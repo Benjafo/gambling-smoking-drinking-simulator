@@ -40,7 +40,9 @@ export const REACH_RADIUS = 10;
 export const TABLE = { radius: 1.5, height: 0.76, rimRadius: 1.47, rimTube: 0.055 };
 export const SEAT_COUNT: number = 5;
 export const SEAT_RADIUS = 2.05;
-export const EYE_HEIGHT = 1.32;
+/* eye sits high enough to look DOWN at the felt — flat cards at a grazing
+   angle are unreadable */
+export const EYE_HEIGHT = 1.5;
 export const DEALER_POS = { x: 0, y: 0, z: -1.35 };
 
 export interface V3 {

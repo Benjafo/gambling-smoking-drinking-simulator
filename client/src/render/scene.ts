@@ -14,6 +14,7 @@ import {
 } from "@shared/constants";
 import type { Intent, PlayerSnap, Snapshot } from "@shared/types";
 import type { ViceKind } from "@shared/types";
+import { handValue } from "@shared/blackjack";
 import { CardZone } from "./cards";
 import { DebrisView } from "./debris";
 import { HeldItemControl, makeBottleMesh, makeCigarMesh } from "./held";
@@ -76,7 +77,10 @@ export class SceneView {
       new THREE.Vector3(0, TABLE.height + 0.004, -0.52),
       0,
       SHOE_POS,
-      dealSound
+      dealSound,
+      // propped toward the players, sized for distance; the total pill sits
+      // on the felt in front of the cards, not over the dealer's face
+      { scale: 1.3, lean: 0.3, badgeOffset: { x: 0, y: 0.03, z: 0.3 } }
     );
 
     addEventListener("resize", () => {
@@ -90,8 +94,8 @@ export class SceneView {
 
   /* ---------------- static world ---------------- */
   private buildLights(): void {
-    this.scene.add(new THREE.AmbientLight(0x342b1e, 1.4));
-    const spot = new THREE.SpotLight(0xffdca8, 90, 14, Math.PI / 3.6, 0.55, 1.6);
+    this.scene.add(new THREE.AmbientLight(0x342b1e, 1.6));
+    const spot = new THREE.SpotLight(0xffdca8, 115, 14, Math.PI / 3.6, 0.55, 1.6);
     spot.position.set(0, 4.2, 0);
     spot.target.position.set(0, TABLE.height, 0);
     spot.castShadow = true;
@@ -373,21 +377,38 @@ export class SceneView {
     if (me && me.seat !== this.mySeat) this.setCameraSeat(me.seat);
 
     this.dealerZone.reconcile(snap.dealerHand);
+    this.dealerZone.setBadge(
+      snap.dealerHand.length === 0
+        ? null
+        : snap.holeHidden
+          ? "SHOWS " + snap.dealerHand[0].r
+          : String(handValue(snap.dealerHand).total)
+    );
 
     for (const p of snap.players) {
       let zone = this.playerZones.get(p.id);
       if (!zone) {
         const anchor = seatTablePoint(p.seat, 0.86);
+        const mine = p.id === myId;
         zone = new CardZone(
           this.scene,
           new THREE.Vector3(anchor.x, anchor.y + 0.004, anchor.z),
           seatAngle(p.seat),
           SHOE_POS,
-          dealSound
+          dealSound,
+          // your own hand is the one you must read at a glance; neighbors'
+          // lean gently toward their owners, still identifiable from above
+          mine
+            ? { scale: 1.3, lean: 0.55, badgeScale: 0.8, badgeOffset: { x: 0, y: 0.17, z: 0 } }
+            : { scale: 1.05, lean: 0.12 }
         );
         this.playerZones.set(p.id, zone);
       }
       zone.reconcile(p.hand);
+      const hv = handValue(p.hand);
+      zone.setBadge(
+        p.hand.length ? `${hv.soft && hv.total <= 21 ? "soft " : ""}${hv.total}` : null
+      );
       this.reconcileChips(p);
       this.reconcileAvatar(p);
     }
@@ -411,8 +432,12 @@ export class SceneView {
     let entry = this.chipStacks.get(p.id);
     if (!entry) {
       entry = { group: new THREE.Group(), bet: -1 };
-      const spot = seatTablePoint(p.seat, 0.58);
-      entry.group.position.set(spot.x, spot.y, spot.z);
+      // beside the cards, not between them and the eye — a chip stack in
+      // the sightline reads as a black blob squatting on your hand
+      const spot = seatTablePoint(p.seat, 0.62);
+      const a = seatAngle(p.seat);
+      const tangent = new THREE.Vector3(Math.cos(a), 0, -Math.sin(a));
+      entry.group.position.set(spot.x, spot.y, spot.z).addScaledVector(tangent, -0.3);
       this.scene.add(entry.group);
       this.chipStacks.set(p.id, entry);
     }

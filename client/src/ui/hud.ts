@@ -1,6 +1,7 @@
 /* DOM overlay HUD — the original game's UI language, now rendering snapshots
    and emitting intents instead of mutating state. */
 import { MIN_BET } from "@shared/constants";
+import { handValue } from "@shared/blackjack";
 import type { Intent, PlayerSnap, Snapshot } from "@shared/types";
 
 const $ = (id: string): HTMLElement => document.getElementById(id)!;
@@ -246,7 +247,12 @@ export class Hud {
 
     if (myTurn) {
       ($("doubleBtn") as HTMLButtonElement).disabled = !(me.hand.length === 2 && me.money >= me.bet);
-      $("betInPlay").textContent = "Bet: " + fmtMoney(me.bet) + (me.doubled ? " (doubled)" : "");
+      const hv = handValue(me.hand);
+      const up = snap.dealerHand[0];
+      $("betInPlay").textContent =
+        `YOU ${hv.soft && hv.total <= 21 ? "soft " : ""}${hv.total}` +
+        ` · DEALER SHOWS ${up ? up.r : "?"}` +
+        ` · Bet ${fmtMoney(me.bet)}${me.doubled ? " (doubled)" : ""}`;
     }
   }
 

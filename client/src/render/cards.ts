@@ -37,23 +37,26 @@ function faceTexture(card: Card): THREE.CanvasTexture {
   roundRect(ctx, 2, 2, 252, 368, 18);
   ctx.stroke();
 
+  // oversized indices: these cards are read from a metre away at an angle,
+  // not from a hand of cards — legibility beats print fidelity
+  // deep inks: the warm spot + ACES tone mapping washes lighter pigments
   const red = card.s === "♥" || card.s === "♦";
-  ctx.fillStyle = red ? "#b3272c" : "#1d1a14";
-  ctx.font = "700 52px Georgia, serif";
+  ctx.fillStyle = red ? "#8f1418" : "#0d0b08";
+  ctx.font = "700 96px Georgia, serif";
   ctx.textAlign = "center";
-  ctx.fillText(card.r, 40, 58);
-  ctx.font = "44px Georgia, serif";
-  ctx.fillText(card.s, 40, 102);
+  ctx.fillText(card.r, 62, 92);
+  ctx.font = "72px Georgia, serif";
+  ctx.fillText(card.s, 62, 164);
   ctx.save();
-  ctx.translate(216, 314);
+  ctx.translate(194, 280);
   ctx.rotate(Math.PI);
-  ctx.font = "700 52px Georgia, serif";
-  ctx.fillText(card.r, 0, -46);
-  ctx.font = "44px Georgia, serif";
+  ctx.font = "700 96px Georgia, serif";
+  ctx.fillText(card.r, 0, -72);
+  ctx.font = "72px Georgia, serif";
   ctx.fillText(card.s, 0, 0);
   ctx.restore();
-  ctx.font = "150px Georgia, serif";
-  ctx.fillText(card.s, 128, 240);
+  ctx.font = "140px Georgia, serif";
+  ctx.fillText(card.s, 172, 330);
 
   const tex = new THREE.CanvasTexture(cv);
   tex.colorSpace = THREE.SRGBColorSpace;
@@ -102,12 +105,21 @@ interface CardObj {
   faceUp: boolean;
 }
 
-function makeCardMesh(card: Card, faceUp: boolean): CardObj {
-  const frontMat = new THREE.MeshStandardMaterial({
-    map: card.r === "?" ? backTexture() : faceTexture(card),
+/* card faces glow softly with their own texture: pips must stay inky under
+   the warm spot + ACES tone mapping, not wash out to beige */
+function faceMaterial(tex: THREE.CanvasTexture): THREE.MeshStandardMaterial {
+  return new THREE.MeshStandardMaterial({
+    map: tex,
     roughness: 0.55,
+    emissive: 0xffffff,
+    emissiveMap: tex,
+    emissiveIntensity: 0.55,
   });
-  const backMat = new THREE.MeshStandardMaterial({ map: backTexture(), roughness: 0.6 });
+}
+
+function makeCardMesh(card: Card, faceUp: boolean): CardObj {
+  const frontMat = faceMaterial(card.r === "?" ? backTexture() : faceTexture(card));
+  const backMat = faceMaterial(backTexture());
   const inner = new THREE.Mesh(cardGeo, [edgeMat, edgeMat, edgeMat, edgeMat, frontMat, backMat]);
   inner.castShadow = true;
   const group = new THREE.Group();
@@ -116,20 +128,81 @@ function makeCardMesh(card: Card, faceUp: boolean): CardObj {
   return { group, inner, data: card, faceUp };
 }
 
+export interface CardZoneOpts {
+  scale?: number; // bigger cards for hands that must be read precisely
+  lean?: number; // radians the card leans back toward its owner's eye
+  badgeOffset?: { x: number; y: number; z: number }; // pill position vs anchor
+  badgeScale?: number;
+}
+
 /* A zone renders one hand (dealer or a seat) and diffs against snapshots. */
 export class CardZone {
   private cards: CardObj[] = [];
+  private scale: number;
+  private lean: number;
+  private badge: THREE.Sprite | null = null;
+  private badgeText: string | null = null;
+  private badgeOffset: THREE.Vector3;
+  private badgeScale: number;
   constructor(
     private scene: THREE.Scene,
     private anchor: THREE.Vector3,
     private yaw: number,
     private shoePos: THREE.Vector3,
-    private onDeal?: () => void
-  ) {}
+    private onDeal?: () => void,
+    opts?: CardZoneOpts
+  ) {
+    this.scale = opts?.scale ?? 1;
+    this.lean = opts?.lean ?? 0;
+    const bo = opts?.badgeOffset ?? { x: 0, y: 0.14 * this.scale, z: 0 };
+    this.badgeOffset = new THREE.Vector3(bo.x, bo.y, bo.z);
+    this.badgeScale = opts?.badgeScale ?? 1;
+  }
 
   private slotPos(i: number): THREE.Vector3 {
     const tangent = new THREE.Vector3(Math.cos(this.yaw), 0, -Math.sin(this.yaw));
-    return this.anchor.clone().addScaledVector(tangent, (i - 1) * 0.125);
+    const p = this.anchor.clone().addScaledVector(tangent, (i - 1) * 0.125 * this.scale);
+    // leaned cards pivot at their center: lift so the bottom edge stays on the felt
+    p.y += ((CARD_H * this.scale) / 2) * Math.sin(this.lean) * 0.95;
+    return p;
+  }
+
+  /* floating total pill above the hand — readable at any distance, and in
+     multiplayer it's how you read the table at a glance */
+  setBadge(text: string | null): void {
+    if (text === this.badgeText) return;
+    this.badgeText = text;
+    if (this.badge) {
+      this.scene.remove(this.badge);
+      (this.badge.material as THREE.SpriteMaterial).map?.dispose();
+      (this.badge.material as THREE.SpriteMaterial).dispose();
+      this.badge = null;
+    }
+    if (!text) return;
+    const cv = document.createElement("canvas");
+    cv.width = 320;
+    cv.height = 96;
+    const ctx = cv.getContext("2d")!;
+    ctx.fillStyle = "rgba(10,8,5,0.78)";
+    ctx.beginPath();
+    ctx.roundRect(4, 4, 312, 88, 44);
+    ctx.fill();
+    ctx.strokeStyle = "rgba(242,232,213,0.4)";
+    ctx.lineWidth = 3;
+    ctx.stroke();
+    ctx.fillStyle = "#f2e8d5";
+    ctx.font = "700 52px 'Courier New', monospace";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(text, 160, 52);
+    const tex = new THREE.CanvasTexture(cv);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    this.badge = new THREE.Sprite(
+      new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false })
+    );
+    this.badge.scale.set(0.2 * this.badgeScale, 0.06 * this.badgeScale, 1);
+    this.badge.position.copy(this.anchor).add(this.badgeOffset);
+    this.scene.add(this.badge);
   }
 
   reconcile(hand: Card[]): void {
@@ -144,10 +217,7 @@ export class CardZone {
       } else if (have.data.r !== want.r || have.data.s !== want.s) {
         // hole card revealed: real rank replaces "?" — retexture and flip
         have.data = want;
-        (have.inner.material as THREE.Material[])[4] = new THREE.MeshStandardMaterial({
-          map: faceTexture(want),
-          roughness: 0.55,
-        });
+        (have.inner.material as THREE.Material[])[4] = faceMaterial(faceTexture(want));
         if (!have.faceUp) this.flip(have);
       }
     }
@@ -159,8 +229,10 @@ export class CardZone {
     obj.faceUp = false;
     const target = this.slotPos(i);
     const tilt = (Math.random() - 0.5) * 0.07;
-    obj.group.rotation.set(-Math.PI / 2, 0, 0);
+    // -90° is flat on the felt; the lean tips the face toward the owner
+    obj.group.rotation.set(-Math.PI / 2 + this.lean, 0, 0);
     obj.group.rotation.y = this.yaw + tilt;
+    obj.group.scale.setScalar(this.scale);
     obj.group.position.copy(this.shoePos);
     this.scene.add(obj.group);
     this.cards[i] = obj;
@@ -201,5 +273,6 @@ export class CardZone {
   clear(): void {
     for (const c of this.cards) this.scene.remove(c.group);
     this.cards = [];
+    this.setBadge(null);
   }
 }
