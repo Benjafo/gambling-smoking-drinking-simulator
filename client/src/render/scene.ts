@@ -349,6 +349,10 @@ export class SceneView {
     return { x: ((v.x + 1) / 2) * innerWidth, y: ((1 - v.y) / 2) * innerHeight };
   }
 
+  ritualGhostWorldPos(): THREE.Vector3 | null {
+    return this.ritualGhost ? this.ritualGhost.position.clone() : null;
+  }
+
   emitSmokeAtGhost(): void {
     if (!this.ritualGhost) return;
     // smoke rises off the ember — the far tip, not "above the hand"

@@ -71,6 +71,9 @@ export class HeldItemControl {
   /* optimistic floor-grab: mesh exists before the sim confirms the pickup */
   private pendingKind: ViceKind | null = null;
   private pendingTtl = 0;
+  /* how the current grab started — a ritual-finish release drops in place
+     instead of tucking back to the hand */
+  private grabSource: "hand" | "floor" | "ritual" = "hand";
   private pendingFling: { origin: THREE.Vector3; vel: THREE.Vector3; angVel: THREE.Vector3 } | null =
     null;
   private denyUntil = 0;
@@ -134,9 +137,22 @@ export class HeldItemControl {
     this.mesh.position.copy(worldPos);
     this.scene.add(this.mesh);
     this.grabbing = true;
+    this.grabSource = "floor";
     this.samples = [];
     this.grabPoint.copy(worldPos);
     pickupSound();
+  }
+
+  /* a ritual just finished with the pointer still down: the fresh empty
+     (created by apply() this same snapshot) is grabbed in place — the
+     player flings or drops it from right there, no second click */
+  grabAt(worldPos: THREE.Vector3): void {
+    if (!this.mesh) return;
+    this.mesh.position.copy(worldPos);
+    this.grabbing = true;
+    this.grabSource = "ritual";
+    this.samples = [];
+    this.grabPoint.copy(worldPos);
   }
 
   /* returns true if the pointer event was consumed (grabbed the held item) */
@@ -146,6 +162,7 @@ export class HeldItemControl {
     const hit = this.raycaster.intersectObject(this.mesh, true);
     if (hit.length === 0) return false;
     this.grabbing = true;
+    this.grabSource = "hand";
     this.samples = [];
     return true;
   }
@@ -168,12 +185,13 @@ export class HeldItemControl {
     }
     this.grabbing = false;
 
-    // barely moved: this was "take it into the hand", not a throw
+    // barely moved: for hand/floor grabs that's "take it into the hand" —
+    // but releasing a just-finished ritual means "drop it right here"
     const travel =
       this.samples.length >= 2
         ? this.samples[this.samples.length - 1].p.distanceTo(this.samples[0].p)
         : 0;
-    if (travel < 0.03) return;
+    if (travel < 0.03 && this.grabSource !== "ritual") return;
 
     let vel = new THREE.Vector3();
     if (this.samples.length >= 2) {

@@ -2,6 +2,7 @@
    target ring mid-screen, then HOLD STILL to light the cigar, or SWIPE UP
    AND HOLD to pour the beer. The 3D ghost follows the pointer; the sim owns
    the clock (progress only accrues while we report the gesture engaged). */
+import { Vector2 } from "three";
 import type { Intent, PlayerSnap, ViceKind } from "@shared/types";
 import type { SceneView } from "../render/scene";
 
@@ -15,7 +16,9 @@ const $ = (id: string): HTMLElement => document.getElementById(id)!;
 
 export class RitualControl {
   private active: ViceKind | null = null;
-  private phase: "drag" | "hold" | "primed" | "pouring" = "drag";
+  /* "fling" = ritual finished but the pointer is still down: the fresh
+     empty is grabbed in place, events route to the held-item control */
+  private phase: "drag" | "hold" | "primed" | "pouring" | "fling" = "drag";
   private auto = false;
   private sawRitual = false; // sim confirmed the ritual started
   private anchorX = 0;
@@ -63,10 +66,19 @@ export class RitualControl {
       this.start(kind, e.clientX, e.clientY, false);
     });
     item.addEventListener("pointermove", (e) => {
-      if (this.active === kind && !this.auto) this.gestureMove(e.clientX, e.clientY);
+      if (this.active !== kind || this.auto) return;
+      if (this.phase === "fling")
+        this.scene.held.pointerMove(new Vector2(...this.ndc(e.clientX, e.clientY)));
+      else this.gestureMove(e.clientX, e.clientY);
     });
     const drop = () => {
-      if (this.active === kind && !this.auto) this.cancel();
+      if (this.active !== kind || this.auto) return;
+      if (this.phase === "fling") {
+        this.scene.held.pointerUp(); // fling on a flick, drop in place otherwise
+        this.cleanup();
+      } else {
+        this.cancel();
+      }
     };
     item.addEventListener("pointerup", drop);
     item.addEventListener("pointercancel", drop);
@@ -183,7 +195,7 @@ export class RitualControl {
 
   /* called on every snapshot with our player */
   update(me: PlayerSnap | undefined): void {
-    if (!this.active) return;
+    if (!this.active || this.phase === "fling") return;
     const ritual = me?.ritual ?? null;
     if (ritual) {
       this.sawRitual = true;
@@ -192,9 +204,19 @@ export class RitualControl {
       if (this.active === "cigar" && ritual.progress > 0 && Math.random() < 0.35)
         this.scene.emitSmokeAtGhost();
     } else if (this.sawRitual) {
-      // sim ended it: completed (meter refilled, empty now in hand) — celebrate
+      // sim ended it: completed — meter refilled, empty now in hand
       for (let i = 0; i < 3; i++) this.scene.emitSmokeAtGhost();
-      this.cleanup();
+      const ghostPos = this.scene.ritualGhostWorldPos();
+      if (!this.auto && me?.held && ghostPos) {
+        // pointer is still down (the gesture requires it): hand the fresh
+        // empty straight into the grab — fling or drop from right here
+        this.hideChrome();
+        this.scene.held.grabAt(ghostPos);
+        this.phase = "fling";
+        this.sawRitual = false;
+      } else {
+        this.cleanup(); // hands-free ritual: the empty idles in the hand
+      }
     }
   }
 
@@ -203,18 +225,24 @@ export class RitualControl {
     this.cleanup();
   }
 
-  private cleanup(): void {
+  /* hide all ritual UI without ending the interaction (fling phase keeps
+     routing pointer events) */
+  private hideChrome(): void {
     if (this.active) this.items[this.active].classList.remove("held");
-    this.active = null;
-    this.auto = false;
-    this.sawRitual = false;
-    this.phase = "drag";
     this.stopSpill();
     this.setRing(0);
     this.scene.hideRitualGhost();
     $("dropTarget").classList.remove("show", "armed");
     $("swipeHint").classList.remove("show");
     $("lighterGfx").classList.remove("show");
+  }
+
+  private cleanup(): void {
+    this.hideChrome();
+    this.active = null;
+    this.auto = false;
+    this.sawRitual = false;
+    this.phase = "drag";
   }
 
   /* ---------------- flourishes ---------------- */

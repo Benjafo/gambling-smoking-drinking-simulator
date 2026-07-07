@@ -10,8 +10,9 @@ const SCRIPT: [string, number][] = [
   [`document.getElementById('startBtn').click()`, 1500],
   [`document.querySelector('#chipRack .plus[data-denom="100"]').click()`, 300],
   [`document.getElementById('dealBtn').click()`, 4500],
-  // the beer ritual, as the real gesture: drag bottle to the target ring,
-  // swipe up past the pour threshold, hold until the sim finishes the pour
+  // the beer ritual as the real gesture — then the seamless finish: the
+  // pour completes (~2.4s) with the pointer still down, the empty is already
+  // grabbed, and a flick releases it without any second click
   [
     `{const item=document.getElementById('beerItem');
       const cx=innerWidth/2, cy=innerHeight*0.45;
@@ -20,8 +21,12 @@ const SCRIPT: [string, number][] = [
       fire('pointerdown', r.left+40, r.top+40);
       setTimeout(()=>fire('pointermove', cx, cy), 120);
       setTimeout(()=>fire('pointermove', cx, cy-85), 300);
-      setTimeout(()=>fire('pointerup', cx, cy-85), 3200);}`,
-    4000,
+      setTimeout(()=>{ // ritual done: flick the fresh empty straight away
+        let x=cx, y=cy-85, i=0;
+        const iv=setInterval(()=>{i++;x+=8;y-=24;fire('pointermove',x,y);
+          if(i>=5){clearInterval(iv);fire('pointerup',x,y);}},16);
+      }, 3000);}`,
+    4200,
   ],
   // grab the held bottle (projected hand position) and flick it upward
   [
