@@ -72,7 +72,10 @@ interface Player {
   beerDrift: number;
   cigarInv: number;
   beerInv: number;
-  ritual: { kind: ViceKind; startTick: number; endTick: number } | null;
+  /* gesture-driven: progress accrues only while the client reports the
+     ritual engaged (cigar held still in the zone / beer tipped up). The sim
+     owns the clock, so the time cost can't be skipped. */
+  ritual: { kind: ViceKind; progressTicks: number; engaged: boolean } | null;
   held: { id: number; kind: ViceKind; sinceTick: number } | null;
   alive: boolean;
   causeOfDeath: string | null;
@@ -164,6 +167,12 @@ export class Simulation {
         break;
       case "consumeStart":
         this.consumeStart(p, intent.kind);
+        break;
+      case "ritualEngage":
+        if (p.ritual) p.ritual.engaged = intent.on;
+        break;
+      case "ritualReset":
+        if (p.ritual) p.ritual.progressTicks = 0;
         break;
       case "consumeCancel":
         p.ritual = null;
@@ -471,7 +480,7 @@ export class Simulation {
     if (!p.alive || p.ritual) return;
     if (kind === "cigar" && p.cigarInv < 1) return;
     if (kind === "beer" && p.beerInv < 1) return;
-    p.ritual = { kind, startTick: this.tick, endTick: this.tick + msTicks(RITUAL_MS[kind]) };
+    p.ritual = { kind, progressTicks: 0, engaged: false };
   }
 
   private completeRitual(p: Player): void {
@@ -624,7 +633,10 @@ export class Simulation {
       p.cigarMeter -= (base + p.cigarDrift) * dt;
       p.beerMeter -= (base + p.beerDrift) * dt;
 
-      if (p.ritual && this.tick >= p.ritual.endTick) this.completeRitual(p);
+      if (p.ritual?.engaged) {
+        p.ritual.progressTicks++;
+        if (p.ritual.progressTicks >= msTicks(RITUAL_MS[p.ritual.kind])) this.completeRitual(p);
+      }
 
       if (p.held && this.tick - p.held.sinceTick > msTicks(HELD_AUTODROP_MS)) this.autoDrop(p);
 
@@ -716,10 +728,7 @@ export class Simulation {
       ritual: p.ritual
         ? {
             kind: p.ritual.kind,
-            progress: Math.min(
-              1,
-              (this.tick - p.ritual.startTick) / (p.ritual.endTick - p.ritual.startTick)
-            ),
+            progress: Math.min(1, p.ritual.progressTicks / msTicks(RITUAL_MS[p.ritual.kind])),
           }
         : null,
       held: p.held ? { id: p.held.id, kind: p.held.kind } : null,

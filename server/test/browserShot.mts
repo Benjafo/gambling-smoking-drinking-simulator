@@ -10,11 +10,18 @@ const SCRIPT: [string, number][] = [
   [`document.getElementById('startBtn').click()`, 1500],
   [`document.querySelector('#chipRack .plus[data-denom="100"]').click()`, 300],
   [`document.getElementById('dealBtn').click()`, 4500],
+  // the beer ritual, as the real gesture: drag bottle to the target ring,
+  // swipe up past the pour threshold, hold until the sim finishes the pour
   [
-    `{const b=document.getElementById('drinkBtn');
-      b.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true}));
-      setTimeout(()=>b.dispatchEvent(new PointerEvent('pointerup',{bubbles:true})), 2300);}`,
-    3500,
+    `{const item=document.getElementById('beerItem');
+      const cx=innerWidth/2, cy=innerHeight*0.45;
+      const r=item.getBoundingClientRect();
+      const fire=(t,x,y)=>item.dispatchEvent(new PointerEvent(t,{bubbles:true,clientX:x,clientY:y,pointerId:9}));
+      fire('pointerdown', r.left+40, r.top+40);
+      setTimeout(()=>fire('pointermove', cx, cy), 120);
+      setTimeout(()=>fire('pointermove', cx, cy-85), 300);
+      setTimeout(()=>fire('pointerup', cx, cy-85), 3200);}`,
+    4000,
   ],
   // grab the held bottle (projected hand position) and flick it upward
   [
@@ -27,6 +34,11 @@ const SCRIPT: [string, number][] = [
     2500,
   ],
   [`(document.getElementById('standBtn') || {click(){}}).click()`, 3500],
+  // cigar via keyboard fallback (auto ritual, same time cost)
+  [
+    `document.getElementById('cigarItem').dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true}))`,
+    3800,
+  ],
 ];
 
 const listRes = await fetch(`http://localhost:${CDP_PORT}/json/list`);
@@ -74,6 +86,7 @@ const state = await cmd("Runtime.evaluate", {
     hands: document.getElementById('handsDisplay').textContent,
     phase: document.getElementById('phaseDisplay').textContent,
     beerInv: document.getElementById('beerInv').textContent,
+    cigarInv: document.getElementById('cigarInv').textContent,
     flingHint: document.getElementById('flingHint').classList.contains('show'),
     debris: (window.__snap?.debris ?? []).map(d => d.kind + ':' + d.phase + '@' +
       d.pos.x.toFixed(1) + ',' + d.pos.y.toFixed(2) + ',' + d.pos.z.toFixed(1)),

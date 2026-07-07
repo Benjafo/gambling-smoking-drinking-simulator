@@ -95,16 +95,152 @@ button:focus-visible{outline:2px solid var(--amber);outline-offset:2px}
   content:"";position:absolute;right:-2px;top:0;bottom:0;width:8px;border-radius:3px;
   background:repeating-radial-gradient(circle at 50% 30%,#fff8e6 0 2px,#e8ddc2 2px 4px);opacity:.9;
 }
-.vice-btn{
-  position:relative;width:100%;overflow:hidden;
-  font-family:var(--serif);font-weight:700;font-size:14px;letter-spacing:.12em;color:#241703;
-  padding:12px 10px;border-radius:6px;user-select:none;-webkit-user-select:none;touch-action:none;
+/* ---------- vice items (draggable, ported from the 2D game) ---------- */
+.vice-item{
+  width:100%;display:flex;flex-direction:column;align-items:center;gap:10px;
+  font-family:var(--serif);font-weight:700;font-size:13px;letter-spacing:.12em;color:#241703;
+  padding:14px 10px 10px;border-radius:6px;user-select:none;-webkit-user-select:none;touch-action:none;
   background:linear-gradient(#f2b64d,#c07f1f);border:2px solid #6e4c12;box-shadow:0 3px 0 #5b3d10;
+  cursor:grab;
 }
-.vice-btn:active{transform:translateY(2px);box-shadow:0 1px 0 #5b3d10}
-.vice-btn .ritual-fill{
-  position:absolute;left:0;top:0;bottom:0;width:0%;pointer-events:none;
-  background:rgba(224,82,43,.45);transition:width .1s linear;
+.vice-item:active{cursor:grabbing}
+.vice-item.disabled{opacity:.35;cursor:not-allowed;pointer-events:none}
+.vice-item:focus-visible{outline:2px solid var(--amber);outline-offset:2px}
+.vice-item.held .cigar-gfx,.vice-item.held .bottle-gfx{visibility:hidden}
+
+/* realistic cigar: gray ash foot, glowing ember ring, leaf-wrapped body, gold band */
+.cigar-gfx{position:relative;width:204px;height:31px;flex:0 0 auto;filter:drop-shadow(0 3px 4px rgba(0,0,0,.45))}
+.cigar-gfx .wrap{
+  position:absolute;left:29px;right:0;top:0;bottom:0;
+  border-radius:5px 16px 16px 5px;
+  background:
+    repeating-linear-gradient(104deg, rgba(30,12,2,.22) 0 5px, transparent 5px 16px),
+    linear-gradient(#9c6236 0%, #7a4423 38%, #5a2f14 78%, #3f200c 100%);
+  box-shadow:inset 0 3px 4px rgba(255,220,170,.25), inset 0 -4px 6px rgba(0,0,0,.5);
+}
+.cigar-gfx .cap-end{
+  position:absolute;right:-2px;top:2px;bottom:2px;width:17px;border-radius:50%;
+  background:radial-gradient(circle at 35% 40%, #8a5029, #4a250e 75%);
+}
+.cigar-gfx .band{
+  position:absolute;right:42px;top:-1px;bottom:-1px;width:24px;border-radius:3px;
+  background:linear-gradient(90deg,#8f6a1d,#e8c469 30%,#f4dc94 50%,#e8c469 70%,#8f6a1d);
+  box-shadow:0 0 3px rgba(0,0,0,.5);
+}
+.cigar-gfx .band::after{
+  content:"";position:absolute;left:6px;right:6px;top:8px;bottom:8px;border-radius:50%;
+  background:radial-gradient(circle,#a02020 40%,#5e0f0f 100%);border:1px solid #6e5313;
+}
+.cigar-gfx .ash{
+  position:absolute;left:0;top:1px;bottom:1px;width:27px;border-radius:14px 3px 3px 14px;
+  background:
+    repeating-linear-gradient(88deg, rgba(0,0,0,.25) 0 2px, transparent 2px 6px),
+    linear-gradient(#d6d2c8,#9a958a 60%,#6f6a60);
+}
+.cigar-gfx .ember{
+  position:absolute;left:24px;top:2px;bottom:2px;width:10px;border-radius:5px;
+  background:radial-gradient(circle,#ffd08a 0%,#ff7a30 45%,#c22f10 80%,#5a1c0c 100%);
+}
+
+/* realistic beer bottle: clipped silhouette, amber liquid, label, glass shine, crown cap */
+.bottle-gfx{position:relative;width:56px;height:134px;flex:0 0 auto;filter:drop-shadow(0 3px 4px rgba(0,0,0,.45))}
+.bottle-gfx .body{
+  position:absolute;inset:7px 0 0 0;overflow:hidden;
+  clip-path:polygon(36% 0%, 64% 0%, 64% 5%, 61% 20%, 96% 33%, 100% 38%, 100% 95%, 93% 100%, 7% 100%, 0% 95%, 0% 38%, 4% 33%, 39% 20%, 36% 5%);
+  background:linear-gradient(90deg,#3a1d09,#5e3413 30%,#6e401a 50%,#4c2810 75%,#2c1405);
+}
+.bottle-gfx .liquid{
+  position:absolute;left:0;right:0;bottom:0;height:80%;
+  background:linear-gradient(90deg,#a25f10,#e8a63a 45%,#f4c565 55%,#b97416);
+  box-shadow:inset 0 3px 4px rgba(255,240,190,.5);
+}
+.bottle-gfx .label{
+  position:absolute;left:6%;right:6%;top:48%;height:30%;border-radius:2px;
+  background:linear-gradient(#efe3c8,#d9c69a);border:1px solid #8f7c4e;
+  display:flex;align-items:center;justify-content:center;
+  font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.08em;color:#4a2c10;
+}
+.bottle-gfx .shine{
+  position:absolute;left:14%;top:4%;bottom:4%;width:12%;border-radius:6px;
+  background:linear-gradient(rgba(255,255,255,.5),rgba(255,255,255,.08) 70%,transparent);
+  clip-path:inherit;
+}
+.bottle-gfx .cap{
+  position:absolute;left:32.5%;top:0;width:35%;height:10px;border-radius:3px 3px 1px 1px;
+  background:
+    repeating-linear-gradient(90deg, rgba(0,0,0,.3) 0 2px, transparent 2px 4px),
+    linear-gradient(#e6c34a,#a8871f);
+  border:1px solid #6e5313;
+}
+
+/* ---------- ritual layer ---------- */
+#dropTarget{
+  position:fixed;left:50%;top:45%;transform:translate(-50%,-50%);
+  width:150px;height:150px;display:none;align-items:center;justify-content:center;
+  pointer-events:none !important;z-index:60;
+}
+#dropTarget.show{display:flex}
+#dropTarget .ring-svg{position:absolute;inset:0;width:100%;height:100%;transform:rotate(-90deg)}
+#dropTarget .ring-bg{fill:none;stroke:rgba(242,232,213,.3);stroke-width:4;stroke-dasharray:6 8}
+#dropTarget .ring-fg{fill:none;stroke:var(--amber);stroke-width:5;stroke-linecap:round;
+  stroke-dasharray:339.3;stroke-dashoffset:339.3;filter:drop-shadow(0 0 6px rgba(233,166,58,.8))}
+#dropTarget.armed .ring-bg{stroke:rgba(233,166,58,.7);animation:targetPulse 1s ease-in-out infinite}
+@keyframes targetPulse{50%{stroke:rgba(233,166,58,.25)}}
+#dropTarget .target-label{
+  font-family:var(--mono);font-size:11px;letter-spacing:.25em;color:var(--cream);
+  background:rgba(0,0,0,.55);padding:4px 10px;border-radius:12px;text-align:center;line-height:1.6;
+  transform:translateY(58px);white-space:nowrap;
+}
+
+#swipeHint{
+  position:fixed;left:50%;top:45%;transform:translate(-50%,-190px);display:none;
+  flex-direction:column;align-items:center;gap:2px;z-index:60;pointer-events:none !important;
+  font-family:var(--mono);font-size:12px;letter-spacing:.25em;color:var(--amber);text-align:center;
+  text-shadow:0 0 8px rgba(233,166,58,.6);
+}
+#swipeHint.show{display:flex}
+#swipeHint .arrow{font-size:30px;animation:arrowUp 1s ease-in-out infinite}
+@keyframes arrowUp{0%,100%{transform:translateY(6px);opacity:.5}50%{transform:translateY(-6px);opacity:1}}
+
+#lighterGfx{position:fixed;display:none;z-index:69;pointer-events:none !important;width:64px;height:106px}
+#lighterGfx.show{display:block;animation:lighterUp .3s ease-out both}
+@keyframes lighterUp{from{transform:translateY(46px) rotate(6deg);opacity:0}to{transform:translateY(0) rotate(0);opacity:1}}
+#lighterGfx .body{
+  position:absolute;bottom:0;left:10px;width:44px;height:62px;border-radius:8px;
+  background:linear-gradient(100deg,#8f1f1f,#d24848 30%,#e86a6a 44%,#a02525 70%,#5e1212);
+  border:1px solid #3a0c0c;
+  box-shadow:inset 0 2px 3px rgba(255,255,255,.35), inset 0 -4px 6px rgba(0,0,0,.35), 0 5px 10px rgba(0,0,0,.55);
+}
+#lighterGfx .hood{
+  position:absolute;bottom:58px;left:10px;width:44px;height:15px;border-radius:5px 5px 2px 2px;
+  background:linear-gradient(#efeade,#b3ada0 55%,#8f8a7d);border:1px solid #4a463d;
+}
+#lighterGfx .wheel{
+  position:absolute;bottom:62px;left:19px;width:26px;height:11px;border-radius:5px;z-index:2;
+  background:repeating-linear-gradient(90deg,#6b665c 0 3px,#a29c8f 3px 6px);border:1px solid #3a362e;
+}
+#lighterGfx .flame{
+  position:absolute;bottom:73px;left:23px;width:18px;height:36px;z-index:3;
+  border-radius:50% 50% 50% 50%/62% 62% 38% 38%;
+  background:radial-gradient(circle at 50% 85%,#fff6cf 0%,#ffc14d 40%,#ff7a30 70%,#d23a12 92%,transparent 100%);
+  transform-origin:50% 100%;
+  animation:ignite .22s .18s both, flameFlicker .16s .45s infinite alternate;
+  filter:drop-shadow(0 0 14px rgba(255,180,77,.95));
+}
+@keyframes ignite{from{transform:scaleY(0)}to{transform:scaleY(1)}}
+@keyframes flameFlicker{from{transform:scaleY(.95) skewX(-3deg)}to{transform:scaleY(1.2) skewX(4deg)}}
+
+/* beer spilling "onto" the user: droplets fly at the screen */
+.spill-drop{
+  position:fixed;z-index:71;pointer-events:none;width:15px;height:19px;
+  border-radius:50% 50% 55% 55%/42% 42% 58% 58%;
+  background:radial-gradient(circle at 40% 32%, #ffe4a3, #e8a63a 55%, #b97416 90%);
+  box-shadow:0 0 6px rgba(232,166,58,.5);
+  animation:spillAtYou .6s ease-in forwards;
+}
+@keyframes spillAtYou{
+  from{transform:translate(0,0) scale(.35);opacity:.95}
+  to{transform:translate(var(--sx,0px),var(--sy,140px)) scale(4.6);opacity:0}
 }
 .shop-row{display:flex;align-items:center;justify-content:space-between;font-family:var(--mono);font-size:13px;margin-bottom:10px;gap:8px}
 .shop-row .price{color:var(--amber)}

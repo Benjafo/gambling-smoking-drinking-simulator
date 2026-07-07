@@ -2,9 +2,50 @@
    Flying items interpolate toward 20 Hz snapshot transforms; settled items
    pin exactly. Two draw calls total no matter how filthy the floor gets. */
 import * as THREE from "three";
+import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import { MAX_DEBRIS, type V3 } from "@shared/constants";
-import { DEBRIS_SHAPE } from "@shared/physics";
 import type { DebrisSnap, Quat, ViceKind } from "@shared/types";
+
+/* Paint a whole sub-geometry one color so merged parts can share a single
+   vertex-colored material — keeps debris at one draw call per kind. */
+function colored(geo: THREE.BufferGeometry, color: number, y: number): THREE.BufferGeometry {
+  geo.translate(0, y, 0);
+  const c = new THREE.Color(color);
+  const n = geo.attributes.position.count;
+  const arr = new Float32Array(n * 3);
+  for (let i = 0; i < n; i++) {
+    arr[i * 3] = c.r;
+    arr[i * 3 + 1] = c.g;
+    arr[i * 3 + 2] = c.b;
+  }
+  geo.setAttribute("color", new THREE.BufferAttribute(arr, 3));
+  return geo;
+}
+
+/* Matches makeBottleMesh proportions; centered on the physics capsule. */
+function bottleGeometry(): THREE.BufferGeometry {
+  const glass = 0x6e401a;
+  const g = mergeGeometries([
+    colored(new THREE.CylinderGeometry(0.034, 0.036, 0.13, 14), glass, 0),
+    colored(new THREE.CylinderGeometry(0.014, 0.034, 0.045, 14), glass, 0.088),
+    colored(new THREE.CylinderGeometry(0.013, 0.013, 0.05, 10), glass, 0.133),
+    colored(new THREE.CylinderGeometry(0.0365, 0.0375, 0.05, 14), 0xd9c69a, 0.005),
+    colored(new THREE.CylinderGeometry(0.0135, 0.0135, 0.008, 10), 0xe6c34a, 0.161),
+  ])!;
+  g.translate(0, -0.047, 0);
+  return g;
+}
+
+function cigarGeometry(): THREE.BufferGeometry {
+  const g = mergeGeometries([
+    colored(new THREE.CylinderGeometry(0.012, 0.012, 0.11, 10), 0x5a2f14, 0),
+    colored(new THREE.CylinderGeometry(0.0122, 0.0122, 0.02, 10), 0x9a958a, 0.062),
+    colored(new THREE.CylinderGeometry(0.0121, 0.0121, 0.006, 10), 0xc25a2a, 0.051),
+    colored(new THREE.CylinderGeometry(0.0125, 0.0125, 0.012, 10), 0xe8c469, -0.03),
+  ])!;
+  g.translate(0, -0.009, 0);
+  return g;
+}
 
 interface Tracked {
   kind: ViceKind;
@@ -27,23 +68,23 @@ export class DebrisView {
   cigarIds: number[] = [];
 
   constructor(scene: THREE.Scene) {
-    const b = DEBRIS_SHAPE.beer;
-    const bottleGeo = new THREE.CapsuleGeometry(b.radius, b.halfHeight * 2, 6, 12);
     const bottleMat = new THREE.MeshStandardMaterial({
-      color: 0x6e401a,
-      roughness: 0.15,
+      vertexColors: true,
+      roughness: 0.25,
       metalness: 0.1,
-      transparent: true,
-      opacity: 0.92,
     });
-    this.bottles = new THREE.InstancedMesh(bottleGeo, bottleMat, MAX_DEBRIS);
+    this.bottles = new THREE.InstancedMesh(bottleGeometry(), bottleMat, MAX_DEBRIS);
     this.bottles.castShadow = true;
 
-    const c = DEBRIS_SHAPE.cigar;
-    const cigarGeo = new THREE.CylinderGeometry(c.radius, c.radius, c.halfHeight * 2 + c.radius, 8);
-    const cigarMat = new THREE.MeshStandardMaterial({ color: 0x5a2f14, roughness: 0.85 });
-    this.cigars = new THREE.InstancedMesh(cigarGeo, cigarMat, MAX_DEBRIS);
+    const cigarMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.85 });
+    this.cigars = new THREE.InstancedMesh(cigarGeometry(), cigarMat, MAX_DEBRIS);
     this.cigars.castShadow = true;
+
+    // instances scatter across the room but the geometry's bounding sphere
+    // sits at the origin — default culling makes debris blink out whenever
+    // the table center leaves the frustum
+    this.bottles.frustumCulled = false;
+    this.cigars.frustumCulled = false;
 
     this.bottles.count = 0;
     this.cigars.count = 0;

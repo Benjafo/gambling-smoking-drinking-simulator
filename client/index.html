@@ -25,11 +25,25 @@
       <h3>VICES</h3>
       <div class="vice-head"><span>🚬 CIGARS</span><span class="inv" id="cigarInv">×3</span></div>
       <div class="meter cigar"><div class="fill ok" id="cigarFill"></div></div>
-      <button class="vice-btn" id="smokeBtn">HOLD TO SMOKE<div class="ritual-fill" id="cigarRitual"></div></button>
+      <div class="vice-item" id="cigarItem" role="button" tabindex="0"
+           aria-label="Smoke a cigar: drag to the table target and hold still, or press Enter">
+        <div class="cigar-gfx">
+          <div class="ash"></div><div class="ember"></div>
+          <div class="wrap"></div><div class="band"></div><div class="cap-end"></div>
+        </div>
+        <span>DRAG TO SMOKE</span>
+      </div>
       <div style="height:12px"></div>
       <div class="vice-head"><span>🍺 BEER</span><span class="inv" id="beerInv">×3</span></div>
       <div class="meter beer"><div class="fill ok" id="beerFill"></div></div>
-      <button class="vice-btn" id="drinkBtn">HOLD TO DRINK<div class="ritual-fill" id="beerRitual"></div></button>
+      <div class="vice-item" id="beerItem" role="button" tabindex="0"
+           aria-label="Drink a beer: drag to the table target, then swipe up and hold, or press Enter">
+        <div class="bottle-gfx">
+          <div class="body"><div class="liquid"></div><div class="label">LAGER</div><div class="shine"></div></div>
+          <div class="cap"></div>
+        </div>
+        <span>DRAG TO DRINK</span>
+      </div>
     </div>
     <div class="panel">
       <h3>SHOP — ALWAYS OPEN</h3>
@@ -80,6 +94,16 @@
   <div id="banner"></div>
   <div id="flingHint">DRAG THE EMPTY &amp; RELEASE TO FLING IT — OR LET IT DROP</div>
   <div id="flavorBar">The dealer doesn't blink.</div>
+
+  <div id="dropTarget">
+    <svg class="ring-svg" viewBox="0 0 120 120">
+      <circle class="ring-bg" cx="60" cy="60" r="54"></circle>
+      <circle class="ring-fg" cx="60" cy="60" r="54"></circle>
+    </svg>
+    <div class="target-label" id="targetLabel">HOLD HERE</div>
+  </div>
+  <div id="swipeHint"><div class="arrow">▲</div>SWIPE UP<br>&amp; HOLD</div>
+  <div id="lighterGfx"><div class="flame"></div><div class="wheel"></div><div class="hood"></div><div class="body"></div></div>
 </div>
 
 <!-- ============ TITLE ============ -->

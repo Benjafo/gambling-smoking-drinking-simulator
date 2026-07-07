@@ -103,20 +103,6 @@ export class Hud {
     $("buyCigar5").addEventListener("click", () => this.send({ type: "buy", item: "cigar", qty: 5 }));
     $("buyBeer1").addEventListener("click", () => this.send({ type: "buy", item: "beer", qty: 1 }));
     $("buyBeer5").addEventListener("click", () => this.send({ type: "buy", item: "beer", qty: 5 }));
-
-    this.wireVice($("smokeBtn"), "cigar");
-    this.wireVice($("drinkBtn"), "beer");
-  }
-
-  private wireVice(btn: HTMLElement, kind: "cigar" | "beer"): void {
-    const start = (e: Event) => {
-      e.preventDefault();
-      this.send({ type: "consumeStart", kind });
-    };
-    const cancel = () => this.send({ type: "consumeCancel" });
-    btn.addEventListener("pointerdown", start);
-    btn.addEventListener("pointerup", cancel);
-    btn.addEventListener("pointerleave", cancel);
   }
 
   private adjustBet(delta: number): void {
@@ -162,13 +148,13 @@ export class Hud {
       me.alive && snap.phase !== "over" && (me.cigarMeter < 20 || me.beerMeter < 20)
     );
 
-    // ritual progress
-    const cig = me.ritual?.kind === "cigar" ? me.ritual.progress : 0;
-    const beer = me.ritual?.kind === "beer" ? me.ritual.progress : 0;
-    $("cigarRitual").style.width = cig * 100 + "%";
-    $("beerRitual").style.width = beer * 100 + "%";
-    (($("smokeBtn")) as HTMLButtonElement).disabled = !me.alive || me.cigarInv < 1;
-    (($("drinkBtn")) as HTMLButtonElement).disabled = !me.alive || me.beerInv < 1;
+    // vice items (draggable; RitualControl refuses to start when one is running)
+    const cigarOff = !me.alive || me.cigarInv < 1;
+    const beerOff = !me.alive || me.beerInv < 1;
+    $("cigarItem").classList.toggle("disabled", cigarOff);
+    $("beerItem").classList.toggle("disabled", beerOff);
+    $("cigarItem").setAttribute("aria-disabled", String(cigarOff));
+    $("beerItem").setAttribute("aria-disabled", String(beerOff));
 
     // shop
     $("cigarPrice").textContent = fmtMoney(snap.cigarPrice);

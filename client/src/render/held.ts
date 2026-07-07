@@ -1,10 +1,9 @@
-/* The held empty (bottle/butt) after a ritual, the ritual-in-progress prop,
-   and the grab-and-fling gesture. Throw velocity comes from a short ring
-   buffer of hand positions — release speed and direction are the player's. */
+/* The held empty (bottle/butt) after a ritual, and the grab-and-fling
+   gesture. Throw velocity comes from a short ring buffer of hand positions —
+   release speed and direction are the player's. */
 import * as THREE from "three";
 import { MAX_FLING_SPEED, type V3 } from "@shared/constants";
 import type { Intent, PlayerSnap, ViceKind } from "@shared/types";
-import { SmokeSystem } from "./effects";
 
 export function makeBottleMesh(): THREE.Group {
   const g = new THREE.Group();
@@ -60,26 +59,19 @@ export function makeCigarMesh(spent: boolean): THREE.Group {
 }
 
 const HAND_OFFSET = new THREE.Vector3(0.3, -0.26, -0.72);
-const RITUAL_OFFSET = new THREE.Vector3(0.16, -0.18, -0.5);
 
 export class HeldItemControl {
   private heldId: number | null = null;
-  private heldKind: ViceKind | null = null;
   private mesh: THREE.Group | null = null;
-  private ritualMesh: THREE.Group | null = null;
-  private ritualKind: ViceKind | null = null;
-  private ritualTilt = 0;
   private grabbing = false;
   private grabPoint = new THREE.Vector3();
   private samples: { p: THREE.Vector3; t: number }[] = [];
-  private smokeAccum = 0;
   private raycaster = new THREE.Raycaster();
 
   constructor(
     private scene: THREE.Scene,
     private camera: THREE.PerspectiveCamera,
-    private send: (intent: Intent) => void,
-    private smoke: SmokeSystem
+    private send: (intent: Intent) => void
   ) {}
 
   get isGrabbing(): boolean {
@@ -94,24 +86,11 @@ export class HeldItemControl {
     if (held && held.id !== this.heldId) {
       this.dropMesh();
       this.heldId = held.id;
-      this.heldKind = held.kind;
       this.mesh = held.kind === "beer" ? makeBottleMesh() : makeCigarMesh(true);
       this.scene.add(this.mesh);
     } else if (!held && this.heldId !== null) {
       this.dropMesh();
     }
-
-    const ritual = me?.ritual ?? null;
-    if (ritual && this.ritualKind !== ritual.kind) {
-      this.clearRitual();
-      this.ritualKind = ritual.kind;
-      this.ritualMesh = ritual.kind === "beer" ? makeBottleMesh() : makeCigarMesh(false);
-      this.scene.add(this.ritualMesh);
-    } else if (!ritual) {
-      this.clearRitual();
-    }
-    // beer tips back as it drains; cigar smolders in place
-    this.ritualTilt = ritual?.kind === "beer" ? -ritual.progress * 1.9 : 0;
   }
 
   /* returns true if the pointer event was consumed (grabbed the held item) */
@@ -179,29 +158,15 @@ export class HeldItemControl {
   }
 
   frame(dt: number): void {
-    if (this.mesh) {
-      if (this.grabbing && this.samples.length) {
-        this.mesh.position.lerp(this.grabPoint, 1 - Math.exp(-dt * 30));
-      } else {
-        this.mesh.position.copy(this.camAnchor(HAND_OFFSET));
-        this.mesh.position.y += Math.sin(performance.now() / 600) * 0.006; // idle bob
-      }
-      this.mesh.quaternion.copy(this.camera.quaternion);
-      this.mesh.rotateZ(0.35);
+    if (!this.mesh) return;
+    if (this.grabbing && this.samples.length) {
+      this.mesh.position.lerp(this.grabPoint, 1 - Math.exp(-dt * 30));
+    } else {
+      this.mesh.position.copy(this.camAnchor(HAND_OFFSET));
+      this.mesh.position.y += Math.sin(performance.now() / 600) * 0.006; // idle bob
     }
-    if (this.ritualMesh) {
-      const p = this.camAnchor(RITUAL_OFFSET);
-      this.ritualMesh.position.copy(p);
-      this.ritualMesh.quaternion.copy(this.camera.quaternion);
-      if (this.ritualKind === "beer") this.ritualMesh.rotateX(this.ritualTilt);
-      if (this.ritualKind === "cigar") {
-        this.smokeAccum += dt;
-        if (this.smokeAccum > 0.28) {
-          this.smokeAccum = 0;
-          this.smoke.emit(p.clone().add(new THREE.Vector3(0, 0.08, 0)));
-        }
-      }
-    }
+    this.mesh.quaternion.copy(this.camera.quaternion);
+    this.mesh.rotateZ(0.35);
   }
 
   private camAnchor(offset: THREE.Vector3): THREE.Vector3 {
@@ -212,13 +177,7 @@ export class HeldItemControl {
     if (this.mesh) this.scene.remove(this.mesh);
     this.mesh = null;
     this.heldId = null;
-    this.heldKind = null;
     this.grabbing = false;
-  }
-  private clearRitual(): void {
-    if (this.ritualMesh) this.scene.remove(this.ritualMesh);
-    this.ritualMesh = null;
-    this.ritualKind = null;
   }
 }
 

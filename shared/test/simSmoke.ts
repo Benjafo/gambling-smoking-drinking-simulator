@@ -47,9 +47,16 @@ assert(snap.phase === "betting" || snap.phase === "over", "round returns to bett
 const dealerTotal = handValue(settleDealerHand).total;
 assert(settleDealerHand.length >= 2 && dealerTotal >= 17, "dealer played out to " + dealerTotal);
 
-// smoke a cigar: ritual completes after 2.5s and leaves a held butt
+// smoke a cigar: ritual accrues only while engaged, completes after 2.5s
 const meterBefore = snap.players[0].cigarMeter;
 sim.applyIntent(ME, { type: "consumeStart", kind: "cigar" });
+for (let i = 0; i < 60; i++) sim.step(); // not engaged: no progress
+assert(sim.snapshot().players[0].ritual?.progress === 0, "ritual idle until gesture engages");
+sim.applyIntent(ME, { type: "ritualEngage", on: true });
+for (let i = 0; i < 30; i++) sim.step();
+sim.applyIntent(ME, { type: "ritualReset" }); // wobble: flame restarts
+const afterReset = sim.snapshot().players[0].ritual?.progress ?? -1;
+assert(afterReset >= 0 && afterReset < 0.05, "wobble resets progress");
 for (let i = 0; i < 60 * 3; i++) sim.step();
 snap = sim.snapshot();
 assert(snap.players[0].cigarMeter > meterBefore, "cigar meter refilled");
@@ -85,6 +92,7 @@ assert(snap.debris[0].pos.y > -5, "debris rests in-bounds at y=" + snap.debris[0
 
 // fling speed clamp: absurd velocity must be capped server-side
 sim.applyIntent(ME, { type: "consumeStart", kind: "beer" });
+sim.applyIntent(ME, { type: "ritualEngage", on: true });
 for (let i = 0; i < 60 * 3; i++) sim.step();
 snap = sim.snapshot();
 assert(snap.players[0].held?.kind === "beer", "beer bottle held");

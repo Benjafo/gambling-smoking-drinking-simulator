@@ -81,6 +81,8 @@ export type Intent =
   | { type: "double" }
   | { type: "buy"; item: ViceKind; qty: number }
   | { type: "consumeStart"; kind: ViceKind }
+  | { type: "ritualEngage"; on: boolean }
+  | { type: "ritualReset" }
   | { type: "consumeCancel" }
   | { type: "fling"; itemId: number; origin: V3; vel: V3; angVel: V3 }
   | { type: "pickup"; itemId: number }

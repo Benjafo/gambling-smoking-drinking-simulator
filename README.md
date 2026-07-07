@@ -47,10 +47,18 @@ npm run build
 ## Controls
 
 - Bet with the chip rack, DEAL / HIT / STAND / DOUBLE.
-- Hold the SMOKE / DRINK buttons to perform the ritual; the meters refill.
+- **Smoke**: drag the cigar from the sidebar to the target ring mid-screen,
+  then hold still while the lighter does its work — wobble and the flame
+  restarts. **Drink**: drag the bottle to the ring, then swipe up and hold to
+  pour; tip back down to pause. (Enter on a focused item runs the ritual
+  hands-free at the same time cost.)
 - The empty stays in your hand: grab it with the pointer, drag, and release
   to fling it. Or ignore it and it drops on its own.
 - Click a settled bottle/butt within reach to pick it back up.
 - Drag anywhere else to look around.
+
+Ritual progress is enforced by the simulation: the client only reports
+whether the gesture is currently engaged; the sim runs the clock, so the
+time cost can't be skipped by a modified client.
 
 The original 2D game is preserved untouched at `degenerate-blackjack.html`.

@@ -13,9 +13,10 @@ import {
   seatTablePoint,
 } from "@shared/constants";
 import type { Intent, PlayerSnap, Snapshot } from "@shared/types";
+import type { ViceKind } from "@shared/types";
 import { CardZone } from "./cards";
 import { DebrisView } from "./debris";
-import { HeldItemControl } from "./held";
+import { HeldItemControl, makeBottleMesh, makeCigarMesh } from "./held";
 import { SmokeSystem, impactSound, dealSound } from "./effects";
 import { updateTweens } from "./tween";
 
@@ -35,6 +36,8 @@ export class SceneView {
   held: HeldItemControl;
   private raycaster = new THREE.Raycaster();
 
+  private ritualGhost: THREE.Group | null = null;
+  private ritualRay = new THREE.Raycaster();
   private mySeat = 2;
   private yawOff = 0;
   private pitchOff = 0;
@@ -66,7 +69,7 @@ export class SceneView {
 
     this.smoke = new SmokeSystem(this.scene);
     this.debrisView = new DebrisView(this.scene);
-    this.held = new HeldItemControl(this.scene, this.camera, send, this.smoke);
+    this.held = new HeldItemControl(this.scene, this.camera, send);
     this.dealerZone = new CardZone(
       this.scene,
       new THREE.Vector3(0, TABLE.height + 0.004, -0.52),
@@ -96,6 +99,12 @@ export class SceneView {
     const rim = new THREE.PointLight(0xe0522b, 6, 7, 2);
     rim.position.set(-3, 1.6, -2.5);
     this.scene.add(rim);
+
+    // camera-attached fill so held items / ritual ghosts aren't silhouettes
+    this.scene.add(this.camera);
+    const fill = new THREE.PointLight(0xffe6c0, 0.9, 2.2, 2);
+    fill.position.set(0.1, 0.15, 0.1);
+    this.camera.add(fill);
   }
 
   private buildRoom(): void {
@@ -256,6 +265,38 @@ export class SceneView {
       return true;
     }
     return false;
+  }
+
+  /* ---------------- ritual ghost (driven by RitualControl) ---------------- */
+  showRitualGhost(kind: ViceKind): void {
+    this.hideRitualGhost();
+    this.ritualGhost = kind === "beer" ? makeBottleMesh() : makeCigarMesh(false);
+    this.scene.add(this.ritualGhost);
+  }
+
+  /* place the ghost on the pointer ray; tilt tips the bottle for the pour.
+     The tip is around the view axis (screen-plane rotation, like the 2D
+     game) with a touch of lean for depth — pitching it at the camera just
+     reads as a dark disc. */
+  moveRitualGhost(ndcX: number, ndcY: number, tilt: number): void {
+    if (!this.ritualGhost) return;
+    this.ritualRay.setFromCamera(new THREE.Vector2(ndcX, ndcY), this.camera);
+    this.ritualGhost.position
+      .copy(this.ritualRay.ray.origin)
+      .addScaledVector(this.ritualRay.ray.direction, 0.9);
+    this.ritualGhost.quaternion.copy(this.camera.quaternion);
+    this.ritualGhost.rotateZ(0.25 + tilt);
+    if (tilt !== 0) this.ritualGhost.rotateX(-tilt * 0.2);
+  }
+
+  emitSmokeAtGhost(): void {
+    if (this.ritualGhost)
+      this.smoke.emit(this.ritualGhost.position.clone().add(new THREE.Vector3(0, 0.09, 0)));
+  }
+
+  hideRitualGhost(): void {
+    if (this.ritualGhost) this.scene.remove(this.ritualGhost);
+    this.ritualGhost = null;
   }
 
   /* ---------------- snapshot reconcile ---------------- */

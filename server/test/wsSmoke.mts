@@ -45,6 +45,7 @@ ws.on("message", (raw) => {
     done("hand settled over the wire, money now " + me.money);
     stage = 4;
     send({ type: "consumeStart", kind: "beer" });
+    send({ type: "ritualEngage", on: true });
   } else if (stage === 4 && me.held) {
     done("beer ritual completed, holding empty #" + me.held.id);
     stage = 5;
