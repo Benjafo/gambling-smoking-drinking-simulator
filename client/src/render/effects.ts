@@ -113,14 +113,17 @@ export class SmokeSystem {
     });
     const sprite = new THREE.Sprite(mat);
     sprite.position.copy(at).add(
-      new THREE.Vector3((Math.random() - 0.5) * 0.06, 0, (Math.random() - 0.5) * 0.06)
+      new THREE.Vector3((Math.random() - 0.5) * 0.04, 0, (Math.random() - 0.5) * 0.04)
     );
-    sprite.scale.setScalar(0.06);
+    // small: ritual smoke lives ~1m from the camera, where a fat sprite
+    // reads as a blinding white blob
+    sprite.scale.setScalar(0.02);
+    mat.opacity = 0.4;
     this.scene.add(sprite);
     this.puffs.push({
       sprite,
-      vel: new THREE.Vector3((Math.random() - 0.5) * 0.05, 0.22 + Math.random() * 0.12, (Math.random() - 0.5) * 0.05),
-      life: 1.5 + Math.random() * 0.5,
+      vel: new THREE.Vector3((Math.random() - 0.5) * 0.04, 0.16 + Math.random() * 0.1, (Math.random() - 0.5) * 0.04),
+      life: 1.4 + Math.random() * 0.5,
       age: 0,
     });
   }
@@ -137,8 +140,8 @@ export class SmokeSystem {
       }
       const t = p.age / p.life;
       p.sprite.position.addScaledVector(p.vel, dt);
-      p.sprite.scale.setScalar(0.06 + t * 0.22);
-      (p.sprite.material as THREE.SpriteMaterial).opacity = 0.7 * (1 - t);
+      p.sprite.scale.setScalar(0.02 + t * 0.09);
+      (p.sprite.material as THREE.SpriteMaterial).opacity = 0.4 * (1 - t);
     }
   }
 }

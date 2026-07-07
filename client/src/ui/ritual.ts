@@ -102,6 +102,7 @@ export class RitualControl {
       $("targetLabel").textContent = kind === "cigar" ? "LIGHTING…" : "POURING…";
       this.send({ type: "ritualEngage", on: true });
       if (kind === "beer") this.startSpill();
+      else this.showLighter();
     } else {
       this.gestureMove(x, y);
     }
@@ -122,7 +123,7 @@ export class RitualControl {
       this.send({ type: "ritualEngage", on: true });
       $("dropTarget").classList.add("armed");
       $("targetLabel").textContent = "HOLD STILL…";
-      this.showLighter(x, y);
+      this.showLighter();
     } else if (this.phase === "hold") {
       if (!inZone) {
         this.phase = "drag";
@@ -139,7 +140,7 @@ export class RitualControl {
         this.send({ type: "ritualReset" });
         this.setRing(0);
       }
-      if (this.phase === "hold") this.showLighter(x, y);
+      if (this.phase === "hold") this.showLighter();
     }
   }
 
@@ -217,11 +218,17 @@ export class RitualControl {
   }
 
   /* ---------------- flourishes ---------------- */
-  private showLighter(x: number, y: number): void {
+  /* the flame parks under the cigar's lit end — the far tip, projected to
+     screen — not at some fixed offset from the cursor */
+  private showLighter(): void {
+    const tip = this.scene.ritualGhostTipScreen();
+    if (!tip) return;
     const l = $("lighterGfx");
     l.classList.add("show");
-    l.style.left = x - 110 + "px";
-    l.style.top = y + 8 + "px";
+    // flame center sits ~32px right of the element's left edge, near its
+    // top — park the flame just under the ember so the body hangs clear
+    l.style.left = tip.x - 32 + "px";
+    l.style.top = tip.y - 2 + "px";
   }
 
   private startSpill(): void {

@@ -37,6 +37,7 @@ export class SceneView {
   private raycaster = new THREE.Raycaster();
 
   private ritualGhost: THREE.Group | null = null;
+  private ritualGhostKind: ViceKind | null = null;
   private ritualRay = new THREE.Raycaster();
   private mySeat = 2;
   private yawOff = 0;
@@ -310,13 +311,16 @@ export class SceneView {
   showRitualGhost(kind: ViceKind): void {
     this.hideRitualGhost();
     this.ritualGhost = kind === "beer" ? makeBottleMesh() : makeCigarMesh(false);
+    if (kind === "cigar") this.ritualGhost.scale.setScalar(1.35); // foreshortened, needs presence
+    this.ritualGhostKind = kind;
     this.scene.add(this.ritualGhost);
   }
 
-  /* place the ghost on the pointer ray; tilt tips the bottle for the pour.
-     The tip is around the view axis (screen-plane rotation, like the 2D
-     game) with a touch of lean for depth — pitching it at the camera just
-     reads as a dark disc. */
+  /* place the ghost on the pointer ray. Orientation is first-person:
+     - cigar: held like a smoker holds it — mouth end (band) toward the
+       player, lit end pointing away with a slight up-right cant
+     - beer: neck tips back TOWARD the mouth as `tilt` grows, curving left
+       so the bottle stays visible instead of foreshortening into a disc */
   moveRitualGhost(ndcX: number, ndcY: number, tilt: number): void {
     if (!this.ritualGhost) return;
     this.ritualRay.setFromCamera(new THREE.Vector2(ndcX, ndcY), this.camera);
@@ -324,18 +328,37 @@ export class SceneView {
       .copy(this.ritualRay.ray.origin)
       .addScaledVector(this.ritualRay.ray.direction, 0.9);
     this.ritualGhost.quaternion.copy(this.camera.quaternion);
-    this.ritualGhost.rotateZ(0.25 + tilt);
-    if (tilt !== 0) this.ritualGhost.rotateX(-tilt * 0.2);
+    if (this.ritualGhostKind === "cigar") {
+      // ember end points away and up-right; enough screen-plane length
+      // remains that it reads as a cigar, not a dot behind the lighter
+      this.ritualGhost.rotateZ(0.35);
+      this.ritualGhost.rotateX(-0.95);
+    } else {
+      this.ritualGhost.rotateZ(0.18 + tilt * 0.45); // left curve keeps the label in view
+      this.ritualGhost.rotateX(tilt * 0.75); // neck pitches back toward the drinker
+    }
+    this.ritualGhost.updateMatrixWorld();
+  }
+
+  /* screen position of the ghost's far tip (+Y end: ember / bottle neck) —
+     the lighter flame parks itself here */
+  ritualGhostTipScreen(): { x: number; y: number } | null {
+    if (!this.ritualGhost) return null;
+    const tip = this.ritualGhost.localToWorld(new THREE.Vector3(0, 0.075, 0));
+    const v = tip.project(this.camera);
+    return { x: ((v.x + 1) / 2) * innerWidth, y: ((1 - v.y) / 2) * innerHeight };
   }
 
   emitSmokeAtGhost(): void {
-    if (this.ritualGhost)
-      this.smoke.emit(this.ritualGhost.position.clone().add(new THREE.Vector3(0, 0.09, 0)));
+    if (!this.ritualGhost) return;
+    // smoke rises off the ember — the far tip, not "above the hand"
+    this.smoke.emit(this.ritualGhost.localToWorld(new THREE.Vector3(0, 0.062, 0)));
   }
 
   hideRitualGhost(): void {
     if (this.ritualGhost) this.scene.remove(this.ritualGhost);
     this.ritualGhost = null;
+    this.ritualGhostKind = null;
   }
 
   /* ---------------- snapshot reconcile ---------------- */

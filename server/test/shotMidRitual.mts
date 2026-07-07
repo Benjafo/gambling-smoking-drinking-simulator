@@ -33,20 +33,30 @@ const cmd = (method: string, params: object = {}): Promise<any> =>
   });
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+const KIND = process.env.KIND === "cigar" ? "cigar" : "beer";
+
 await new Promise((r) => ws.on("open", r));
 await sleep(2500);
 await cmd("Runtime.evaluate", { expression: `document.getElementById('startBtn').click()` });
 await sleep(1200);
 await cmd("Runtime.evaluate", {
-  expression: `{const item=document.getElementById('beerItem');
+  expression:
+    KIND === "beer"
+      ? `{const item=document.getElementById('beerItem');
     const cx=innerWidth/2, cy=innerHeight*0.45;
     const r=item.getBoundingClientRect();
     const fire=(t,x,y)=>item.dispatchEvent(new PointerEvent(t,{bubbles:true,clientX:x,clientY:y,pointerId:9}));
     fire('pointerdown', r.left+40, r.top+40);
     setTimeout(()=>fire('pointermove', cx, cy), 120);
-    setTimeout(()=>fire('pointermove', cx, cy-85), 300);}`,
+    setTimeout(()=>fire('pointermove', cx, cy-85), 300);}`
+      : `{const item=document.getElementById('cigarItem');
+    const cx=innerWidth/2, cy=innerHeight*0.45;
+    const r=item.getBoundingClientRect();
+    const fire=(t,x,y)=>item.dispatchEvent(new PointerEvent(t,{bubbles:true,clientX:x,clientY:y,pointerId:9}));
+    fire('pointerdown', r.left+40, r.top+40);
+    setTimeout(()=>fire('pointermove', cx, cy), 120);}`, // then hold still
 });
-await sleep(1300); // ~1s into the pour
+await sleep(1300); // ~1s into the pour / hold
 const shot = await cmd("Page.captureScreenshot", { format: "png" });
 const { writeFileSync } = await import("node:fs");
 writeFileSync(SHOT, Buffer.from(shot.result.data, "base64"));

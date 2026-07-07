@@ -48,11 +48,12 @@ setInterval(() => {
   const now = performance.now();
   acc += now - last;
   last = now;
-  let guard = 0;
-  while (acc >= stepMs && guard < 12) {
+  // cap the backlog: a stalled event loop must not fast-forward the sim in a
+  // burst (an engaged ritual would complete in a blink of catch-up ticks)
+  if (acc > 250) acc = 250;
+  while (acc >= stepMs) {
     sim.step();
     acc -= stepMs;
-    guard++;
     if (++sinceSnap >= SNAPSHOT_EVERY_TICKS) {
       sinceSnap = 0;
       if (clients.size > 0) {
@@ -62,5 +63,4 @@ setInterval(() => {
       }
     }
   }
-  if (guard >= 12) acc = 0;
 }, 8);
