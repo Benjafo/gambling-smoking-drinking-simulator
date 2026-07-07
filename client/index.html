@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Degenerate Blackjack 3D</title>
+<link rel="stylesheet" href="/src/styles.css">
+</head>
+<body>
+
+<div id="stage"></div>
+<div id="vignette"></div>
+
+<!-- ============ HUD OVERLAY ============ -->
+<div id="hud">
+  <div id="topBar">
+    <span class="money" id="moneyDisplay">$1000</span>
+    <span class="stat">Hands: <b id="handsDisplay">0</b></span>
+    <span class="stat">Time: <b id="timeDisplay">00:00</b></span>
+    <span class="stat" id="phaseDisplay"></span>
+  </div>
+
+  <div id="sidebar">
+    <div class="panel">
+      <h3>VICES</h3>
+      <div class="vice-head"><span>🚬 CIGARS</span><span class="inv" id="cigarInv">×3</span></div>
+      <div class="meter cigar"><div class="fill ok" id="cigarFill"></div></div>
+      <button class="vice-btn" id="smokeBtn">HOLD TO SMOKE<div class="ritual-fill" id="cigarRitual"></div></button>
+      <div style="height:12px"></div>
+      <div class="vice-head"><span>🍺 BEER</span><span class="inv" id="beerInv">×3</span></div>
+      <div class="meter beer"><div class="fill ok" id="beerFill"></div></div>
+      <button class="vice-btn" id="drinkBtn">HOLD TO DRINK<div class="ritual-fill" id="beerRitual"></div></button>
+    </div>
+    <div class="panel">
+      <h3>SHOP — ALWAYS OPEN</h3>
+      <div class="shop-row">
+        <span>🚬 <span class="price" id="cigarPrice">$15</span></span>
+        <span>
+          <button class="buy-btn" id="buyCigar1">Buy 1</button>
+          <button class="buy-btn" id="buyCigar5">Buy 5</button>
+        </span>
+      </div>
+      <div class="shop-row">
+        <span>🍺 <span class="price" id="beerPrice">$10</span></span>
+        <span>
+          <button class="buy-btn" id="buyBeer1">Buy 1</button>
+          <button class="buy-btn" id="buyBeer5">Buy 5</button>
+        </span>
+      </div>
+      <p class="inflation-note">Prices rise 10% every 10 hands.<br>The bar knows you're not leaving.</p>
+    </div>
+  </div>
+
+  <div id="actionDock">
+    <div id="betPanel">
+      <div class="controls-row">
+        <div class="bet-amount" id="betDisplay">$0</div>
+        <div class="chip-rack" id="chipRack"></div>
+        <button class="act-btn" id="dealBtn">DEAL</button>
+      </div>
+      <div class="controls-row" style="margin-top:8px">
+        <button class="preset-btn" data-preset="min">MIN</button>
+        <button class="preset-btn" data-preset="half">HALF</button>
+        <button class="preset-btn" data-preset="allin">ALL IN</button>
+        <button class="preset-btn" data-preset="rebet" id="rebetBtn">REBET</button>
+        <button class="preset-btn" id="betClear">CLEAR</button>
+      </div>
+    </div>
+    <div id="playPanel" style="display:none">
+      <div class="controls-row">
+        <button class="act-btn" id="hitBtn">HIT</button>
+        <button class="act-btn" id="standBtn">STAND</button>
+        <button class="act-btn secondary" id="doubleBtn">DOUBLE</button>
+        <span class="hint" id="betInPlay"></span>
+      </div>
+    </div>
+    <div class="hint" id="dockHint"></div>
+  </div>
+
+  <div id="banner"></div>
+  <div id="flingHint">DRAG THE EMPTY &amp; RELEASE TO FLING IT — OR LET IT DROP</div>
+  <div id="flavorBar">The dealer doesn't blink.</div>
+</div>
+
+<!-- ============ TITLE ============ -->
+<div id="titleScreen" class="screen active">
+  <div class="marquee">DEGENERATE<br>BLACKJACK<small class="vices-title">🚬 3D SIMULATOR 🍺</small></div>
+  <p class="tagline">One thousand dollars. Infinite hands. Keep smoking. Keep drinking.
+    Fling the empties wherever you like — the floor belongs to the house too.</p>
+  <button class="big-btn" id="startBtn">DEAL ME IN</button>
+</div>
+
+<!-- ============ GAME OVER ============ -->
+<div id="overScreen" class="screen">
+  <div id="deathCause"></div>
+  <div id="overStats"></div>
+  <p class="epitaph">The stool is still warm. The bottles stay where they landed.</p>
+  <button class="big-btn" id="retryBtn">RUN IT BACK</button>
+</div>
+
+<script type="module" src="/src/main.ts"></script>
+</body>
+</html>

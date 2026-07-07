@@ -1,0 +1,16 @@
+{
+  "name": "degenerate-blackjack-3d",
+  "private": true,
+  "workspaces": [
+    "shared",
+    "client",
+    "server"
+  ],
+  "scripts": {
+    "dev": "npm --workspace client run dev",
+    "build": "npm --workspace client run build",
+    "typecheck": "npm --workspace client run typecheck && npm --workspace server run typecheck",
+    "server": "npm --workspace server run start",
+    "test:sim": "npm --workspace shared run test"
+  }
+}
