@@ -73,6 +73,7 @@ export class HeldItemControl {
   private pendingTtl = 0;
   private pendingFling: { origin: THREE.Vector3; vel: THREE.Vector3; angVel: THREE.Vector3 } | null =
     null;
+  private denyUntil = 0;
 
   constructor(
     private scene: THREE.Scene,
@@ -212,6 +213,33 @@ export class HeldItemControl {
     });
     // optimistic: hand empties now; the sim's debris body appears next snapshot
     this.dropMesh();
+  }
+
+  /* hands-full pickup denied: pulse the held item red twice */
+  flashDeny(): void {
+    if (!this.mesh || this.denyUntil > performance.now()) return;
+    this.denyUntil = performance.now() + 450;
+    this.mesh.traverse((o) => {
+      const mat = (o as THREE.Mesh).material as THREE.MeshStandardMaterial | undefined;
+      if (mat?.emissive) {
+        const orig = mat.emissive.clone();
+        const origIntensity = mat.emissiveIntensity;
+        mat.emissive.setHex(0xd02010);
+        mat.emissiveIntensity = 1.6;
+        setTimeout(() => {
+          mat.emissive.copy(orig);
+          mat.emissiveIntensity = origIntensity;
+          setTimeout(() => {
+            mat.emissive.setHex(0xd02010);
+            mat.emissiveIntensity = 1.6;
+            setTimeout(() => {
+              mat.emissive.copy(orig);
+              mat.emissiveIntensity = origIntensity;
+            }, 130);
+          }, 90);
+        }, 130);
+      }
+    });
   }
 
   frame(dt: number): void {

@@ -17,7 +17,7 @@ import type { ViceKind } from "@shared/types";
 import { CardZone } from "./cards";
 import { DebrisView } from "./debris";
 import { HeldItemControl, makeBottleMesh, makeCigarMesh } from "./held";
-import { SmokeSystem, impactSound, dealSound } from "./effects";
+import { SmokeSystem, impactSound, dealSound, denySound } from "./effects";
 import { updateTweens } from "./tween";
 
 const CENTER = new THREE.Vector3(0, TABLE.height + 0.05, 0);
@@ -229,6 +229,12 @@ export class SceneView {
       }
       const target = this.findDebrisAt(ndc);
       if (target) {
+        if (this.held.hasHeld) {
+          // hands full: deny, and make the held item say so
+          this.held.flashDeny();
+          denySound();
+          return;
+        }
         // one motion: the pickup intent flies while the drag starts locally
         this.send({ type: "pickup", itemId: target.id });
         this.held.beginFloorGrab(target.kind, target.pos);
@@ -262,8 +268,9 @@ export class SceneView {
   }
 
   /* what grabbable debris is under the pointer? Direct instance hit first,
-     then a fat-pick fallback: nearest settled item to where the ray meets
-     the floor or the tabletop — clicking near a cigar counts. */
+     then a fat-pick fallback: nearest item (settled or mid-tumble) within
+     ~25cm of the pointer ray — clicking near a cigar counts, and a rolling
+     bottle can be snatched out of the air. */
   private findDebrisAt(ndc: THREE.Vector2): { id: number; kind: ViceKind; pos: THREE.Vector3 } | null {
     this.raycaster.setFromCamera(ndc, this.camera);
     const hits = this.raycaster.intersectObjects(this.debrisView.pickables, false);
@@ -272,24 +279,23 @@ export class SceneView {
       const id = this.debrisView.debrisIdFor(h.object, h.instanceId);
       if (id === null) continue;
       const info = this.debrisView.info(id);
-      if (!info || info.phase !== "settled") continue;
+      if (!info) continue;
       if (info.pos.distanceTo(this.camera.position) > REACH_RADIUS) continue;
       return { id, kind: info.kind, pos: info.pos };
     }
-    for (const planeY of [TABLE.height, 0]) {
-      const t = (planeY - this.raycaster.ray.origin.y) / this.raycaster.ray.direction.y;
-      if (t <= 0) continue;
-      const p = this.raycaster.ray.origin
-        .clone()
-        .addScaledVector(this.raycaster.ray.direction, t);
-      const near = this.debrisView.nearestSettled(p, 0.35);
-      if (near && near.pos.distanceTo(this.camera.position) <= REACH_RADIUS) return near;
-    }
+    const near = this.debrisView.nearestToRay(this.raycaster.ray, 0.25);
+    if (near && near.pos.distanceTo(this.camera.position) <= REACH_RADIUS) return near;
     return null;
   }
 
   private updateHover(ndc: THREE.Vector2): void {
     const target = this.findDebrisAt(ndc);
+    if (target && this.held.hasHeld) {
+      // hands full: no invitation, and the cursor says why
+      this.debrisView.setHighlight(null);
+      this.renderer.domElement.style.cursor = "not-allowed";
+      return;
+    }
     this.debrisView.setHighlight(target?.id ?? null);
     this.renderer.domElement.style.cursor = target ? "grab" : "";
   }

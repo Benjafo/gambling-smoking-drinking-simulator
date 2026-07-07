@@ -52,6 +52,16 @@ const SCRIPT: [string, number][] = [
     `document.getElementById('cigarItem').dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true}))`,
     3800,
   ],
+  // hands full (holding the butt): clicking the settled bottle must be DENIED
+  [
+    `{const d=(window.__snap?.debris||[]).find(d=>d.phase==='settled');
+      if(!d) throw new Error('no settled debris for deny test');
+      const s=window.__scene.screenPos(d.pos.x,d.pos.y,d.pos.z);
+      const c=document.querySelector('#stage canvas');
+      c.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true,clientX:s.x,clientY:s.y,pointerId:13}));
+      c.dispatchEvent(new PointerEvent('pointerup',{bubbles:true,clientX:s.x,clientY:s.y,pointerId:13}));}`,
+    800,
+  ],
 ];
 
 const listRes = await fetch(`http://localhost:${CDP_PORT}/json/list`);
@@ -101,6 +111,7 @@ const state = await cmd("Runtime.evaluate", {
     beerInv: document.getElementById('beerInv').textContent,
     cigarInv: document.getElementById('cigarInv').textContent,
     flingHint: document.getElementById('flingHint').classList.contains('show'),
+    held: window.__snap?.players?.[0]?.held?.kind ?? null,
     debris: (window.__snap?.debris ?? []).map(d => d.kind + ':' + d.phase + '@' +
       d.pos.x.toFixed(1) + ',' + d.pos.y.toFixed(2) + ',' + d.pos.z.toFixed(1)),
   })`,

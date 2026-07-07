@@ -98,8 +98,8 @@ snap = sim.snapshot();
 assert(snap.players[0].held?.kind === "cigar", "settled debris picked back up from afar");
 assert(snap.debris.length === 0, "picked-up debris left the world");
 
-// hands-full pickup swaps instead of dead-ending: drop the butt, drink a
-// beer (now holding the empty bottle), then grab the butt again
+// hands-full pickup is DENIED, not swapped: drop the butt, drink a beer
+// (now holding the empty bottle), then try to grab the butt
 const butt = snap.players[0].held!;
 sim.applyIntent(ME, {
   type: "fling",
@@ -119,11 +119,30 @@ assert(sim.snapshot().players[0].held?.kind === "beer", "holding the beer empty"
 sim.applyIntent(ME, { type: "pickup", itemId: buttOnFloor!.id });
 sim.step();
 snap = sim.snapshot();
-assert(snap.players[0].held?.kind === "cigar", "pickup swapped: butt now in hand");
+assert(snap.players[0].held?.kind === "beer", "hands-full pickup denied: still holding beer");
 assert(
-  snap.debris.some((d) => d.kind === "beer"),
-  "swapped-out bottle dropped back into the world"
+  snap.debris.some((d) => d.id === buttOnFloor!.id),
+  "denied pickup left the butt on the floor"
 );
+
+// a rolling/flying item can be snatched mid-air
+const bottleInHand = snap.players[0].held!;
+sim.applyIntent(ME, {
+  type: "fling",
+  itemId: bottleInHand.id,
+  origin: { x: 0, y: 1.3, z: 1.6 },
+  vel: { x: 0.5, y: 2.5, z: -3 },
+  angVel: { x: 3, y: 1, z: 2 },
+});
+for (let i = 0; i < 12; i++) sim.step(); // ~0.2s: definitely still airborne
+snap = sim.snapshot();
+const flying = snap.debris.find((d) => d.kind === "beer" && d.phase === "flying");
+assert(flying !== undefined, "bottle airborne");
+sim.applyIntent(ME, { type: "pickup", itemId: flying!.id });
+sim.step();
+snap = sim.snapshot();
+assert(snap.players[0].held?.kind === "beer", "snatched the bottle mid-flight");
+assert(!snap.debris.some((d) => d.id === flying!.id), "mid-flight body removed from the world");
 
 // fling speed clamp: absurd velocity must be capped server-side
 sim.applyIntent(ME, { type: "consumeStart", kind: "beer" });

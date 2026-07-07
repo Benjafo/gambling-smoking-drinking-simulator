@@ -108,14 +108,17 @@ export class DebrisView {
     return t ? { id, kind: t.kind, phase: t.phase, pos: t.pos.clone() } : null;
   }
 
-  /* fat-pick fallback: nearest settled item to a world point (a ray-plane
-     hit), so clicking "near" a 2cm cigar still grabs it */
-  nearestSettled(point: THREE.Vector3, maxDist: number): { id: number; kind: ViceKind; pos: THREE.Vector3 } | null {
+  /* fat-pick fallback: nearest item (settled OR rolling/flying) to the
+     pointer ray, so clicking "near" a 2cm cigar — or a tumbling bottle —
+     still grabs it */
+  nearestToRay(
+    ray: THREE.Ray,
+    threshold: number
+  ): { id: number; kind: ViceKind; pos: THREE.Vector3 } | null {
     let best: { id: number; kind: ViceKind; pos: THREE.Vector3 } | null = null;
-    let bestD = maxDist;
+    let bestD = threshold;
     for (const [id, t] of this.tracked) {
-      if (t.phase !== "settled") continue;
-      const d = t.pos.distanceTo(point);
+      const d = ray.distanceToPoint(t.pos);
       if (d < bestD) {
         bestD = d;
         best = { id, kind: t.kind, pos: t.pos.clone() };

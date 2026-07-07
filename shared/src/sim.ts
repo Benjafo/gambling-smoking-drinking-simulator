@@ -576,13 +576,14 @@ export class Simulation {
     this.debris.delete(d.id);
   }
 
+  /* settled or mid-flight — snatching a rolling bottle is allowed. Hands
+     full is a hard deny (the client flashes the held item red). */
   private pickup(p: Player, itemId: number): void {
-    if (!p.alive || p.ritual) return;
+    if (!p.alive || p.ritual || p.held) return;
     const d = this.debris.get(itemId);
-    if (!d || d.phase !== "settled") return;
+    if (!d) return;
     const eye = seatEye(p.seat);
     if (Math.hypot(d.pos.x - eye.x, d.pos.y - eye.y, d.pos.z - eye.z) > REACH_RADIUS) return;
-    if (p.held) this.autoDrop(p); // hands full: swap, don't dead-end
     this.removeDebris(d);
     p.held = { id: this.nextDebrisId++, kind: d.kind, sinceTick: this.tick };
   }

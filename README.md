@@ -71,7 +71,10 @@ since npm workspaces span `client/`, `server/`, and `shared/`.
   hands-free at the same time cost.)
 - The empty stays in your hand: grab it with the pointer, drag, and release
   to fling it. Or ignore it and it drops on its own.
-- Click a settled bottle/butt within reach to pick it back up.
+- Debris glows amber under the cursor when it's grabbable — press-drag-release
+  flings it straight off the floor, a plain click takes it into your hand.
+  Rolling and mid-air items can be snatched too. With your hands full the
+  held item flashes red and the grab is denied.
 - Drag anywhere else to look around.
 
 Ritual progress is enforced by the simulation: the client only reports
