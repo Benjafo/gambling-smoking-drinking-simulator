@@ -44,6 +44,23 @@ npm run typecheck
 npm run build
 ```
 
+### Docker
+
+```sh
+docker compose up --build
+```
+
+Starts the websocket room on `:8081` (`server/Dockerfile`, runs `server/src`
+via `tsx`, no compile step) and the built client behind nginx on `:8080`
+(`client/Dockerfile`, multi-stage `vite build`). Open:
+
+- `http://localhost:8080` — single player (sim runs in a browser worker).
+- `http://localhost:8080/?server=ws://localhost:8081` — multiplayer, against
+  the containerized room.
+
+Both Dockerfiles build from the repo root (`docker build -f server/Dockerfile .`)
+since npm workspaces span `client/`, `server/`, and `shared/`.
+
 ## Controls
 
 - Bet with the chip rack, DEAL / HIT / STAND / DOUBLE.
