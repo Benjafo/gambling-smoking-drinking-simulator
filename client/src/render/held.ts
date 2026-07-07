@@ -4,6 +4,7 @@
 import * as THREE from "three";
 import { MAX_FLING_SPEED, type V3 } from "@shared/constants";
 import type { Intent, PlayerSnap, ViceKind } from "@shared/types";
+import { pickupSound } from "./effects";
 
 export function makeBottleMesh(): THREE.Group {
   const g = new THREE.Group();
@@ -67,6 +68,11 @@ export class HeldItemControl {
   private grabPoint = new THREE.Vector3();
   private samples: { p: THREE.Vector3; t: number }[] = [];
   private raycaster = new THREE.Raycaster();
+  /* optimistic floor-grab: mesh exists before the sim confirms the pickup */
+  private pendingKind: ViceKind | null = null;
+  private pendingTtl = 0;
+  private pendingFling: { origin: THREE.Vector3; vel: THREE.Vector3; angVel: THREE.Vector3 } | null =
+    null;
 
   constructor(
     private scene: THREE.Scene,
@@ -84,13 +90,52 @@ export class HeldItemControl {
   apply(me: PlayerSnap | undefined): void {
     const held = me?.held ?? null;
     if (held && held.id !== this.heldId) {
+      if (this.pendingKind === held.kind && this.mesh) {
+        // sim confirmed our optimistic floor-grab: adopt the id, keep the
+        // mesh and whatever drag is in progress
+        this.heldId = held.id;
+        this.pendingKind = null;
+        if (this.pendingFling) {
+          const f = this.pendingFling;
+          this.pendingFling = null;
+          this.send({
+            type: "fling",
+            itemId: held.id,
+            origin: v3(f.origin),
+            vel: v3(f.vel),
+            angVel: v3(f.angVel),
+          });
+          this.dropMesh();
+        }
+        return;
+      }
       this.dropMesh();
       this.heldId = held.id;
       this.mesh = held.kind === "beer" ? makeBottleMesh() : makeCigarMesh(true);
+      this.mesh.add(hitProxy());
       this.scene.add(this.mesh);
     } else if (!held && this.heldId !== null) {
       this.dropMesh();
+    } else if (!held && this.pendingKind) {
+      // grab not confirmed yet (or rejected — e.g. another player took it)
+      if (--this.pendingTtl <= 0) this.dropMesh();
     }
+  }
+
+  /* pointerdown landed on settled debris: enter the drag state immediately;
+     the pickup intent is in flight and apply() reconciles the answer */
+  beginFloorGrab(kind: ViceKind, worldPos: THREE.Vector3): void {
+    this.dropMesh();
+    this.pendingKind = kind;
+    this.pendingTtl = 20; // snapshots (~1s) before we give up on the sim
+    this.mesh = kind === "beer" ? makeBottleMesh() : makeCigarMesh(true);
+    this.mesh.add(hitProxy());
+    this.mesh.position.copy(worldPos);
+    this.scene.add(this.mesh);
+    this.grabbing = true;
+    this.samples = [];
+    this.grabPoint.copy(worldPos);
+    pickupSound();
   }
 
   /* returns true if the pointer event was consumed (grabbed the held item) */
@@ -116,11 +161,18 @@ export class HeldItemControl {
   }
 
   pointerUp(): void {
-    if (!this.grabbing || this.heldId === null || !this.mesh) {
+    if (!this.grabbing || !this.mesh) {
       this.grabbing = false;
       return;
     }
     this.grabbing = false;
+
+    // barely moved: this was "take it into the hand", not a throw
+    const travel =
+      this.samples.length >= 2
+        ? this.samples[this.samples.length - 1].p.distanceTo(this.samples[0].p)
+        : 0;
+    if (travel < 0.03) return;
 
     let vel = new THREE.Vector3();
     if (this.samples.length >= 2) {
@@ -146,6 +198,11 @@ export class HeldItemControl {
     );
     const origin = this.mesh.position.clone();
 
+    if (this.heldId === null) {
+      // floor-grab not confirmed yet: queue the throw, apply() fires it
+      this.pendingFling = { origin, vel, angVel };
+      return;
+    }
     this.send({
       type: "fling",
       itemId: this.heldId,
@@ -159,8 +216,10 @@ export class HeldItemControl {
 
   frame(dt: number): void {
     if (!this.mesh) return;
-    if (this.grabbing && this.samples.length) {
+    if (this.grabbing) {
       this.mesh.position.lerp(this.grabPoint, 1 - Math.exp(-dt * 30));
+    } else if (this.pendingFling) {
+      // released mid-air, waiting for the sim to confirm — hold the pose
     } else {
       this.mesh.position.copy(this.camAnchor(HAND_OFFSET));
       this.mesh.position.y += Math.sin(performance.now() / 600) * 0.006; // idle bob
@@ -178,7 +237,20 @@ export class HeldItemControl {
     this.mesh = null;
     this.heldId = null;
     this.grabbing = false;
+    this.pendingKind = null;
+    this.pendingFling = null;
   }
+}
+
+/* invisible sphere that fattens the held item's raycast target — grabbing a
+   2cm cigar with a naked mesh raycast is pixel hunting */
+function hitProxy(): THREE.Mesh {
+  const m = new THREE.Mesh(
+    new THREE.SphereGeometry(0.16, 8, 6),
+    new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false })
+  );
+  m.name = "hitProxy";
+  return m;
 }
 
 function v3(v: THREE.Vector3): V3 {

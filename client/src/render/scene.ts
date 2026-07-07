@@ -227,7 +227,14 @@ export class SceneView {
         capture(e);
         return;
       }
-      if (this.tryPickup(ndc)) return;
+      const target = this.findDebrisAt(ndc);
+      if (target) {
+        // one motion: the pickup intent flies while the drag starts locally
+        this.send({ type: "pickup", itemId: target.id });
+        this.held.beginFloorGrab(target.kind, target.pos);
+        capture(e);
+        return;
+      }
       this.looking = true;
       this.lastPointer = { x: e.clientX, y: e.clientY };
       capture(e);
@@ -242,7 +249,9 @@ export class SceneView {
         this.pitchOff = clamp(this.pitchOff + (e.clientY - this.lastPointer.y) * 0.003, -0.5, 0.35);
         this.lastPointer = { x: e.clientX, y: e.clientY };
         this.applyLook();
+        return;
       }
+      this.updateHover(this.ndc(e));
     });
     const up = () => {
       if (this.held.isGrabbing) this.held.pointerUp();
@@ -252,19 +261,43 @@ export class SceneView {
     dom.addEventListener("pointercancel", up);
   }
 
-  private tryPickup(ndc: THREE.Vector2): boolean {
-    if (this.held.hasHeld || !this.latest) return false;
+  /* what grabbable debris is under the pointer? Direct instance hit first,
+     then a fat-pick fallback: nearest settled item to where the ray meets
+     the floor or the tabletop — clicking near a cigar counts. */
+  private findDebrisAt(ndc: THREE.Vector2): { id: number; kind: ViceKind; pos: THREE.Vector3 } | null {
     this.raycaster.setFromCamera(ndc, this.camera);
     const hits = this.raycaster.intersectObjects(this.debrisView.pickables, false);
     for (const h of hits) {
       if (h.instanceId === undefined) continue;
       const id = this.debrisView.debrisIdFor(h.object, h.instanceId);
       if (id === null) continue;
-      if (h.point.distanceTo(this.camera.position) > REACH_RADIUS) return false;
-      this.send({ type: "pickup", itemId: id });
-      return true;
+      const info = this.debrisView.info(id);
+      if (!info || info.phase !== "settled") continue;
+      if (info.pos.distanceTo(this.camera.position) > REACH_RADIUS) continue;
+      return { id, kind: info.kind, pos: info.pos };
     }
-    return false;
+    for (const planeY of [TABLE.height, 0]) {
+      const t = (planeY - this.raycaster.ray.origin.y) / this.raycaster.ray.direction.y;
+      if (t <= 0) continue;
+      const p = this.raycaster.ray.origin
+        .clone()
+        .addScaledVector(this.raycaster.ray.direction, t);
+      const near = this.debrisView.nearestSettled(p, 0.35);
+      if (near && near.pos.distanceTo(this.camera.position) <= REACH_RADIUS) return near;
+    }
+    return null;
+  }
+
+  private updateHover(ndc: THREE.Vector2): void {
+    const target = this.findDebrisAt(ndc);
+    this.debrisView.setHighlight(target?.id ?? null);
+    this.renderer.domElement.style.cursor = target ? "grab" : "";
+  }
+
+  /* project a world point to CSS pixels — used by headless UI tests */
+  screenPos(x: number, y: number, z: number): { x: number; y: number } {
+    const v = new THREE.Vector3(x, y, z).project(this.camera);
+    return { x: ((v.x + 1) / 2) * innerWidth, y: ((1 - v.y) / 2) * innerHeight };
   }
 
   /* ---------------- ritual ghost (driven by RitualControl) ---------------- */

@@ -58,11 +58,14 @@ interface Tracked {
 
 const _m = new THREE.Matrix4();
 const _s = new THREE.Vector3(1, 1, 1);
+const _plainColor = new THREE.Color(1, 1, 1);
+const _hotColor = new THREE.Color(1.9, 1.5, 0.9); // >1 brightens: amber glow
 
 export class DebrisView {
   private bottles: THREE.InstancedMesh;
   private cigars: THREE.InstancedMesh;
   private tracked = new Map<number, Tracked>();
+  private highlighted: number | null = null;
   /* instanceId -> debris id, per mesh, rebuilt every frame for pick-raycasts */
   bottleIds: number[] = [];
   cigarIds: number[] = [];
@@ -98,6 +101,31 @@ export class DebrisView {
     if (mesh === this.bottles) return this.bottleIds[instanceId] ?? null;
     if (mesh === this.cigars) return this.cigarIds[instanceId] ?? null;
     return null;
+  }
+
+  info(id: number): { id: number; kind: ViceKind; phase: string; pos: THREE.Vector3 } | null {
+    const t = this.tracked.get(id);
+    return t ? { id, kind: t.kind, phase: t.phase, pos: t.pos.clone() } : null;
+  }
+
+  /* fat-pick fallback: nearest settled item to a world point (a ray-plane
+     hit), so clicking "near" a 2cm cigar still grabs it */
+  nearestSettled(point: THREE.Vector3, maxDist: number): { id: number; kind: ViceKind; pos: THREE.Vector3 } | null {
+    let best: { id: number; kind: ViceKind; pos: THREE.Vector3 } | null = null;
+    let bestD = maxDist;
+    for (const [id, t] of this.tracked) {
+      if (t.phase !== "settled") continue;
+      const d = t.pos.distanceTo(point);
+      if (d < bestD) {
+        bestD = d;
+        best = { id, kind: t.kind, pos: t.pos.clone() };
+      }
+    }
+    return best;
+  }
+
+  setHighlight(id: number | null): void {
+    this.highlighted = id;
   }
 
   apply(debris: DebrisSnap[]): void {
@@ -140,13 +168,16 @@ export class DebrisView {
         t.rot.copy(t.targetRot);
       }
       _m.compose(t.pos, t.rot, _s);
+      const hot = id === this.highlighted;
       if (t.kind === "beer") {
         if (bi < MAX_DEBRIS) {
           this.bottles.setMatrixAt(bi, _m);
+          this.bottles.setColorAt(bi, hot ? _hotColor : _plainColor);
           this.bottleIds[bi++] = id;
         }
       } else if (ci < MAX_DEBRIS) {
         this.cigars.setMatrixAt(ci, _m);
+        this.cigars.setColorAt(ci, hot ? _hotColor : _plainColor);
         this.cigarIds[ci++] = id;
       }
     }
@@ -154,6 +185,8 @@ export class DebrisView {
     this.cigars.count = ci;
     this.bottles.instanceMatrix.needsUpdate = true;
     this.cigars.instanceMatrix.needsUpdate = true;
+    if (this.bottles.instanceColor) this.bottles.instanceColor.needsUpdate = true;
+    if (this.cigars.instanceColor) this.cigars.instanceColor.needsUpdate = true;
   }
 }
 

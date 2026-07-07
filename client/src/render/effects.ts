@@ -33,6 +33,21 @@ export function impactSound(speed: number): void {
   src.start();
 }
 
+export function pickupSound(): void {
+  const ac = audio();
+  if (!ac) return;
+  const osc = ac.createOscillator();
+  osc.type = "sine";
+  osc.frequency.setValueAtTime(340, ac.currentTime);
+  osc.frequency.exponentialRampToValueAtTime(520, ac.currentTime + 0.06);
+  const gain = ac.createGain();
+  gain.gain.setValueAtTime(0.08, ac.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.001, ac.currentTime + 0.09);
+  osc.connect(gain).connect(ac.destination);
+  osc.start();
+  osc.stop(ac.currentTime + 0.1);
+}
+
 export function dealSound(): void {
   const ac = audio();
   if (!ac) return;

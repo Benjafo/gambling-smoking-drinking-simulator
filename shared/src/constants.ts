@@ -31,7 +31,10 @@ export const ACT_TIMEOUT_MS = 30000; // auto-stand an AFK player
 
 export const MAX_DEBRIS = 200;
 export const MAX_FLING_SPEED = 12;
-export const REACH_RADIUS = 2.2;
+/* pickup range, from the seat's eye. Effectively room-wide: you're stuck on
+   the stool, so debris you can't retrieve is dead content, and multiplayer
+   "reach" fairness matters less than keeping the toy alive. */
+export const REACH_RADIUS = 10;
 
 /* ---- world geometry ---- */
 export const TABLE = { radius: 1.5, height: 0.76, rimRadius: 1.47, rimTube: 0.055 };

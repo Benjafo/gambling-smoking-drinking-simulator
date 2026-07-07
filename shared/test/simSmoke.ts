@@ -90,6 +90,41 @@ snap = sim.snapshot();
 assert(settled, "debris settled and froze");
 assert(snap.debris[0].pos.y > -5, "debris rests in-bounds at y=" + snap.debris[0].pos.y.toFixed(2));
 
+// pick the settled butt back up — it landed across the room, still in reach
+const settledId = snap.debris[0].id;
+sim.applyIntent(ME, { type: "pickup", itemId: settledId });
+sim.step();
+snap = sim.snapshot();
+assert(snap.players[0].held?.kind === "cigar", "settled debris picked back up from afar");
+assert(snap.debris.length === 0, "picked-up debris left the world");
+
+// hands-full pickup swaps instead of dead-ending: drop the butt, drink a
+// beer (now holding the empty bottle), then grab the butt again
+const butt = snap.players[0].held!;
+sim.applyIntent(ME, {
+  type: "fling",
+  itemId: butt.id,
+  origin: { x: 0, y: 1.2, z: 1.8 },
+  vel: { x: 0, y: 0.5, z: -2 },
+  angVel: { x: 1, y: 0, z: 1 },
+});
+for (let i = 0; i < 60 * 6; i++) sim.step();
+snap = sim.snapshot();
+const buttOnFloor = snap.debris.find((d) => d.kind === "cigar" && d.phase === "settled");
+assert(buttOnFloor !== undefined, "butt settled again");
+sim.applyIntent(ME, { type: "consumeStart", kind: "beer" });
+sim.applyIntent(ME, { type: "ritualEngage", on: true });
+for (let i = 0; i < 60 * 3; i++) sim.step();
+assert(sim.snapshot().players[0].held?.kind === "beer", "holding the beer empty");
+sim.applyIntent(ME, { type: "pickup", itemId: buttOnFloor!.id });
+sim.step();
+snap = sim.snapshot();
+assert(snap.players[0].held?.kind === "cigar", "pickup swapped: butt now in hand");
+assert(
+  snap.debris.some((d) => d.kind === "beer"),
+  "swapped-out bottle dropped back into the world"
+);
+
 // fling speed clamp: absurd velocity must be capped server-side
 sim.applyIntent(ME, { type: "consumeStart", kind: "beer" });
 sim.applyIntent(ME, { type: "ritualEngage", on: true });

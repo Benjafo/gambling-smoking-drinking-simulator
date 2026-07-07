@@ -34,6 +34,19 @@ const SCRIPT: [string, number][] = [
     2500,
   ],
   [`(document.getElementById('standBtn') || {click(){}}).click()`, 3500],
+  // grab the settled bottle off the table and re-fling it, one motion:
+  // pointerdown on its screen position, drag, release
+  [
+    `{const d=(window.__snap?.debris||[]).find(d=>d.phase==='settled');
+      if(!d) throw new Error('no settled debris to grab');
+      const s=window.__scene.screenPos(d.pos.x,d.pos.y,d.pos.z);
+      const c=document.querySelector('#stage canvas');
+      const fire=(t,x,y)=>c.dispatchEvent(new PointerEvent(t,{bubbles:true,clientX:x,clientY:y,pointerId:11}));
+      let x=s.x,y=s.y; fire('pointerdown',x,y);
+      let i=0;const iv=setInterval(()=>{i++;x+=9;y-=26;fire('pointermove',x,y);
+        if(i>=6){clearInterval(iv);fire('pointerup',x,y);}},16);}`,
+    2500,
+  ],
   // cigar via keyboard fallback (auto ritual, same time cost)
   [
     `document.getElementById('cigarItem').dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true}))`,

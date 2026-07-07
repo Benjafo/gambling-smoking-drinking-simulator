@@ -577,11 +577,12 @@ export class Simulation {
   }
 
   private pickup(p: Player, itemId: number): void {
-    if (!p.alive || p.held || p.ritual) return;
+    if (!p.alive || p.ritual) return;
     const d = this.debris.get(itemId);
     if (!d || d.phase !== "settled") return;
     const eye = seatEye(p.seat);
     if (Math.hypot(d.pos.x - eye.x, d.pos.y - eye.y, d.pos.z - eye.z) > REACH_RADIUS) return;
+    if (p.held) this.autoDrop(p); // hands full: swap, don't dead-end
     this.removeDebris(d);
     p.held = { id: this.nextDebrisId++, kind: d.kind, sinceTick: this.tick };
   }

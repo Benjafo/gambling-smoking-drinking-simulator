@@ -16,3 +16,5 @@ transport.onSnapshot((snap) => {
   // debugging/testing hook: latest authoritative state, read-only by convention
   (window as unknown as { __snap: unknown }).__snap = snap;
 });
+// testing hook: lets headless UI tests project world coords to screen px
+(window as unknown as { __scene: unknown }).__scene = scene;
