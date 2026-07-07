@@ -1,6 +1,7 @@
 # Build context must be the repo root (npm workspaces span client/server/shared):
 #   docker build -f client/Dockerfile .
-FROM node:22-alpine AS build
+# deps stage is reused by docker-compose.dev.yml (source is bind-mounted there).
+FROM node:22-alpine AS deps
 
 WORKDIR /app
 
@@ -10,6 +11,7 @@ COPY server/package.json server/package.json
 COPY shared/package.json shared/package.json
 RUN npm ci
 
+FROM deps AS build
 COPY shared shared
 COPY client client
 RUN npm run build

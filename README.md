@@ -47,7 +47,7 @@ npm run build
 ### Docker
 
 ```sh
-docker compose up --build
+docker compose --profile prod up --build
 ```
 
 Starts the websocket room on `:8081` (`server/Dockerfile`, runs `server/src`
@@ -60,6 +60,16 @@ via `tsx`, no compile step) and the built client behind nginx on `:8080`
 
 Both Dockerfiles build from the repo root (`docker build -f server/Dockerfile .`)
 since npm workspaces span `client/`, `server/`, and `shared/`.
+
+Hot reload — the repo is bind-mounted into the containers, `tsx watch`
+restarts the room and vite HMR patches the browser on every edit:
+
+```sh
+docker compose --profile dev up --build
+```
+
+- `http://localhost:5173` — vite dev server (single player).
+- `http://localhost:5173/?server=ws://localhost:8081` — multiplayer.
 
 ## Controls
 

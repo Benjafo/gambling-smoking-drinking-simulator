@@ -1,1408 +1,2582 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Degenerate Blackjack</title>
-<style>
-:root{
-  --void:#14110c;
-  --void-2:#1c1811;
-  --felt:#1d4a30;
-  --felt-dark:#143523;
-  --felt-rim:#3a2a18;
-  --amber:#e9a63a;
-  --amber-dim:#9c6f24;
-  --ember:#e0522b;
-  --ash:#a39a8b;
-  --cream:#f2e8d5;
-  --ok:#5fbf6e;
-  --warn:#e6c34a;
-  --bad:#e05545;
-  --mono:"Courier New",Courier,monospace;
-  --serif:Georgia,"Times New Roman",serif;
-  --sans:-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
-}
-*{box-sizing:border-box;margin:0;padding:0}
-html,body{height:100%}
-body{
-  background:var(--void);
-  color:var(--cream);
-  font-family:var(--sans);
-  overflow:hidden;
-}
-button{font-family:inherit;cursor:pointer;border:none}
-button:disabled{cursor:not-allowed;opacity:.35}
-button:focus-visible{outline:2px solid var(--amber);outline-offset:2px}
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Degenerate Blackjack</title>
+    <style>
+      :root {
+        --void: #14110c;
+        --void-2: #1c1811;
+        --felt: #1d4a30;
+        --felt-dark: #143523;
+        --felt-rim: #3a2a18;
+        --amber: #e9a63a;
+        --amber-dim: #9c6f24;
+        --ember: #e0522b;
+        --ash: #a39a8b;
+        --cream: #f2e8d5;
+        --ok: #5fbf6e;
+        --warn: #e6c34a;
+        --bad: #e05545;
+        --mono: "Courier New", Courier, monospace;
+        --serif: Georgia, "Times New Roman", serif;
+        --sans: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      }
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+      html,
+      body {
+        height: 100%;
+      }
+      body {
+        background: var(--void);
+        color: var(--cream);
+        font-family: var(--sans);
+        overflow: hidden;
+      }
+      button {
+        font-family: inherit;
+        cursor: pointer;
+        border: none;
+      }
+      button:disabled {
+        cursor: not-allowed;
+        opacity: 0.35;
+      }
+      button:focus-visible {
+        outline: 2px solid var(--amber);
+        outline-offset: 2px;
+      }
 
-/* ---------- screens ---------- */
-.screen{display:none;height:100vh;width:100%}
-.screen.active{display:flex}
+      /* ---------- screens ---------- */
+      .screen {
+        display: none;
+        height: 100vh;
+        width: 100%;
+      }
+      .screen.active {
+        display: flex;
+      }
 
-/* ---------- title ---------- */
-#titleScreen{flex-direction:column;align-items:center;justify-content:center;gap:28px;text-align:center;
-  background:radial-gradient(ellipse at 50% 35%, #24301f 0%, var(--void) 65%)}
-.marquee{
-  font-family:var(--serif);font-weight:700;font-size:clamp(40px,6vw,76px);
-  letter-spacing:.06em;color:var(--amber);
-  text-shadow:0 0 22px rgba(233,166,58,.45),0 3px 0 #5b3d10;
-}
-.marquee small{display:block;font-size:.32em;letter-spacing:.5em;color:var(--ash);text-shadow:none;margin-top:10px}
-.tagline{color:var(--ash);font-style:italic;max-width:520px;line-height:1.6}
-.big-btn{
-  background:linear-gradient(#f2b64d,#c07f1f);
-  color:#241703;font-family:var(--serif);font-weight:700;font-size:22px;letter-spacing:.12em;
-  padding:16px 42px;border-radius:6px;border:2px solid #6e4c12;
-  box-shadow:0 6px 0 #5b3d10,0 10px 24px rgba(0,0,0,.6);
-  transition:transform .08s ease, box-shadow .08s ease;
-}
-.big-btn:hover{transform:translateY(-2px)}
-.big-btn:active{transform:translateY(3px);box-shadow:0 2px 0 #5b3d10}
-.vices-title{font-size:34px;letter-spacing:14px;margin-right:-14px}
+      /* ---------- title ---------- */
+      #titleScreen {
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 28px;
+        text-align: center;
+        background: radial-gradient(
+          ellipse at 50% 35%,
+          #24301f 0%,
+          var(--void) 65%
+        );
+      }
+      .marquee {
+        font-family: var(--serif);
+        font-weight: 700;
+        font-size: clamp(40px, 6vw, 76px);
+        letter-spacing: 0.06em;
+        color: var(--amber);
+        text-shadow:
+          0 0 22px rgba(233, 166, 58, 0.45),
+          0 3px 0 #5b3d10;
+      }
+      .marquee small {
+        display: block;
+        font-size: 0.32em;
+        letter-spacing: 0.5em;
+        color: var(--ash);
+        text-shadow: none;
+        margin-top: 10px;
+      }
+      .tagline {
+        color: var(--ash);
+        font-style: italic;
+        max-width: 520px;
+        line-height: 1.6;
+      }
+      .big-btn {
+        background: linear-gradient(#f2b64d, #c07f1f);
+        color: #241703;
+        font-family: var(--serif);
+        font-weight: 700;
+        font-size: 22px;
+        letter-spacing: 0.12em;
+        padding: 16px 42px;
+        border-radius: 6px;
+        border: 2px solid #6e4c12;
+        box-shadow:
+          0 6px 0 #5b3d10,
+          0 10px 24px rgba(0, 0, 0, 0.6);
+        transition:
+          transform 0.08s ease,
+          box-shadow 0.08s ease;
+      }
+      .big-btn:hover {
+        transform: translateY(-2px);
+      }
+      .big-btn:active {
+        transform: translateY(3px);
+        box-shadow: 0 2px 0 #5b3d10;
+      }
+      .vices-title {
+        font-size: 34px;
+        letter-spacing: 14px;
+        margin-right: -14px;
+      }
 
-/* ---------- gameplay layout ---------- */
-#gameScreen{flex-direction:column}
-#topBar{
-  display:flex;align-items:baseline;gap:34px;
-  padding:10px 22px;background:var(--void-2);border-bottom:2px solid #2c2317;
-  font-family:var(--mono);font-size:15px;color:var(--ash);flex:0 0 auto;
-}
-#topBar .money{font-size:26px;color:var(--amber);font-weight:700}
-#topBar .money.up{color:var(--ok)}
-#topBar .money.down{color:var(--bad)}
-#topBar .stat b{color:var(--cream)}
-#main{flex:1 1 auto;display:flex;min-height:0}
+      /* ---------- gameplay layout ---------- */
+      #gameScreen {
+        flex-direction: column;
+      }
+      #topBar {
+        display: flex;
+        align-items: baseline;
+        gap: 34px;
+        padding: 10px 22px;
+        background: var(--void-2);
+        border-bottom: 2px solid #2c2317;
+        font-family: var(--mono);
+        font-size: 15px;
+        color: var(--ash);
+        flex: 0 0 auto;
+      }
+      #topBar .money {
+        font-size: 26px;
+        color: var(--amber);
+        font-weight: 700;
+      }
+      #topBar .money.up {
+        color: var(--ok);
+      }
+      #topBar .money.down {
+        color: var(--bad);
+      }
+      #topBar .stat b {
+        color: var(--cream);
+      }
+      #main {
+        flex: 1 1 auto;
+        display: flex;
+        min-height: 0;
+      }
 
-/* ---------- table ---------- */
-#table{
-  flex:1 1 auto;position:relative;display:flex;flex-direction:column;
-  background:
-    radial-gradient(ellipse at 50% -20%, rgba(0,0,0,.55), transparent 60%),
-    radial-gradient(ellipse at 50% 45%, var(--felt) 0%, var(--felt-dark) 75%);
-  border-right:10px solid var(--felt-rim);
-  box-shadow:inset 0 0 90px rgba(0,0,0,.55);
-  padding:18px 26px;min-width:0;
-}
-.zone-label{font-family:var(--mono);font-size:11px;letter-spacing:.35em;color:rgba(242,232,213,.4);margin-bottom:6px}
-.hand-row{display:flex;align-items:center;gap:10px;min-height:118px;flex-wrap:wrap}
-.hand-total{
-  font-family:var(--mono);font-size:15px;color:var(--cream);
-  background:rgba(0,0,0,.35);border:1px solid rgba(242,232,213,.25);
-  padding:4px 10px;border-radius:20px;margin-left:8px;white-space:nowrap;
-}
-#dealerZone{margin-bottom:8px}
-.table-line{
-  text-align:center;color:rgba(242,232,213,.28);font-family:var(--serif);font-style:italic;
-  border-top:2px solid rgba(242,232,213,.14);border-bottom:2px solid rgba(242,232,213,.14);
-  padding:5px 0;margin:6px 40px;font-size:13px;letter-spacing:.2em;
-}
-#playerZone{margin-top:6px}
+      /* ---------- table ---------- */
+      #table {
+        flex: 1 1 auto;
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        background:
+          radial-gradient(
+            ellipse at 50% -20%,
+            rgba(0, 0, 0, 0.55),
+            transparent 60%
+          ),
+          radial-gradient(
+            ellipse at 50% 45%,
+            var(--felt) 0%,
+            var(--felt-dark) 75%
+          );
+        border-right: 10px solid var(--felt-rim);
+        box-shadow: inset 0 0 90px rgba(0, 0, 0, 0.55);
+        padding: 18px 26px;
+        min-width: 0;
+      }
+      .zone-label {
+        font-family: var(--mono);
+        font-size: 11px;
+        letter-spacing: 0.35em;
+        color: rgba(242, 232, 213, 0.4);
+        margin-bottom: 6px;
+      }
+      .hand-row {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        min-height: 118px;
+        flex-wrap: wrap;
+      }
+      .hand-total {
+        font-family: var(--mono);
+        font-size: 15px;
+        color: var(--cream);
+        background: rgba(0, 0, 0, 0.35);
+        border: 1px solid rgba(242, 232, 213, 0.25);
+        padding: 4px 10px;
+        border-radius: 20px;
+        margin-left: 8px;
+        white-space: nowrap;
+      }
+      #dealerZone {
+        margin-bottom: 8px;
+      }
+      .table-line {
+        text-align: center;
+        color: rgba(242, 232, 213, 0.28);
+        font-family: var(--serif);
+        font-style: italic;
+        border-top: 2px solid rgba(242, 232, 213, 0.14);
+        border-bottom: 2px solid rgba(242, 232, 213, 0.14);
+        padding: 5px 0;
+        margin: 6px 40px;
+        font-size: 13px;
+        letter-spacing: 0.2em;
+      }
+      #playerZone {
+        margin-top: 6px;
+      }
 
-/* ---------- cards (3D: fly from shoe, then flip) ---------- */
-.card{
-  width:76px;height:108px;position:relative;flex:0 0 auto;
-  perspective:700px;transform:rotate(var(--tilt,0deg));
-}
-.card .inner{
-  position:absolute;inset:0;transform-style:preserve-3d;border-radius:8px;
-  box-shadow:0 4px 10px rgba(0,0,0,.5);
-}
-.card .face{
-  position:absolute;inset:0;backface-visibility:hidden;-webkit-backface-visibility:hidden;
-  border-radius:8px;border:1px solid #b7ab90;background:var(--cream);
-  color:#1d1a14;font-family:var(--serif);overflow:hidden;
-}
-.card.red .face.front{color:#b3272c}
-.card .face .corner{position:absolute;top:5px;left:7px;font-size:17px;font-weight:700;line-height:1.05;text-align:center}
-.card .face .corner.br{top:auto;left:auto;bottom:5px;right:7px;transform:rotate(180deg)}
-.card .face .pip{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:40px}
-.card .face.back{
-  transform:rotateY(180deg);
-  background:
-    radial-gradient(circle at 50% 50%, rgba(242,232,213,.12) 0 18%, transparent 19%),
-    repeating-linear-gradient(45deg,#7a1f22 0 7px,#5d1517 7px 14px);
-  border-color:#3c0d0f;
-}
-.card .inner.down{transform:rotateY(180deg)}
-/* newly dealt: fly in from the shoe, back showing, flip on arrival */
-.card.dealt{animation:dealFly .65s cubic-bezier(.22,.75,.3,1) both}
-@keyframes dealFly{
-  0%{transform:translate(var(--fx,340px),var(--fy,-200px)) rotate(16deg) scale(.94);opacity:0}
-  12%{opacity:1}
-  100%{transform:translate(0,0) rotate(var(--tilt,0deg)) scale(1)}
-}
-.card .inner.flip-in{animation:flipIn .45s ease-out .62s both}
-.card .inner.reveal{animation:flipIn .55s ease-in-out both}
-@keyframes flipIn{from{transform:rotateY(180deg)}to{transform:rotateY(0deg)}}
+      /* ---------- cards (3D: fly from shoe, then flip) ---------- */
+      .card {
+        width: 76px;
+        height: 108px;
+        position: relative;
+        flex: 0 0 auto;
+        perspective: 700px;
+        transform: rotate(var(--tilt, 0deg));
+      }
+      .card .inner {
+        position: absolute;
+        inset: 0;
+        transform-style: preserve-3d;
+        border-radius: 8px;
+        box-shadow: 0 4px 10px rgba(0, 0, 0, 0.5);
+      }
+      .card .face {
+        position: absolute;
+        inset: 0;
+        backface-visibility: hidden;
+        -webkit-backface-visibility: hidden;
+        border-radius: 8px;
+        border: 1px solid #b7ab90;
+        background: var(--cream);
+        color: #1d1a14;
+        font-family: var(--serif);
+        overflow: hidden;
+      }
+      .card.red .face.front {
+        color: #b3272c;
+      }
+      .card .face .corner {
+        position: absolute;
+        top: 5px;
+        left: 7px;
+        font-size: 17px;
+        font-weight: 700;
+        line-height: 1.05;
+        text-align: center;
+      }
+      .card .face .corner.br {
+        top: auto;
+        left: auto;
+        bottom: 5px;
+        right: 7px;
+        transform: rotate(180deg);
+      }
+      .card .face .pip {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 40px;
+      }
+      .card .face.back {
+        transform: rotateY(180deg);
+        background:
+          radial-gradient(
+            circle at 50% 50%,
+            rgba(242, 232, 213, 0.12) 0 18%,
+            transparent 19%
+          ),
+          repeating-linear-gradient(45deg, #7a1f22 0 7px, #5d1517 7px 14px);
+        border-color: #3c0d0f;
+      }
+      .card .inner.down {
+        transform: rotateY(180deg);
+      }
+      /* newly dealt: fly in from the shoe, back showing, flip on arrival */
+      .card.dealt {
+        animation: dealFly 0.65s cubic-bezier(0.22, 0.75, 0.3, 1) both;
+      }
+      @keyframes dealFly {
+        0% {
+          transform: translate(var(--fx, 340px), var(--fy, -200px))
+            rotate(16deg) scale(0.94);
+          opacity: 0;
+        }
+        12% {
+          opacity: 1;
+        }
+        100% {
+          transform: translate(0, 0) rotate(var(--tilt, 0deg)) scale(1);
+        }
+      }
+      .card .inner.flip-in {
+        animation: flipIn 0.45s ease-out 0.62s both;
+      }
+      .card .inner.reveal {
+        animation: flipIn 0.55s ease-in-out both;
+      }
+      @keyframes flipIn {
+        from {
+          transform: rotateY(180deg);
+        }
+        to {
+          transform: rotateY(0deg);
+        }
+      }
 
-/* the shoe the cards come from */
-#shoe{
-  position:absolute;top:16px;right:22px;width:96px;height:66px;z-index:5;
-  background:linear-gradient(160deg,#3a2a18,#241809);
-  border:2px solid #17100a;border-radius:8px 8px 5px 5px;
-  box-shadow:0 6px 12px rgba(0,0,0,.55), inset 0 2px 3px rgba(255,220,170,.15);
-  transform:rotate(-3deg);
-}
-#shoe::before{
-  content:"";position:absolute;left:8px;right:8px;top:-7px;height:16px;border-radius:4px;
-  background:repeating-linear-gradient(45deg,#7a1f22 0 6px,#5d1517 6px 12px);
-  border:1px solid #3c0d0f;box-shadow:0 -2px 4px rgba(0,0,0,.4);
-}
-#shoe::after{
-  content:"SHOE";position:absolute;bottom:6px;left:0;right:0;text-align:center;
-  font-family:var(--mono);font-size:9px;letter-spacing:.35em;color:rgba(242,232,213,.4);
-}
+      /* the shoe the cards come from */
+      #shoe {
+        position: absolute;
+        top: 16px;
+        right: 22px;
+        width: 96px;
+        height: 66px;
+        z-index: 5;
+        background: linear-gradient(160deg, #3a2a18, #241809);
+        border: 2px solid #17100a;
+        border-radius: 8px 8px 5px 5px;
+        box-shadow:
+          0 6px 12px rgba(0, 0, 0, 0.55),
+          inset 0 2px 3px rgba(255, 220, 170, 0.15);
+        transform: rotate(-3deg);
+      }
+      #shoe::before {
+        content: "";
+        position: absolute;
+        left: 8px;
+        right: 8px;
+        top: -7px;
+        height: 16px;
+        border-radius: 4px;
+        background: repeating-linear-gradient(
+          45deg,
+          #7a1f22 0 6px,
+          #5d1517 6px 12px
+        );
+        border: 1px solid #3c0d0f;
+        box-shadow: 0 -2px 4px rgba(0, 0, 0, 0.4);
+      }
+      #shoe::after {
+        content: "SHOE";
+        position: absolute;
+        bottom: 6px;
+        left: 0;
+        right: 0;
+        text-align: center;
+        font-family: var(--mono);
+        font-size: 9px;
+        letter-spacing: 0.35em;
+        color: rgba(242, 232, 213, 0.4);
+      }
 
-/* ---------- action / betting area ---------- */
-#actionArea{margin-top:14px;min-height:120px}
-.controls-row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
-.act-btn{
-  font-family:var(--serif);font-weight:700;font-size:18px;letter-spacing:.08em;
-  padding:12px 26px;border-radius:6px;color:#241703;
-  background:linear-gradient(#f2b64d,#c07f1f);border:2px solid #6e4c12;
-  box-shadow:0 4px 0 #5b3d10;
-}
-.act-btn:not(:disabled):hover{filter:brightness(1.08)}
-.act-btn:not(:disabled):active{transform:translateY(2px);box-shadow:0 2px 0 #5b3d10}
-.act-btn.secondary{background:linear-gradient(#4b4237,#332c23);color:var(--cream);border-color:#221c14;box-shadow:0 4px 0 #17130d}
-#betPanel .bet-amount{
-  font-family:var(--mono);font-size:30px;color:var(--amber);font-weight:700;
-  background:rgba(0,0,0,.4);border:1px solid rgba(233,166,58,.4);border-radius:6px;
-  padding:6px 18px;min-width:130px;text-align:center;
-}
-/* dynamic chip steppers: + above, denomination chip, − below */
-.chip-rack{display:flex;gap:12px;align-items:center}
-.chip-stepper{display:flex;flex-direction:column;align-items:center;gap:4px}
-.chip-step{
-  width:58px;height:24px;border-radius:6px;font-family:var(--mono);font-weight:700;font-size:15px;
-  line-height:1;background:#332c23;color:var(--cream);border:1px solid #17130d;
-}
-.chip-step:not(:disabled):hover{background:#4b4232}
-.chip-step:not(:disabled):active{transform:translateY(1px)}
-.chip-face{
-  width:58px;height:58px;border-radius:50%;display:flex;align-items:center;justify-content:center;
-  font-family:var(--mono);font-weight:700;font-size:13px;color:var(--cream);
-  border:4px dashed rgba(242,232,213,.75);
-  box-shadow:0 3px 6px rgba(0,0,0,.5), inset 0 0 0 3px rgba(0,0,0,.25);
-}
-.chip-face.c0{background:radial-gradient(circle at 35% 30%, #4a5f8f, #2c3c60)}
-.chip-face.c1{background:radial-gradient(circle at 35% 30%, #a03c3c, #6a1f1f)}
-.chip-face.c2{background:radial-gradient(circle at 35% 30%, #3f7a4d, #24512f)}
-.chip-face.c3{background:radial-gradient(circle at 35% 30%, #101010, #383838);border-color:var(--amber)}
-.hint{font-family:var(--mono);font-size:12px;color:rgba(242,232,213,.45);margin-top:8px}
+      /* ---------- action / betting area ---------- */
+      #actionArea {
+        margin-top: 14px;
+        min-height: 120px;
+      }
+      .controls-row {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        align-items: center;
+      }
+      .act-btn {
+        font-family: var(--serif);
+        font-weight: 700;
+        font-size: 18px;
+        letter-spacing: 0.08em;
+        padding: 12px 26px;
+        border-radius: 6px;
+        color: #241703;
+        background: linear-gradient(#f2b64d, #c07f1f);
+        border: 2px solid #6e4c12;
+        box-shadow: 0 4px 0 #5b3d10;
+      }
+      .act-btn:not(:disabled):hover {
+        filter: brightness(1.08);
+      }
+      .act-btn:not(:disabled):active {
+        transform: translateY(2px);
+        box-shadow: 0 2px 0 #5b3d10;
+      }
+      .act-btn.secondary {
+        background: linear-gradient(#4b4237, #332c23);
+        color: var(--cream);
+        border-color: #221c14;
+        box-shadow: 0 4px 0 #17130d;
+      }
+      #betPanel .bet-amount {
+        font-family: var(--mono);
+        font-size: 30px;
+        color: var(--amber);
+        font-weight: 700;
+        background: rgba(0, 0, 0, 0.4);
+        border: 1px solid rgba(233, 166, 58, 0.4);
+        border-radius: 6px;
+        padding: 6px 18px;
+        min-width: 130px;
+        text-align: center;
+      }
+      /* dynamic chip steppers: + above, denomination chip, − below */
+      .chip-rack {
+        display: flex;
+        gap: 12px;
+        align-items: center;
+      }
+      .chip-stepper {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 4px;
+      }
+      .chip-step {
+        width: 58px;
+        height: 24px;
+        border-radius: 6px;
+        font-family: var(--mono);
+        font-weight: 700;
+        font-size: 15px;
+        line-height: 1;
+        background: #332c23;
+        color: var(--cream);
+        border: 1px solid #17130d;
+      }
+      .chip-step:not(:disabled):hover {
+        background: #4b4232;
+      }
+      .chip-step:not(:disabled):active {
+        transform: translateY(1px);
+      }
+      .chip-face {
+        width: 58px;
+        height: 58px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-family: var(--mono);
+        font-weight: 700;
+        font-size: 13px;
+        color: var(--cream);
+        border: 4px dashed rgba(242, 232, 213, 0.75);
+        box-shadow:
+          0 3px 6px rgba(0, 0, 0, 0.5),
+          inset 0 0 0 3px rgba(0, 0, 0, 0.25);
+      }
+      .chip-face.c0 {
+        background: radial-gradient(circle at 35% 30%, #4a5f8f, #2c3c60);
+      }
+      .chip-face.c1 {
+        background: radial-gradient(circle at 35% 30%, #a03c3c, #6a1f1f);
+      }
+      .chip-face.c2 {
+        background: radial-gradient(circle at 35% 30%, #3f7a4d, #24512f);
+      }
+      .chip-face.c3 {
+        background: radial-gradient(circle at 35% 30%, #101010, #383838);
+        border-color: var(--amber);
+      }
+      .hint {
+        font-family: var(--mono);
+        font-size: 12px;
+        color: rgba(242, 232, 213, 0.45);
+        margin-top: 8px;
+      }
 
-/* ---------- result banner ---------- */
-#banner{
-  position:absolute;left:50%;top:42%;transform:translate(-50%,-50%);
-  font-family:var(--serif);font-weight:700;font-size:44px;letter-spacing:.1em;text-align:center;
-  padding:14px 40px;border-radius:10px;pointer-events:none;opacity:0;white-space:nowrap;
-}
-#banner.show{opacity:1;animation:bannerPop .3s ease-out}
-#banner.win{color:#ffd97a;background:rgba(38,28,4,.85);border:2px solid var(--amber);text-shadow:0 0 18px rgba(233,166,58,.8)}
-#banner.lose{color:#ff9d8c;background:rgba(40,8,4,.85);border:2px solid var(--bad)}
-#banner.push{color:var(--cream);background:rgba(20,20,20,.85);border:2px solid var(--ash)}
-@keyframes bannerPop{from{transform:translate(-50%,-50%) scale(.7);opacity:0}to{transform:translate(-50%,-50%) scale(1);opacity:1}}
+      /* ---------- result banner ---------- */
+      #banner {
+        position: absolute;
+        left: 50%;
+        top: 42%;
+        transform: translate(-50%, -50%);
+        font-family: var(--serif);
+        font-weight: 700;
+        font-size: 44px;
+        letter-spacing: 0.1em;
+        text-align: center;
+        padding: 14px 40px;
+        border-radius: 10px;
+        pointer-events: none;
+        opacity: 0;
+        white-space: nowrap;
+      }
+      #banner.show {
+        opacity: 1;
+        animation: bannerPop 0.3s ease-out;
+      }
+      #banner.win {
+        color: #ffd97a;
+        background: rgba(38, 28, 4, 0.85);
+        border: 2px solid var(--amber);
+        text-shadow: 0 0 18px rgba(233, 166, 58, 0.8);
+      }
+      #banner.lose {
+        color: #ff9d8c;
+        background: rgba(40, 8, 4, 0.85);
+        border: 2px solid var(--bad);
+      }
+      #banner.push {
+        color: var(--cream);
+        background: rgba(20, 20, 20, 0.85);
+        border: 2px solid var(--ash);
+      }
+      @keyframes bannerPop {
+        from {
+          transform: translate(-50%, -50%) scale(0.7);
+          opacity: 0;
+        }
+        to {
+          transform: translate(-50%, -50%) scale(1);
+          opacity: 1;
+        }
+      }
 
-/* win / loss table flashes */
-#flash{position:absolute;inset:0;pointer-events:none;opacity:0}
-#flash.gold{background:radial-gradient(ellipse at center,rgba(233,166,58,.4),transparent 70%);animation:flashFade .7s ease-out}
-#flash.red{background:radial-gradient(ellipse at center,rgba(224,85,69,.4),transparent 70%);animation:flashFade .7s ease-out}
-@keyframes flashFade{from{opacity:1}to{opacity:0}}
+      /* win / loss table flashes */
+      #flash {
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        opacity: 0;
+      }
+      #flash.gold {
+        background: radial-gradient(
+          ellipse at center,
+          rgba(233, 166, 58, 0.4),
+          transparent 70%
+        );
+        animation: flashFade 0.7s ease-out;
+      }
+      #flash.red {
+        background: radial-gradient(
+          ellipse at center,
+          rgba(224, 85, 69, 0.4),
+          transparent 70%
+        );
+        animation: flashFade 0.7s ease-out;
+      }
+      @keyframes flashFade {
+        from {
+          opacity: 1;
+        }
+        to {
+          opacity: 0;
+        }
+      }
 
-/* ---------- sidebar ---------- */
-#sidebar{
-  flex:0 0 300px;display:flex;flex-direction:column;gap:14px;
-  background:linear-gradient(#201a12,#171310);padding:16px;overflow-y:auto;
-}
-.panel{background:rgba(0,0,0,.3);border:1px solid #2c2317;border-radius:8px;padding:12px}
-.panel h3{font-family:var(--mono);font-size:12px;letter-spacing:.3em;color:var(--ash);margin-bottom:10px}
-.vice-head{display:flex;justify-content:space-between;align-items:baseline;font-family:var(--mono);font-size:13px;color:var(--cream)}
-.vice-head .inv{color:var(--ash)}
-.meter{
-  height:26px;background:#0d0b08;border:1px solid #3a3226;border-radius:5px;
-  margin:7px 0 9px;position:relative;overflow:hidden;
-}
-.meter .fill{
-  height:100%;width:100%;border-radius:4px 0 0 4px;position:relative;
-  transition:width .12s linear, background-color .3s;
-}
-.meter .fill.ok{background:linear-gradient(#79d187,#3f9b50)}
-.meter .fill.warn{background:linear-gradient(#f2d666,#c29a2e)}
-.meter .fill.bad{background:linear-gradient(#f07a68,#b23327);animation:meterFlash .5s steps(2) infinite}
-@keyframes meterFlash{50%{filter:brightness(1.7)}}
-/* signature: cigar ember + beer foam at the fill edge */
-.meter.cigar .fill::after{
-  content:"";position:absolute;right:-2px;top:0;bottom:0;width:7px;border-radius:3px;
-  background:radial-gradient(circle,#ffb15e 0%,#e0522b 55%,transparent 80%);
-  box-shadow:0 0 10px 2px rgba(224,82,43,.85);
-}
-.meter.beer .fill::after{
-  content:"";position:absolute;right:-2px;top:0;bottom:0;width:8px;border-radius:3px;
-  background:repeating-radial-gradient(circle at 50% 30%,#fff8e6 0 2px,#e8ddc2 2px 4px);
-  opacity:.9;
-}
-/* ---------- vice items (draggable) ---------- */
-.vice-item{
-  width:100%;display:flex;flex-direction:column;align-items:center;gap:10px;
-  font-family:var(--serif);font-weight:700;font-size:13px;letter-spacing:.12em;color:#241703;
-  padding:14px 10px 10px;border-radius:6px;user-select:none;-webkit-user-select:none;touch-action:none;
-  background:linear-gradient(#f2b64d,#c07f1f);border:2px solid #6e4c12;box-shadow:0 3px 0 #5b3d10;
-  cursor:grab;
-}
-.vice-item:active{cursor:grabbing}
-.vice-item.disabled{opacity:.35;cursor:not-allowed;pointer-events:none}
-.vice-item:focus-visible{outline:2px solid var(--amber);outline-offset:2px}
-.vice-item.held{visibility:hidden}
+      /* ---------- sidebar ---------- */
+      #sidebar {
+        flex: 0 0 300px;
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+        background: linear-gradient(#201a12, #171310);
+        padding: 16px;
+        overflow-y: auto;
+      }
+      .panel {
+        background: rgba(0, 0, 0, 0.3);
+        border: 1px solid #2c2317;
+        border-radius: 8px;
+        padding: 12px;
+      }
+      .panel h3 {
+        font-family: var(--mono);
+        font-size: 12px;
+        letter-spacing: 0.3em;
+        color: var(--ash);
+        margin-bottom: 10px;
+      }
+      .vice-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        font-family: var(--mono);
+        font-size: 13px;
+        color: var(--cream);
+      }
+      .vice-head .inv {
+        color: var(--ash);
+      }
+      .meter {
+        height: 26px;
+        background: #0d0b08;
+        border: 1px solid #3a3226;
+        border-radius: 5px;
+        margin: 7px 0 9px;
+        position: relative;
+        overflow: hidden;
+      }
+      .meter .fill {
+        height: 100%;
+        width: 100%;
+        border-radius: 4px 0 0 4px;
+        position: relative;
+        transition:
+          width 0.12s linear,
+          background-color 0.3s;
+      }
+      .meter .fill.ok {
+        background: linear-gradient(#79d187, #3f9b50);
+      }
+      .meter .fill.warn {
+        background: linear-gradient(#f2d666, #c29a2e);
+      }
+      .meter .fill.bad {
+        background: linear-gradient(#f07a68, #b23327);
+        animation: meterFlash 0.5s steps(2) infinite;
+      }
+      @keyframes meterFlash {
+        50% {
+          filter: brightness(1.7);
+        }
+      }
+      /* signature: cigar ember + beer foam at the fill edge */
+      .meter.cigar .fill::after {
+        content: "";
+        position: absolute;
+        right: -2px;
+        top: 0;
+        bottom: 0;
+        width: 7px;
+        border-radius: 3px;
+        background: radial-gradient(
+          circle,
+          #ffb15e 0%,
+          #e0522b 55%,
+          transparent 80%
+        );
+        box-shadow: 0 0 10px 2px rgba(224, 82, 43, 0.85);
+      }
+      .meter.beer .fill::after {
+        content: "";
+        position: absolute;
+        right: -2px;
+        top: 0;
+        bottom: 0;
+        width: 8px;
+        border-radius: 3px;
+        background: repeating-radial-gradient(
+          circle at 50% 30%,
+          #fff8e6 0 2px,
+          #e8ddc2 2px 4px
+        );
+        opacity: 0.9;
+      }
+      /* ---------- vice items (draggable) ---------- */
+      .vice-item {
+        width: 100%;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 10px;
+        font-family: var(--serif);
+        font-weight: 700;
+        font-size: 13px;
+        letter-spacing: 0.12em;
+        color: #241703;
+        padding: 14px 10px 10px;
+        border-radius: 6px;
+        user-select: none;
+        -webkit-user-select: none;
+        touch-action: none;
+        background: linear-gradient(#f2b64d, #c07f1f);
+        border: 2px solid #6e4c12;
+        box-shadow: 0 3px 0 #5b3d10;
+        cursor: grab;
+      }
+      .vice-item:active {
+        cursor: grabbing;
+      }
+      .vice-item.disabled {
+        opacity: 0.35;
+        cursor: not-allowed;
+        pointer-events: none;
+      }
+      .vice-item:focus-visible {
+        outline: 2px solid var(--amber);
+        outline-offset: 2px;
+      }
+      .vice-item.held {
+        visibility: hidden;
+      }
 
-/* realistic cigar: gray ash foot, glowing ember ring, leaf-wrapped body, gold band */
-.cigar-gfx{position:relative;width:204px;height:31px;flex:0 0 auto;filter:drop-shadow(0 3px 4px rgba(0,0,0,.45))}
-.cigar-gfx .wrap{
-  position:absolute;left:29px;right:0;top:0;bottom:0;
-  border-radius:5px 16px 16px 5px;
-  background:
-    repeating-linear-gradient(104deg, rgba(30,12,2,.22) 0 5px, transparent 5px 16px),
-    linear-gradient(#9c6236 0%, #7a4423 38%, #5a2f14 78%, #3f200c 100%);
-  box-shadow:inset 0 3px 4px rgba(255,220,170,.25), inset 0 -4px 6px rgba(0,0,0,.5);
-}
-.cigar-gfx .cap-end{
-  position:absolute;right:-2px;top:2px;bottom:2px;width:17px;border-radius:50%;
-  background:radial-gradient(circle at 35% 40%, #8a5029, #4a250e 75%);
-}
-.cigar-gfx .band{
-  position:absolute;right:42px;top:-1px;bottom:-1px;width:24px;border-radius:3px;
-  background:linear-gradient(90deg,#8f6a1d,#e8c469 30%,#f4dc94 50%,#e8c469 70%,#8f6a1d);
-  box-shadow:0 0 3px rgba(0,0,0,.5);
-}
-.cigar-gfx .band::after{
-  content:"";position:absolute;left:6px;right:6px;top:8px;bottom:8px;border-radius:50%;
-  background:radial-gradient(circle,#a02020 40%,#5e0f0f 100%);border:1px solid #6e5313;
-}
-.cigar-gfx .ash{
-  position:absolute;left:0;top:1px;bottom:1px;width:27px;border-radius:14px 3px 3px 14px;
-  background:
-    repeating-linear-gradient(88deg, rgba(0,0,0,.25) 0 2px, transparent 2px 6px),
-    linear-gradient(#d6d2c8,#9a958a 60%,#6f6a60);
-}
-.cigar-gfx .ember{
-  position:absolute;left:24px;top:2px;bottom:2px;width:10px;border-radius:5px;
-  background:radial-gradient(circle,#ffd08a 0%,#ff7a30 45%,#c22f10 80%,#5a1c0c 100%);
-}
-.gfx-lit .ember{animation:emberGlow .8s ease-in-out infinite;box-shadow:0 0 14px 4px rgba(255,122,48,.9)}
-@keyframes emberGlow{50%{filter:brightness(1.7)}}
+      /* realistic cigar: gray ash foot, glowing ember ring, leaf-wrapped body, gold band */
+      .cigar-gfx {
+        position: relative;
+        width: 204px;
+        height: 31px;
+        flex: 0 0 auto;
+        filter: drop-shadow(0 3px 4px rgba(0, 0, 0, 0.45));
+      }
+      .cigar-gfx .wrap {
+        position: absolute;
+        left: 29px;
+        right: 0;
+        top: 0;
+        bottom: 0;
+        border-radius: 5px 16px 16px 5px;
+        background:
+          repeating-linear-gradient(
+            104deg,
+            rgba(30, 12, 2, 0.22) 0 5px,
+            transparent 5px 16px
+          ),
+          linear-gradient(#9c6236 0%, #7a4423 38%, #5a2f14 78%, #3f200c 100%);
+        box-shadow:
+          inset 0 3px 4px rgba(255, 220, 170, 0.25),
+          inset 0 -4px 6px rgba(0, 0, 0, 0.5);
+      }
+      .cigar-gfx .cap-end {
+        position: absolute;
+        right: -2px;
+        top: 2px;
+        bottom: 2px;
+        width: 17px;
+        border-radius: 50%;
+        background: radial-gradient(circle at 35% 40%, #8a5029, #4a250e 75%);
+      }
+      .cigar-gfx .band {
+        position: absolute;
+        right: 42px;
+        top: -1px;
+        bottom: -1px;
+        width: 24px;
+        border-radius: 3px;
+        background: linear-gradient(
+          90deg,
+          #8f6a1d,
+          #e8c469 30%,
+          #f4dc94 50%,
+          #e8c469 70%,
+          #8f6a1d
+        );
+        box-shadow: 0 0 3px rgba(0, 0, 0, 0.5);
+      }
+      .cigar-gfx .band::after {
+        content: "";
+        position: absolute;
+        left: 6px;
+        right: 6px;
+        top: 8px;
+        bottom: 8px;
+        border-radius: 50%;
+        background: radial-gradient(circle, #a02020 40%, #5e0f0f 100%);
+        border: 1px solid #6e5313;
+      }
+      .cigar-gfx .ash {
+        position: absolute;
+        left: 0;
+        top: 1px;
+        bottom: 1px;
+        width: 27px;
+        border-radius: 14px 3px 3px 14px;
+        background:
+          repeating-linear-gradient(
+            88deg,
+            rgba(0, 0, 0, 0.25) 0 2px,
+            transparent 2px 6px
+          ),
+          linear-gradient(#d6d2c8, #9a958a 60%, #6f6a60);
+      }
+      .cigar-gfx .ember {
+        position: absolute;
+        left: 24px;
+        top: 2px;
+        bottom: 2px;
+        width: 10px;
+        border-radius: 5px;
+        background: radial-gradient(
+          circle,
+          #ffd08a 0%,
+          #ff7a30 45%,
+          #c22f10 80%,
+          #5a1c0c 100%
+        );
+      }
+      .gfx-lit .ember {
+        animation: emberGlow 0.8s ease-in-out infinite;
+        box-shadow: 0 0 14px 4px rgba(255, 122, 48, 0.9);
+      }
+      @keyframes emberGlow {
+        50% {
+          filter: brightness(1.7);
+        }
+      }
 
-/* realistic beer bottle: clipped silhouette, amber liquid, label, glass shine, crown cap */
-.bottle-gfx{position:relative;width:56px;height:134px;flex:0 0 auto;filter:drop-shadow(0 3px 4px rgba(0,0,0,.45))}
-.bottle-gfx .body{
-  position:absolute;inset:7px 0 0 0;overflow:hidden;
-  clip-path:polygon(36% 0%, 64% 0%, 64% 5%, 61% 20%, 96% 33%, 100% 38%, 100% 95%, 93% 100%, 7% 100%, 0% 95%, 0% 38%, 4% 33%, 39% 20%, 36% 5%);
-  background:linear-gradient(90deg,#3a1d09,#5e3413 30%,#6e401a 50%,#4c2810 75%,#2c1405);
-}
-.bottle-gfx .liquid{
-  position:absolute;left:0;right:0;bottom:0;height:80%;
-  background:linear-gradient(90deg,#a25f10,#e8a63a 45%,#f4c565 55%,#b97416);
-  box-shadow:inset 0 3px 4px rgba(255,240,190,.5);
-  transition:height .1s linear;
-}
-.bottle-gfx .label{
-  position:absolute;left:6%;right:6%;top:48%;height:30%;border-radius:2px;
-  background:linear-gradient(#efe3c8,#d9c69a);border:1px solid #8f7c4e;
-  display:flex;align-items:center;justify-content:center;
-  font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.08em;color:#4a2c10;
-}
-.bottle-gfx .shine{
-  position:absolute;left:14%;top:4%;bottom:4%;width:12%;border-radius:6px;
-  background:linear-gradient(rgba(255,255,255,.5),rgba(255,255,255,.08) 70%,transparent);
-  clip-path:inherit;
-}
-.bottle-gfx .cap{
-  position:absolute;left:32.5%;top:0;width:35%;height:10px;border-radius:3px 3px 1px 1px;
-  background:
-    repeating-linear-gradient(90deg, rgba(0,0,0,.3) 0 2px, transparent 2px 4px),
-    linear-gradient(#e6c34a,#a8871f);
-  border:1px solid #6e5313;
-}
+      /* realistic beer bottle: clipped silhouette, amber liquid, label, glass shine, crown cap */
+      .bottle-gfx {
+        position: relative;
+        width: 56px;
+        height: 134px;
+        flex: 0 0 auto;
+        filter: drop-shadow(0 3px 4px rgba(0, 0, 0, 0.45));
+      }
+      .bottle-gfx .body {
+        position: absolute;
+        inset: 7px 0 0 0;
+        overflow: hidden;
+        clip-path: polygon(
+          36% 0%,
+          64% 0%,
+          64% 5%,
+          61% 20%,
+          96% 33%,
+          100% 38%,
+          100% 95%,
+          93% 100%,
+          7% 100%,
+          0% 95%,
+          0% 38%,
+          4% 33%,
+          39% 20%,
+          36% 5%
+        );
+        background: linear-gradient(
+          90deg,
+          #3a1d09,
+          #5e3413 30%,
+          #6e401a 50%,
+          #4c2810 75%,
+          #2c1405
+        );
+      }
+      .bottle-gfx .liquid {
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        height: 80%;
+        background: linear-gradient(
+          90deg,
+          #a25f10,
+          #e8a63a 45%,
+          #f4c565 55%,
+          #b97416
+        );
+        box-shadow: inset 0 3px 4px rgba(255, 240, 190, 0.5);
+        transition: height 0.1s linear;
+      }
+      .bottle-gfx .label {
+        position: absolute;
+        left: 6%;
+        right: 6%;
+        top: 48%;
+        height: 30%;
+        border-radius: 2px;
+        background: linear-gradient(#efe3c8, #d9c69a);
+        border: 1px solid #8f7c4e;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-family: var(--mono);
+        font-size: 10px;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        color: #4a2c10;
+      }
+      .bottle-gfx .shine {
+        position: absolute;
+        left: 14%;
+        top: 4%;
+        bottom: 4%;
+        width: 12%;
+        border-radius: 6px;
+        background: linear-gradient(
+          rgba(255, 255, 255, 0.5),
+          rgba(255, 255, 255, 0.08) 70%,
+          transparent
+        );
+        clip-path: inherit;
+      }
+      .bottle-gfx .cap {
+        position: absolute;
+        left: 32.5%;
+        top: 0;
+        width: 35%;
+        height: 10px;
+        border-radius: 3px 3px 1px 1px;
+        background:
+          repeating-linear-gradient(
+            90deg,
+            rgba(0, 0, 0, 0.3) 0 2px,
+            transparent 2px 4px
+          ),
+          linear-gradient(#e6c34a, #a8871f);
+        border: 1px solid #6e5313;
+      }
 
-/* ---------- ritual layer ---------- */
-#dropTarget{
-  position:absolute;left:50%;top:45%;transform:translate(-50%,-50%);
-  width:150px;height:150px;display:none;align-items:center;justify-content:center;
-  pointer-events:none;z-index:20;
-}
-#dropTarget.show{display:flex}
-#dropTarget .ring-svg{position:absolute;inset:0;width:100%;height:100%;transform:rotate(-90deg)}
-#dropTarget .ring-bg{fill:none;stroke:rgba(242,232,213,.3);stroke-width:4;stroke-dasharray:6 8}
-#dropTarget .ring-fg{fill:none;stroke:var(--amber);stroke-width:5;stroke-linecap:round;
-  stroke-dasharray:339.3;stroke-dashoffset:339.3;filter:drop-shadow(0 0 6px rgba(233,166,58,.8))}
-#dropTarget.armed .ring-bg{stroke:rgba(233,166,58,.7);animation:targetPulse 1s ease-in-out infinite}
-@keyframes targetPulse{50%{stroke:rgba(233,166,58,.25)}}
-#dropTarget .target-label{
-  font-family:var(--mono);font-size:11px;letter-spacing:.25em;color:var(--cream);
-  background:rgba(0,0,0,.55);padding:4px 10px;border-radius:12px;text-align:center;line-height:1.6;
-  transform:translateY(58px);white-space:nowrap;
-}
+      /* ---------- ritual layer ---------- */
+      #dropTarget {
+        position: absolute;
+        left: 50%;
+        top: 45%;
+        transform: translate(-50%, -50%);
+        width: 150px;
+        height: 150px;
+        display: none;
+        align-items: center;
+        justify-content: center;
+        pointer-events: none;
+        z-index: 20;
+      }
+      #dropTarget.show {
+        display: flex;
+      }
+      #dropTarget .ring-svg {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        transform: rotate(-90deg);
+      }
+      #dropTarget .ring-bg {
+        fill: none;
+        stroke: rgba(242, 232, 213, 0.3);
+        stroke-width: 4;
+        stroke-dasharray: 6 8;
+      }
+      #dropTarget .ring-fg {
+        fill: none;
+        stroke: var(--amber);
+        stroke-width: 5;
+        stroke-linecap: round;
+        stroke-dasharray: 339.3;
+        stroke-dashoffset: 339.3;
+        filter: drop-shadow(0 0 6px rgba(233, 166, 58, 0.8));
+      }
+      #dropTarget.armed .ring-bg {
+        stroke: rgba(233, 166, 58, 0.7);
+        animation: targetPulse 1s ease-in-out infinite;
+      }
+      @keyframes targetPulse {
+        50% {
+          stroke: rgba(233, 166, 58, 0.25);
+        }
+      }
+      #dropTarget .target-label {
+        font-family: var(--mono);
+        font-size: 11px;
+        letter-spacing: 0.25em;
+        color: var(--cream);
+        background: rgba(0, 0, 0, 0.55);
+        padding: 4px 10px;
+        border-radius: 12px;
+        text-align: center;
+        line-height: 1.6;
+        transform: translateY(58px);
+        white-space: nowrap;
+      }
 
-#swipeHint{
-  position:absolute;left:50%;top:45%;transform:translate(-50%,-190px);display:none;
-  flex-direction:column;align-items:center;gap:2px;z-index:20;pointer-events:none;
-  font-family:var(--mono);font-size:12px;letter-spacing:.25em;color:var(--amber);text-align:center;
-  text-shadow:0 0 8px rgba(233,166,58,.6);
-}
-#swipeHint.show{display:flex}
-#swipeHint .arrow{font-size:30px;animation:arrowUp 1s ease-in-out infinite}
-@keyframes arrowUp{0%,100%{transform:translateY(6px);opacity:.5}50%{transform:translateY(-6px);opacity:1}}
+      #swipeHint {
+        position: absolute;
+        left: 50%;
+        top: 45%;
+        transform: translate(-50%, -190px);
+        display: none;
+        flex-direction: column;
+        align-items: center;
+        gap: 2px;
+        z-index: 20;
+        pointer-events: none;
+        font-family: var(--mono);
+        font-size: 12px;
+        letter-spacing: 0.25em;
+        color: var(--amber);
+        text-align: center;
+        text-shadow: 0 0 8px rgba(233, 166, 58, 0.6);
+      }
+      #swipeHint.show {
+        display: flex;
+      }
+      #swipeHint .arrow {
+        font-size: 30px;
+        animation: arrowUp 1s ease-in-out infinite;
+      }
+      @keyframes arrowUp {
+        0%,
+        100% {
+          transform: translateY(6px);
+          opacity: 0.5;
+        }
+        50% {
+          transform: translateY(-6px);
+          opacity: 1;
+        }
+      }
 
-#lighterGfx{position:fixed;display:none;z-index:69;pointer-events:none;width:64px;height:106px}
-#lighterGfx.show{display:block;animation:lighterUp .3s ease-out both}
-@keyframes lighterUp{from{transform:translateY(46px) rotate(6deg);opacity:0}to{transform:translateY(0) rotate(0);opacity:1}}
-#lighterGfx .body{
-  position:absolute;bottom:0;left:10px;width:44px;height:62px;border-radius:8px;
-  background:linear-gradient(100deg,#8f1f1f,#d24848 30%,#e86a6a 44%,#a02525 70%,#5e1212);
-  border:1px solid #3a0c0c;
-  box-shadow:inset 0 2px 3px rgba(255,255,255,.35), inset 0 -4px 6px rgba(0,0,0,.35), 0 5px 10px rgba(0,0,0,.55);
-}
-#lighterGfx .hood{
-  position:absolute;bottom:58px;left:10px;width:44px;height:15px;border-radius:5px 5px 2px 2px;
-  background:linear-gradient(#efeade,#b3ada0 55%,#8f8a7d);border:1px solid #4a463d;
-}
-#lighterGfx .wheel{
-  position:absolute;bottom:62px;left:19px;width:26px;height:11px;border-radius:5px;z-index:2;
-  background:repeating-linear-gradient(90deg,#6b665c 0 3px,#a29c8f 3px 6px);border:1px solid #3a362e;
-}
-#lighterGfx .flame{
-  position:absolute;bottom:73px;left:23px;width:18px;height:36px;z-index:3;
-  border-radius:50% 50% 50% 50%/62% 62% 38% 38%;
-  background:radial-gradient(circle at 50% 85%,#fff6cf 0%,#ffc14d 40%,#ff7a30 70%,#d23a12 92%,transparent 100%);
-  transform-origin:50% 100%;
-  animation:ignite .22s .18s both, flameFlicker .16s .45s infinite alternate;
-  filter:drop-shadow(0 0 14px rgba(255,180,77,.95));
-}
-@keyframes ignite{from{transform:scaleY(0)}to{transform:scaleY(1)}}
-@keyframes flameFlicker{from{transform:scaleY(.95) skewX(-3deg)}to{transform:scaleY(1.2) skewX(4deg)}}
+      #lighterGfx {
+        position: fixed;
+        display: none;
+        z-index: 69;
+        pointer-events: none;
+        width: 64px;
+        height: 106px;
+      }
+      #lighterGfx.show {
+        display: block;
+        animation: lighterUp 0.3s ease-out both;
+      }
+      @keyframes lighterUp {
+        from {
+          transform: translateY(46px) rotate(6deg);
+          opacity: 0;
+        }
+        to {
+          transform: translateY(0) rotate(0);
+          opacity: 1;
+        }
+      }
+      #lighterGfx .body {
+        position: absolute;
+        bottom: 0;
+        left: 10px;
+        width: 44px;
+        height: 62px;
+        border-radius: 8px;
+        background: linear-gradient(
+          100deg,
+          #8f1f1f,
+          #d24848 30%,
+          #e86a6a 44%,
+          #a02525 70%,
+          #5e1212
+        );
+        border: 1px solid #3a0c0c;
+        box-shadow:
+          inset 0 2px 3px rgba(255, 255, 255, 0.35),
+          inset 0 -4px 6px rgba(0, 0, 0, 0.35),
+          0 5px 10px rgba(0, 0, 0, 0.55);
+      }
+      #lighterGfx .hood {
+        position: absolute;
+        bottom: 58px;
+        left: 10px;
+        width: 44px;
+        height: 15px;
+        border-radius: 5px 5px 2px 2px;
+        background: linear-gradient(#efeade, #b3ada0 55%, #8f8a7d);
+        border: 1px solid #4a463d;
+      }
+      #lighterGfx .wheel {
+        position: absolute;
+        bottom: 62px;
+        left: 19px;
+        width: 26px;
+        height: 11px;
+        border-radius: 5px;
+        z-index: 2;
+        background: repeating-linear-gradient(
+          90deg,
+          #6b665c 0 3px,
+          #a29c8f 3px 6px
+        );
+        border: 1px solid #3a362e;
+      }
+      #lighterGfx .flame {
+        position: absolute;
+        bottom: 73px;
+        left: 23px;
+        width: 18px;
+        height: 36px;
+        z-index: 3;
+        border-radius: 50% 50% 50% 50%/62% 62% 38% 38%;
+        background: radial-gradient(
+          circle at 50% 85%,
+          #fff6cf 0%,
+          #ffc14d 40%,
+          #ff7a30 70%,
+          #d23a12 92%,
+          transparent 100%
+        );
+        transform-origin: 50% 100%;
+        animation:
+          ignite 0.22s 0.18s both,
+          flameFlicker 0.16s 0.45s infinite alternate;
+        filter: drop-shadow(0 0 14px rgba(255, 180, 77, 0.95));
+      }
+      @keyframes ignite {
+        from {
+          transform: scaleY(0);
+        }
+        to {
+          transform: scaleY(1);
+        }
+      }
+      @keyframes flameFlicker {
+        from {
+          transform: scaleY(0.95) skewX(-3deg);
+        }
+        to {
+          transform: scaleY(1.2) skewX(4deg);
+        }
+      }
 
-#dragGhost{
-  position:fixed;z-index:70;pointer-events:none;display:none;
-  transform:translate(-50%,-50%);perspective:550px;
-}
-#dragGhost.show{display:block}
-#dragGhost .tilt-wrap{transform-style:preserve-3d;transition:transform .28s ease}
-/* cigar: carried mostly flat with a hint of depth; holding leans it toward you */
-#dragGhost .cigar-wrap{transform:rotate(-15deg) rotateX(10deg) scale(1.85)}
-#dragGhost.holding .cigar-wrap{transform:rotate(-7deg) rotateX(30deg) rotateY(-14deg) scale(2.05)}
-/* held off the table: bigger, softer shadow sells the lift */
-#dragGhost.holding .cigar-gfx{filter:drop-shadow(0 20px 12px rgba(0,0,0,.5))}
-/* puff pulse: lengthwise stretch + a slow 3D sway for motion parallax */
-#dragGhost .pulse-wrap{transform-style:preserve-3d}
-#dragGhost.holding .pulse-wrap{animation:cigarPuff 1.05s ease-in-out infinite}
-@keyframes cigarPuff{
-  0%,100%{transform:rotateY(7deg) scale(1,1)}
-  50%{transform:rotateY(-7deg) scale(1.1,.86)}
-}
-/* beer: slight carry lean; pour transform driven inline (2D tip + visible 3D lean) */
-#dragGhost .bottle-wrap{transform-origin:50% 75%;transition:transform .1s linear;transform:rotate(-9deg) rotateX(-8deg) scale(1.55)}
-#dragGhost .bottle-gfx{transition:filter .2s}
-#dragGhost.pouring .bottle-gfx{filter:drop-shadow(0 22px 14px rgba(0,0,0,.5))}
+      #dragGhost {
+        position: fixed;
+        z-index: 70;
+        pointer-events: none;
+        display: none;
+        transform: translate(-50%, -50%);
+        perspective: 550px;
+      }
+      #dragGhost.show {
+        display: block;
+      }
+      #dragGhost .tilt-wrap {
+        transform-style: preserve-3d;
+        transition: transform 0.28s ease;
+      }
+      /* cigar: carried mostly flat with a hint of depth; holding leans it toward you */
+      #dragGhost .cigar-wrap {
+        transform: rotate(-15deg) rotateX(10deg) scale(1.85);
+      }
+      #dragGhost.holding .cigar-wrap {
+        transform: rotate(-7deg) rotateX(30deg) rotateY(-14deg) scale(2.05);
+      }
+      /* held off the table: bigger, softer shadow sells the lift */
+      #dragGhost.holding .cigar-gfx {
+        filter: drop-shadow(0 20px 12px rgba(0, 0, 0, 0.5));
+      }
+      /* puff pulse: lengthwise stretch + a slow 3D sway for motion parallax */
+      #dragGhost .pulse-wrap {
+        transform-style: preserve-3d;
+      }
+      #dragGhost.holding .pulse-wrap {
+        animation: cigarPuff 1.05s ease-in-out infinite;
+      }
+      @keyframes cigarPuff {
+        0%,
+        100% {
+          transform: rotateY(7deg) scale(1, 1);
+        }
+        50% {
+          transform: rotateY(-7deg) scale(1.1, 0.86);
+        }
+      }
+      /* beer: slight carry lean; pour transform driven inline (2D tip + visible 3D lean) */
+      #dragGhost .bottle-wrap {
+        transform-origin: 50% 75%;
+        transition: transform 0.1s linear;
+        transform: rotate(-9deg) rotateX(-8deg) scale(1.55);
+      }
+      #dragGhost .bottle-gfx {
+        transition: filter 0.2s;
+      }
+      #dragGhost.pouring .bottle-gfx {
+        filter: drop-shadow(0 22px 14px rgba(0, 0, 0, 0.5));
+      }
 
-/* beer spilling "onto" the user: droplets fly at the screen */
-.spill-drop{
-  position:fixed;z-index:71;pointer-events:none;width:15px;height:19px;
-  border-radius:50% 50% 55% 55%/42% 42% 58% 58%;
-  background:radial-gradient(circle at 40% 32%, #ffe4a3, #e8a63a 55%, #b97416 90%);
-  box-shadow:0 0 6px rgba(232,166,58,.5);
-  animation:spillAtYou .6s ease-in forwards;
-}
-@keyframes spillAtYou{
-  from{transform:translate(0,0) scale(.35);opacity:.95}
-  to{transform:translate(var(--sx,0px),var(--sy,140px)) scale(4.6);opacity:0}
-}
+      /* beer spilling "onto" the user: droplets fly at the screen */
+      .spill-drop {
+        position: fixed;
+        z-index: 71;
+        pointer-events: none;
+        width: 15px;
+        height: 19px;
+        border-radius: 50% 50% 55% 55%/42% 42% 58% 58%;
+        background: radial-gradient(
+          circle at 40% 32%,
+          #ffe4a3,
+          #e8a63a 55%,
+          #b97416 90%
+        );
+        box-shadow: 0 0 6px rgba(232, 166, 58, 0.5);
+        animation: spillAtYou 0.6s ease-in forwards;
+      }
+      @keyframes spillAtYou {
+        from {
+          transform: translate(0, 0) scale(0.35);
+          opacity: 0.95;
+        }
+        to {
+          transform: translate(var(--sx, 0px), var(--sy, 140px)) scale(4.6);
+          opacity: 0;
+        }
+      }
 
-/* preset bet row */
-.preset-btn{
-  font-family:var(--mono);font-size:12px;font-weight:700;letter-spacing:.08em;color:var(--cream);
-  background:#332c23;border:1px solid #17130d;border-radius:5px;padding:8px 14px;
-}
-.preset-btn:not(:disabled):hover{background:#4b4232}
+      /* preset bet row */
+      .preset-btn {
+        font-family: var(--mono);
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        color: var(--cream);
+        background: #332c23;
+        border: 1px solid #17130d;
+        border-radius: 5px;
+        padding: 8px 14px;
+      }
+      .preset-btn:not(:disabled):hover {
+        background: #4b4232;
+      }
 
-.shop-row{display:flex;align-items:center;justify-content:space-between;font-family:var(--mono);font-size:13px;margin-bottom:10px;gap:8px}
-.shop-row .price{color:var(--amber)}
-.buy-btn{
-  font-family:var(--mono);font-size:12px;font-weight:700;color:var(--cream);
-  background:#3a3226;border:1px solid #17130d;border-radius:5px;padding:6px 10px;
-}
-.buy-btn:not(:disabled):hover{background:#4b4232}
-.inflation-note{font-family:var(--mono);font-size:10px;color:rgba(242,232,213,.4);line-height:1.5}
+      .shop-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        font-family: var(--mono);
+        font-size: 13px;
+        margin-bottom: 10px;
+        gap: 8px;
+      }
+      .shop-row .price {
+        color: var(--amber);
+      }
+      .buy-btn {
+        font-family: var(--mono);
+        font-size: 12px;
+        font-weight: 700;
+        color: var(--cream);
+        background: #3a3226;
+        border: 1px solid #17130d;
+        border-radius: 5px;
+        padding: 6px 10px;
+      }
+      .buy-btn:not(:disabled):hover {
+        background: #4b4232;
+      }
+      .inflation-note {
+        font-family: var(--mono);
+        font-size: 10px;
+        color: rgba(242, 232, 213, 0.4);
+        line-height: 1.5;
+      }
 
-/* ---------- flavor bar ---------- */
-#flavorBar{
-  flex:0 0 auto;padding:8px 22px;background:var(--void-2);border-top:2px solid #2c2317;
-  font-family:var(--serif);font-style:italic;color:var(--ash);font-size:14px;text-align:center;
-  min-height:34px;transition:opacity .5s;
-}
+      /* ---------- flavor bar ---------- */
+      #flavorBar {
+        flex: 0 0 auto;
+        padding: 8px 22px;
+        background: var(--void-2);
+        border-top: 2px solid #2c2317;
+        font-family: var(--serif);
+        font-style: italic;
+        color: var(--ash);
+        font-size: 14px;
+        text-align: center;
+        min-height: 34px;
+        transition: opacity 0.5s;
+      }
 
-/* ---------- panic vignette & shake ---------- */
-#vignette{
-  position:fixed;inset:0;pointer-events:none;opacity:0;z-index:40;
-  background:radial-gradient(ellipse at center,transparent 45%,rgba(180,20,10,.5) 100%);
-}
-body.panic #vignette{animation:panicPulse 1s ease-in-out infinite}
-@keyframes panicPulse{50%{opacity:1}}
-body.panic #gameScreen{animation:shake .35s linear infinite}
-@keyframes shake{
-  0%,100%{transform:translate(0,0)}25%{transform:translate(1.5px,-1px)}
-  50%{transform:translate(-1.5px,1px)}75%{transform:translate(1px,1.5px)}
-}
+      /* ---------- panic vignette & shake ---------- */
+      #vignette {
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+        opacity: 0;
+        z-index: 40;
+        background: radial-gradient(
+          ellipse at center,
+          transparent 45%,
+          rgba(180, 20, 10, 0.5) 100%
+        );
+      }
+      body.panic #vignette {
+        animation: panicPulse 1s ease-in-out infinite;
+      }
+      @keyframes panicPulse {
+        50% {
+          opacity: 1;
+        }
+      }
+      body.panic #gameScreen {
+        animation: shake 0.35s linear infinite;
+      }
+      @keyframes shake {
+        0%,
+        100% {
+          transform: translate(0, 0);
+        }
+        25% {
+          transform: translate(1.5px, -1px);
+        }
+        50% {
+          transform: translate(-1.5px, 1px);
+        }
+        75% {
+          transform: translate(1px, 1.5px);
+        }
+      }
 
-/* smoke particles */
-.puff{
-  position:fixed;z-index:60;pointer-events:none;font-size:22px;
-  animation:puffUp 1.4s ease-out forwards;
-}
-@keyframes puffUp{
-  from{transform:translateY(0) scale(.7);opacity:.95}
-  to{transform:translateY(-110px) scale(1.5);opacity:0}
-}
+      /* smoke particles */
+      .puff {
+        position: fixed;
+        z-index: 60;
+        pointer-events: none;
+        font-size: 22px;
+        animation: puffUp 1.4s ease-out forwards;
+      }
+      @keyframes puffUp {
+        from {
+          transform: translateY(0) scale(0.7);
+          opacity: 0.95;
+        }
+        to {
+          transform: translateY(-110px) scale(1.5);
+          opacity: 0;
+        }
+      }
 
-/* ---------- game over ---------- */
-#overScreen{
-  flex-direction:column;align-items:center;justify-content:center;gap:22px;text-align:center;
-  background:radial-gradient(ellipse at 50% 40%, #2a1512 0%, var(--void) 70%);
-}
-#deathCause{
-  font-family:var(--serif);font-weight:700;font-size:clamp(26px,4vw,44px);color:var(--bad);
-  letter-spacing:.06em;text-shadow:0 0 20px rgba(224,85,69,.5);max-width:900px;padding:0 20px;
-}
-#overStats{
-  font-family:var(--mono);font-size:15px;color:var(--ash);line-height:2;
-  background:rgba(0,0,0,.35);border:1px solid #2c2317;border-radius:8px;padding:18px 34px;
-}
-#overStats b{color:var(--amber)}
-.epitaph{font-family:var(--serif);font-style:italic;color:var(--ash)}
+      /* ---------- game over ---------- */
+      #overScreen {
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 22px;
+        text-align: center;
+        background: radial-gradient(
+          ellipse at 50% 40%,
+          #2a1512 0%,
+          var(--void) 70%
+        );
+      }
+      #deathCause {
+        font-family: var(--serif);
+        font-weight: 700;
+        font-size: clamp(26px, 4vw, 44px);
+        color: var(--bad);
+        letter-spacing: 0.06em;
+        text-shadow: 0 0 20px rgba(224, 85, 69, 0.5);
+        max-width: 900px;
+        padding: 0 20px;
+      }
+      #overStats {
+        font-family: var(--mono);
+        font-size: 15px;
+        color: var(--ash);
+        line-height: 2;
+        background: rgba(0, 0, 0, 0.35);
+        border: 1px solid #2c2317;
+        border-radius: 8px;
+        padding: 18px 34px;
+      }
+      #overStats b {
+        color: var(--amber);
+      }
+      .epitaph {
+        font-family: var(--serif);
+        font-style: italic;
+        color: var(--ash);
+      }
 
-/* ---------- responsive ---------- */
-@media (max-width:900px){
-  body{overflow:auto}
-  #gameScreen{height:auto;min-height:100vh}
-  #main{flex-direction:column}
-  #table{border-right:none;border-bottom:10px solid var(--felt-rim)}
-  #sidebar{flex:1 1 auto}
-}
-@media (prefers-reduced-motion:reduce){
-  *,*::before,*::after{animation:none !important;transition:none !important}
-}
-</style>
-</head>
-<body>
-
-<div id="vignette"></div>
-<div id="dragGhost"></div>
-<div id="lighterGfx"><div class="flame"></div><div class="wheel"></div><div class="hood"></div><div class="body"></div></div>
-
-<!-- ============ TITLE ============ -->
-<div id="titleScreen" class="screen active">
-  <div class="marquee">DEGENERATE<br>BLACKJACK<small class="vices-title">🚬 SIMULATOR 🍺</small></div>
-  <p class="tagline">One thousand dollars. Infinite hands. Keep smoking. Keep drinking.
-    If either runs dry, so do you. There is no point. That is the point.</p>
-  <button class="big-btn" id="startBtn">DEAL ME IN</button>
-</div>
-
-<!-- ============ GAMEPLAY ============ -->
-<div id="gameScreen" class="screen">
-  <div id="topBar">
-    <span class="money" id="moneyDisplay">$1000</span>
-    <span class="stat">Hands: <b id="handsDisplay">0</b></span>
-    <span class="stat">Time: <b id="timeDisplay">00:00</b></span>
-  </div>
-
-  <div id="main">
-    <div id="table">
-      <div id="shoe"></div>
-      <div id="dealerZone">
-        <div class="zone-label">DEALER</div>
-        <div class="hand-row" id="dealerCards"></div>
-      </div>
-      <div class="table-line">BLACKJACK PAYS 3 TO 2 &nbsp;·&nbsp; DEALER STANDS ON ALL 17s &nbsp;·&nbsp; NO EXITS</div>
-      <div id="playerZone">
-        <div class="zone-label">YOU</div>
-        <div class="hand-row" id="playerCards"></div>
-      </div>
-
-      <div id="actionArea">
-        <!-- betting -->
-        <div id="betPanel">
-          <div class="controls-row">
-            <div class="bet-amount" id="betDisplay">$0</div>
-            <div class="chip-rack" id="chipRack"></div>
-            <button class="act-btn" id="dealBtn">DEAL</button>
-          </div>
-          <div class="controls-row" style="margin-top:10px">
-            <button class="preset-btn" data-preset="min">MIN</button>
-            <button class="preset-btn" data-preset="half">HALF</button>
-            <button class="preset-btn" data-preset="allin">ALL IN</button>
-            <button class="preset-btn" id="rebetBtn" data-preset="rebet">REBET</button>
-            <button class="preset-btn" id="betClear">CLEAR</button>
-          </div>
-          <div class="hint" id="betHint">Chips stack. Min bet $10. The meters don't wait.</div>
-        </div>
-        <!-- in-hand actions -->
-        <div id="playPanel" style="display:none">
-          <div class="controls-row">
-            <button class="act-btn" id="hitBtn">HIT</button>
-            <button class="act-btn" id="standBtn">STAND</button>
-            <button class="act-btn secondary" id="doubleBtn">DOUBLE</button>
-            <span class="hint" id="betInPlay"></span>
-          </div>
-        </div>
-      </div>
-
-      <div id="banner"></div>
-      <div id="flash"></div>
-
-      <div id="dropTarget">
-        <svg class="ring-svg" viewBox="0 0 120 120">
-          <circle class="ring-bg" cx="60" cy="60" r="54"></circle>
-          <circle class="ring-fg" cx="60" cy="60" r="54"></circle>
-        </svg>
-        <div class="target-label" id="targetLabel">HOLD HERE</div>
-      </div>
-      <div id="swipeHint"><div class="arrow">▲</div>SWIPE UP<br>&amp; HOLD</div>
+      /* ---------- responsive ---------- */
+      @media (max-width: 900px) {
+        body {
+          overflow: auto;
+        }
+        #gameScreen {
+          height: auto;
+          min-height: 100vh;
+        }
+        #main {
+          flex-direction: column;
+        }
+        #table {
+          border-right: none;
+          border-bottom: 10px solid var(--felt-rim);
+        }
+        #sidebar {
+          flex: 1 1 auto;
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        *,
+        *::before,
+        *::after {
+          animation: none !important;
+          transition: none !important;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="vignette"></div>
+    <div id="dragGhost"></div>
+    <div id="lighterGfx">
+      <div class="flame"></div>
+      <div class="wheel"></div>
+      <div class="hood"></div>
+      <div class="body"></div>
     </div>
 
-    <div id="sidebar">
-      <div class="panel">
-        <h3>VICES</h3>
-        <div class="vice-head"><span>🚬 CIGARS</span><span class="inv" id="cigarInv">×3</span></div>
-        <div class="meter cigar"><div class="fill ok" id="cigarFill"></div></div>
-        <div class="vice-item" id="cigarItem" role="button" tabindex="0"
-             aria-label="Smoke a cigar: drag to the table target and hold still, or press Enter">
-          <div class="cigar-gfx">
-            <div class="ash"></div><div class="ember"></div>
-            <div class="wrap"></div><div class="band"></div><div class="cap-end"></div>
-          </div>
-          <span>DRAG TO SMOKE</span>
-        </div>
-        <div style="height:14px"></div>
-        <div class="vice-head"><span>🍺 BEER</span><span class="inv" id="beerInv">×3</span></div>
-        <div class="meter beer"><div class="fill ok" id="beerFill"></div></div>
-        <div class="vice-item" id="beerItem" role="button" tabindex="0"
-             aria-label="Drink a beer: drag to the table target, then swipe up and hold, or press Enter">
-          <div class="bottle-gfx">
-            <div class="body"><div class="liquid"></div><div class="label">LAGER</div><div class="shine"></div></div>
-            <div class="cap"></div>
-          </div>
-          <span>DRAG TO DRINK</span>
-        </div>
+    <!-- ============ TITLE ============ -->
+    <div id="titleScreen" class="screen active">
+      <div class="marquee">
+        DEGENERATE<br />BLACKJACK<small class="vices-title"
+          >🚬 SIMULATOR 🍺</small
+        >
       </div>
-
-      <div class="panel">
-        <h3>SHOP — ALWAYS OPEN</h3>
-        <div class="shop-row">
-          <span>🚬 Cigar <span class="price" id="cigarPrice">$15</span></span>
-          <span>
-            <button class="buy-btn" id="buyCigar1">Buy 1</button>
-            <button class="buy-btn" id="buyCigar5">Buy 5</button>
-          </span>
-        </div>
-        <div class="shop-row">
-          <span>🍺 Beer <span class="price" id="beerPrice">$10</span></span>
-          <span>
-            <button class="buy-btn" id="buyBeer1">Buy 1</button>
-            <button class="buy-btn" id="buyBeer5">Buy 5</button>
-          </span>
-        </div>
-        <p class="inflation-note">Prices rise 10% every 10 hands.<br>The bar knows you're not leaving.</p>
-      </div>
+      <p class="tagline">
+        One thousand dollars. Infinite hands. Keep smoking. Keep drinking. If
+        either runs dry, so do you. There is no point. That is the point.
+      </p>
+      <button class="big-btn" id="startBtn">DEAL ME IN</button>
     </div>
-  </div>
 
-  <div id="flavorBar">The dealer doesn't blink.</div>
-</div>
+    <!-- ============ GAMEPLAY ============ -->
+    <div id="gameScreen" class="screen">
+      <div id="topBar">
+        <span class="money" id="moneyDisplay">$1000</span>
+        <span class="stat">Hands: <b id="handsDisplay">0</b></span>
+        <span class="stat">Time: <b id="timeDisplay">00:00</b></span>
+      </div>
 
-<!-- ============ GAME OVER ============ -->
-<div id="overScreen" class="screen">
-  <div id="deathCause"></div>
-  <div id="overStats"></div>
-  <p class="epitaph">The stool is still warm. Someone else will sit in it.</p>
-  <button class="big-btn" id="retryBtn">RUN IT BACK</button>
-</div>
+      <div id="main">
+        <div id="table">
+          <div id="shoe"></div>
+          <div id="dealerZone">
+            <div class="zone-label">DEALER</div>
+            <div class="hand-row" id="dealerCards"></div>
+          </div>
+          <div class="table-line">
+            BLACKJACK PAYS 3 TO 2 &nbsp;·&nbsp; DEALER STANDS ON ALL 17s
+            &nbsp;·&nbsp; NO EXITS
+          </div>
+          <div id="playerZone">
+            <div class="zone-label">YOU</div>
+            <div class="hand-row" id="playerCards"></div>
+          </div>
 
-<script>
-"use strict";
-/* ================= PURE LOGIC ================= */
-const SUITS = ["♠","♥","♦","♣"];
-const RANKS = ["A","2","3","4","5","6","7","8","9","10","J","Q","K"];
+          <div id="actionArea">
+            <!-- betting -->
+            <div id="betPanel">
+              <div class="controls-row">
+                <div class="bet-amount" id="betDisplay">$0</div>
+                <div class="chip-rack" id="chipRack"></div>
+                <button class="act-btn" id="dealBtn">DEAL</button>
+              </div>
+              <div class="controls-row" style="margin-top: 10px">
+                <button class="preset-btn" data-preset="min">MIN</button>
+                <button class="preset-btn" data-preset="half">HALF</button>
+                <button class="preset-btn" data-preset="allin">ALL IN</button>
+                <button class="preset-btn" id="rebetBtn" data-preset="rebet">
+                  REBET
+                </button>
+                <button class="preset-btn" id="betClear">CLEAR</button>
+              </div>
+              <div class="hint" id="betHint">
+                Chips stack. Min bet $10. The meters don't wait.
+              </div>
+            </div>
+            <!-- in-hand actions -->
+            <div id="playPanel" style="display: none">
+              <div class="controls-row">
+                <button class="act-btn" id="hitBtn">HIT</button>
+                <button class="act-btn" id="standBtn">STAND</button>
+                <button class="act-btn secondary" id="doubleBtn">DOUBLE</button>
+                <span class="hint" id="betInPlay"></span>
+              </div>
+            </div>
+          </div>
 
-function buildShoe(decks){
-  const shoe = [];
-  for (let d = 0; d < decks; d++)
-    for (const s of SUITS)
-      for (const r of RANKS)
-        shoe.push({r, s});
-  for (let i = shoe.length - 1; i > 0; i--){
-    const j = Math.floor(Math.random() * (i + 1));
-    [shoe[i], shoe[j]] = [shoe[j], shoe[i]];
-  }
-  return shoe;
-}
-function cardValue(r){
-  if (r === "A") return 11;
-  if (r === "J" || r === "Q" || r === "K") return 10;
-  return parseInt(r, 10);
-}
-function handValue(cards){
-  let total = 0, aces = 0;
-  for (const c of cards){
-    total += cardValue(c.r);
-    if (c.r === "A") aces++;
-  }
-  while (total > 21 && aces > 0){ total -= 10; aces--; }
-  return { total, soft: aces > 0 };
-}
-function isBlackjack(cards){
-  return cards.length === 2 && handValue(cards).total === 21;
-}
-/* Returns money returned to the player (0 on loss) and a result label.
+          <div id="banner"></div>
+          <div id="flash"></div>
+
+          <div id="dropTarget">
+            <svg class="ring-svg" viewBox="0 0 120 120">
+              <circle class="ring-bg" cx="60" cy="60" r="54"></circle>
+              <circle class="ring-fg" cx="60" cy="60" r="54"></circle>
+            </svg>
+            <div class="target-label" id="targetLabel">HOLD HERE</div>
+          </div>
+          <div id="swipeHint">
+            <div class="arrow">▲</div>
+            SWIPE UP<br />&amp; HOLD
+          </div>
+        </div>
+
+        <div id="sidebar">
+          <div class="panel">
+            <h3>VICES</h3>
+            <div class="vice-head">
+              <span>🚬 CIGARS</span><span class="inv" id="cigarInv">×3</span>
+            </div>
+            <div class="meter cigar">
+              <div class="fill ok" id="cigarFill"></div>
+            </div>
+            <div
+              class="vice-item"
+              id="cigarItem"
+              role="button"
+              tabindex="0"
+              aria-label="Smoke a cigar: drag to the table target and hold still, or press Enter"
+            >
+              <div class="cigar-gfx">
+                <div class="ash"></div>
+                <div class="ember"></div>
+                <div class="wrap"></div>
+                <div class="band"></div>
+                <div class="cap-end"></div>
+              </div>
+              <span>DRAG TO SMOKE</span>
+            </div>
+            <div style="height: 14px"></div>
+            <div class="vice-head">
+              <span>🍺 BEER</span><span class="inv" id="beerInv">×3</span>
+            </div>
+            <div class="meter beer">
+              <div class="fill ok" id="beerFill"></div>
+            </div>
+            <div
+              class="vice-item"
+              id="beerItem"
+              role="button"
+              tabindex="0"
+              aria-label="Drink a beer: drag to the table target, then swipe up and hold, or press Enter"
+            >
+              <div class="bottle-gfx">
+                <div class="body">
+                  <div class="liquid"></div>
+                  <div class="label">LAGER</div>
+                  <div class="shine"></div>
+                </div>
+                <div class="cap"></div>
+              </div>
+              <span>DRAG TO DRINK</span>
+            </div>
+          </div>
+
+          <div class="panel">
+            <h3>SHOP — ALWAYS OPEN</h3>
+            <div class="shop-row">
+              <span
+                >🚬 Cigar <span class="price" id="cigarPrice">$15</span></span
+              >
+              <span>
+                <button class="buy-btn" id="buyCigar1">Buy 1</button>
+                <button class="buy-btn" id="buyCigar5">Buy 5</button>
+              </span>
+            </div>
+            <div class="shop-row">
+              <span>🍺 Beer <span class="price" id="beerPrice">$10</span></span>
+              <span>
+                <button class="buy-btn" id="buyBeer1">Buy 1</button>
+                <button class="buy-btn" id="buyBeer5">Buy 5</button>
+              </span>
+            </div>
+            <p class="inflation-note">
+              Prices rise 10% every 10 hands.<br />The bar knows you're not
+              leaving.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div id="flavorBar">The dealer doesn't blink.</div>
+    </div>
+
+    <!-- ============ GAME OVER ============ -->
+    <div id="overScreen" class="screen">
+      <div id="deathCause"></div>
+      <div id="overStats"></div>
+      <p class="epitaph">
+        The stool is still warm. Someone else will sit in it.
+      </p>
+      <button class="big-btn" id="retryBtn">RUN IT BACK</button>
+    </div>
+
+    <script>
+      "use strict";
+      /* ================= PURE LOGIC ================= */
+      const SUITS = ["♠", "♥", "♦", "♣"];
+      const RANKS = [
+        "A",
+        "2",
+        "3",
+        "4",
+        "5",
+        "6",
+        "7",
+        "8",
+        "9",
+        "10",
+        "J",
+        "Q",
+        "K",
+      ];
+
+      function buildShoe(decks) {
+        const shoe = [];
+        for (let d = 0; d < decks; d++)
+          for (const s of SUITS) for (const r of RANKS) shoe.push({ r, s });
+        for (let i = shoe.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [shoe[i], shoe[j]] = [shoe[j], shoe[i]];
+        }
+        return shoe;
+      }
+      function cardValue(r) {
+        if (r === "A") return 11;
+        if (r === "J" || r === "Q" || r === "K") return 10;
+        return parseInt(r, 10);
+      }
+      function handValue(cards) {
+        let total = 0,
+          aces = 0;
+        for (const c of cards) {
+          total += cardValue(c.r);
+          if (c.r === "A") aces++;
+        }
+        while (total > 21 && aces > 0) {
+          total -= 10;
+          aces--;
+        }
+        return { total, soft: aces > 0 };
+      }
+      function isBlackjack(cards) {
+        return cards.length === 2 && handValue(cards).total === 21;
+      }
+      /* Returns money returned to the player (0 on loss) and a result label.
    bet = total amount already deducted (post-double). */
-function settle(pTotal, dTotal, pBJ, dBJ, bet){
-  if (pBJ && dBJ)  return { back: bet,             label: "PUSH",        kind: "push" };
-  if (pBJ)         return { back: bet + bet * 1.5, label: "BLACKJACK!",  kind: "win"  };
-  if (dBJ)         return { back: 0,               label: "DEALER BLACKJACK", kind: "lose" };
-  if (pTotal > 21) return { back: 0,               label: "BUST",        kind: "lose" };
-  if (dTotal > 21) return { back: bet * 2,         label: "DEALER BUSTS — YOU WIN", kind: "win" };
-  if (pTotal > dTotal) return { back: bet * 2,     label: "YOU WIN",     kind: "win"  };
-  if (pTotal < dTotal) return { back: 0,           label: "DEALER WINS", kind: "lose" };
-  return { back: bet, label: "PUSH", kind: "push" };
-}
-function inflate(price){ return Math.ceil(price * 1.1); }
-/* ================= END PURE LOGIC ================= */
+      function settle(pTotal, dTotal, pBJ, dBJ, bet) {
+        if (pBJ && dBJ) return { back: bet, label: "PUSH", kind: "push" };
+        if (pBJ)
+          return { back: bet + bet * 1.5, label: "BLACKJACK!", kind: "win" };
+        if (dBJ) return { back: 0, label: "DEALER BLACKJACK", kind: "lose" };
+        if (pTotal > 21) return { back: 0, label: "BUST", kind: "lose" };
+        if (dTotal > 21)
+          return {
+            back: bet * 2,
+            label: "DEALER BUSTS — YOU WIN",
+            kind: "win",
+          };
+        if (pTotal > dTotal)
+          return { back: bet * 2, label: "YOU WIN", kind: "win" };
+        if (pTotal < dTotal)
+          return { back: 0, label: "DEALER WINS", kind: "lose" };
+        return { back: bet, label: "PUSH", kind: "push" };
+      }
+      function inflate(price) {
+        return Math.ceil(price * 1.1);
+      }
+      /* ================= END PURE LOGIC ================= */
 
-/* ---------------- state ---------------- */
-const DECKS = 6, RESHUFFLE_AT = 52;
-const START_MONEY = 1000, METER_MAX = 100;
-const BASE_RATE = 2.0, RAMP = 0.3, RATE_CAP = 6.0, JITTER = 0.5;
-const TICK_MS = 100;
+      /* ---------------- state ---------------- */
+      const DECKS = 6,
+        RESHUFFLE_AT = 52;
+      const START_MONEY = 1000,
+        METER_MAX = 100;
+      const BASE_RATE = 2.0,
+        RAMP = 0.3,
+        RATE_CAP = 6.0,
+        JITTER = 0.5;
+      const TICK_MS = 100;
 
-let S = null;
-let tickTimer = null, flavorTimer = null, rafId = null;
-let displayedMoney = 0;
-let timeouts = [];
+      let S = null;
+      let tickTimer = null,
+        flavorTimer = null,
+        rafId = null;
+      let displayedMoney = 0;
+      let timeouts = [];
 
-function freshState(){
-  return {
-    screen: "title",
-    money: START_MONEY, peakMoney: START_MONEY,
-    cigarMeter: METER_MAX, beerMeter: METER_MAX,
-    cigarInv: 3, beerInv: 3,
-    cigarPrice: 15, beerPrice: 10,
-    hands: 0, cigarsSmoked: 0, beersDrunk: 0,
-    startTime: 0, elapsed: 0,
-    cigarDrift: 0, beerDrift: 0,
-    shoe: buildShoe(DECKS),
-    phase: "betting",          // betting | dealing | player | dealer | result
-    pendingBet: 0, bet: 0, lastBet: 0, doubled: false,
-    playerHand: [], dealerHand: [], holeHidden: true,
-    over: false,
-  };
-}
+      function freshState() {
+        return {
+          screen: "title",
+          money: START_MONEY,
+          peakMoney: START_MONEY,
+          cigarMeter: METER_MAX,
+          beerMeter: METER_MAX,
+          cigarInv: 3,
+          beerInv: 3,
+          cigarPrice: 15,
+          beerPrice: 10,
+          hands: 0,
+          cigarsSmoked: 0,
+          beersDrunk: 0,
+          startTime: 0,
+          elapsed: 0,
+          cigarDrift: 0,
+          beerDrift: 0,
+          shoe: buildShoe(DECKS),
+          phase: "betting", // betting | dealing | player | dealer | result
+          pendingBet: 0,
+          bet: 0,
+          lastBet: 0,
+          doubled: false,
+          playerHand: [],
+          dealerHand: [],
+          holeHidden: true,
+          over: false,
+        };
+      }
 
-/* ---------------- DOM refs ---------------- */
-const $ = id => document.getElementById(id);
-const el = {
-  title: $("titleScreen"), game: $("gameScreen"), over: $("overScreen"),
-  money: $("moneyDisplay"), hands: $("handsDisplay"), time: $("timeDisplay"),
-  dealerCards: $("dealerCards"), playerCards: $("playerCards"),
-  betPanel: $("betPanel"), playPanel: $("playPanel"),
-  betDisplay: $("betDisplay"), betHint: $("betHint"), betInPlay: $("betInPlay"),
-  chipRack: $("chipRack"),
-  dealBtn: $("dealBtn"), hitBtn: $("hitBtn"), standBtn: $("standBtn"), doubleBtn: $("doubleBtn"),
-  banner: $("banner"), flash: $("flash"),
-  cigarFill: $("cigarFill"), beerFill: $("beerFill"),
-  cigarInv: $("cigarInv"), beerInv: $("beerInv"),
-  cigarItem: $("cigarItem"), beerItem: $("beerItem"),
-  dropTarget: $("dropTarget"), targetLabel: $("targetLabel"),
-  ringFg: document.querySelector("#dropTarget .ring-fg"),
-  swipeHint: $("swipeHint"), lighter: $("lighterGfx"), ghost: $("dragGhost"),
-  table: $("table"),
-  cigarPrice: $("cigarPrice"), beerPrice: $("beerPrice"),
-  buyCigar1: $("buyCigar1"), buyCigar5: $("buyCigar5"),
-  buyBeer1: $("buyBeer1"), buyBeer5: $("buyBeer5"),
-  flavor: $("flavorBar"),
-  deathCause: $("deathCause"), overStats: $("overStats"),
-};
+      /* ---------------- DOM refs ---------------- */
+      const $ = (id) => document.getElementById(id);
+      const el = {
+        title: $("titleScreen"),
+        game: $("gameScreen"),
+        over: $("overScreen"),
+        money: $("moneyDisplay"),
+        hands: $("handsDisplay"),
+        time: $("timeDisplay"),
+        dealerCards: $("dealerCards"),
+        playerCards: $("playerCards"),
+        betPanel: $("betPanel"),
+        playPanel: $("playPanel"),
+        betDisplay: $("betDisplay"),
+        betHint: $("betHint"),
+        betInPlay: $("betInPlay"),
+        chipRack: $("chipRack"),
+        dealBtn: $("dealBtn"),
+        hitBtn: $("hitBtn"),
+        standBtn: $("standBtn"),
+        doubleBtn: $("doubleBtn"),
+        banner: $("banner"),
+        flash: $("flash"),
+        cigarFill: $("cigarFill"),
+        beerFill: $("beerFill"),
+        cigarInv: $("cigarInv"),
+        beerInv: $("beerInv"),
+        cigarItem: $("cigarItem"),
+        beerItem: $("beerItem"),
+        dropTarget: $("dropTarget"),
+        targetLabel: $("targetLabel"),
+        ringFg: document.querySelector("#dropTarget .ring-fg"),
+        swipeHint: $("swipeHint"),
+        lighter: $("lighterGfx"),
+        ghost: $("dragGhost"),
+        table: $("table"),
+        cigarPrice: $("cigarPrice"),
+        beerPrice: $("beerPrice"),
+        buyCigar1: $("buyCigar1"),
+        buyCigar5: $("buyCigar5"),
+        buyBeer1: $("buyBeer1"),
+        buyBeer5: $("buyBeer5"),
+        flavor: $("flavorBar"),
+        deathCause: $("deathCause"),
+        overStats: $("overStats"),
+      };
 
-/* ---------------- helpers ---------------- */
-function later(fn, ms){ timeouts.push(setTimeout(fn, ms)); }
-function clearTimers(){
-  timeouts.forEach(clearTimeout); timeouts = [];
-  if (tickTimer) clearInterval(tickTimer), tickTimer = null;
-  if (flavorTimer) clearInterval(flavorTimer), flavorTimer = null;
-  if (rafId) cancelAnimationFrame(rafId), rafId = null;
-}
-function setScreen(name){
-  el.title.classList.toggle("active", name === "title");
-  el.game.classList.toggle("active", name === "game");
-  el.over.classList.toggle("active", name === "over");
-}
-function fmtMoney(n){ return "$" + Math.round(n).toLocaleString("en-US"); }
-function fmtTime(sec){
-  const m = Math.floor(sec / 60), s = Math.floor(sec % 60);
-  return String(m).padStart(2,"0") + ":" + String(s).padStart(2,"0");
-}
-function setMoney(n){
-  S.money = n;
-  if (n > S.peakMoney) S.peakMoney = n;
-}
-function drawFromShoe(){
-  if (S.shoe.length < 1) S.shoe = buildShoe(DECKS);
-  return S.shoe.pop();
-}
+      /* ---------------- helpers ---------------- */
+      function later(fn, ms) {
+        timeouts.push(setTimeout(fn, ms));
+      }
+      function clearTimers() {
+        timeouts.forEach(clearTimeout);
+        timeouts = [];
+        if (tickTimer) (clearInterval(tickTimer), (tickTimer = null));
+        if (flavorTimer) (clearInterval(flavorTimer), (flavorTimer = null));
+        if (rafId) (cancelAnimationFrame(rafId), (rafId = null));
+      }
+      function setScreen(name) {
+        el.title.classList.toggle("active", name === "title");
+        el.game.classList.toggle("active", name === "game");
+        el.over.classList.toggle("active", name === "over");
+      }
+      function fmtMoney(n) {
+        return "$" + Math.round(n).toLocaleString("en-US");
+      }
+      function fmtTime(sec) {
+        const m = Math.floor(sec / 60),
+          s = Math.floor(sec % 60);
+        return String(m).padStart(2, "0") + ":" + String(s).padStart(2, "0");
+      }
+      function setMoney(n) {
+        S.money = n;
+        if (n > S.peakMoney) S.peakMoney = n;
+      }
+      function drawFromShoe() {
+        if (S.shoe.length < 1) S.shoe = buildShoe(DECKS);
+        return S.shoe.pop();
+      }
 
-/* ---------------- rendering ---------------- */
-function cardEl(card, faceDown, fx){
-  fx = fx || {};
-  const d = document.createElement("div");
-  const red = card.s === "♥" || card.s === "♦";
-  d.className = "card" + (red ? " red" : "") + (fx.dealt ? " dealt" : "");
-  d.style.setProperty("--tilt", (Math.random() * 4 - 2).toFixed(1) + "deg");
-  if (faceDown) d.dataset.hole = "1";
-  const inner = document.createElement("div");
-  inner.className = "inner"
-    + (faceDown ? " down" : "")
-    + (!faceDown && fx.reveal ? " reveal" : "")
-    + (!faceDown && !fx.reveal && fx.dealt ? " flip-in" : "");
-  inner.innerHTML =
-    `<div class="face front">
+      /* ---------------- rendering ---------------- */
+      function cardEl(card, faceDown, fx) {
+        fx = fx || {};
+        const d = document.createElement("div");
+        const red = card.s === "♥" || card.s === "♦";
+        d.className = "card" + (red ? " red" : "") + (fx.dealt ? " dealt" : "");
+        d.style.setProperty(
+          "--tilt",
+          (Math.random() * 4 - 2).toFixed(1) + "deg",
+        );
+        if (faceDown) d.dataset.hole = "1";
+        const inner = document.createElement("div");
+        inner.className =
+          "inner" +
+          (faceDown ? " down" : "") +
+          (!faceDown && fx.reveal ? " reveal" : "") +
+          (!faceDown && !fx.reveal && fx.dealt ? " flip-in" : "");
+        inner.innerHTML = `<div class="face front">
        <div class="corner">${card.r}<br>${card.s}</div>
        <div class="pip">${card.s}</div>
        <div class="corner br">${card.r}<br>${card.s}</div>
      </div><div class="face back"></div>`;
-  d.appendChild(inner);
-  return d;
-}
-function totalBadge(cards, hideHole){
-  const b = document.createElement("div");
-  b.className = "hand-total";
-  if (hideHole){
-    b.textContent = "showing " + handValue([cards[0]]).total;
-  } else {
-    const v = handValue(cards);
-    b.textContent = (v.soft && v.total <= 21 ? "soft " : "") + v.total;
-  }
-  return b;
-}
-function renderZone(container, hand, opts){
-  container.innerHTML = "";
-  hand.forEach((c, i) => {
-    const node = cardEl(c, i === opts.hideIdx, {
-      dealt: opts.animateLast && i === hand.length - 1,
-      reveal: i === opts.flipIdx,
-    });
-    container.appendChild(node);
-    if (node.classList.contains("dealt")){
-      // fly in from wherever the shoe actually sits
-      const shoeR = $("shoe").getBoundingClientRect();
-      const cardR = node.getBoundingClientRect();
-      node.style.setProperty("--fx", (shoeR.left - cardR.left) + "px");
-      node.style.setProperty("--fy", (shoeR.top - cardR.top) + "px");
-    }
-  });
-  if (hand.length) container.appendChild(totalBadge(hand, opts.hideIdx >= 0));
-}
-/* anim: {player, dealer, flipHole} — animate only what just changed */
-function renderHands(anim){
-  anim = anim || {};
-  renderZone(el.dealerCards, S.dealerHand, {
-    hideIdx: S.holeHidden ? 1 : -1,
-    animateLast: !!anim.dealer,
-    flipIdx: anim.flipHole ? 1 : -1,
-  });
-  renderZone(el.playerCards, S.playerHand, {
-    hideIdx: -1,
-    animateLast: !!anim.player,
-    flipIdx: -1,
-  });
-}
-function meterClass(v){ return v > 50 ? "ok" : v >= 20 ? "warn" : "bad"; }
-function renderMeters(){
-  el.cigarFill.style.width = Math.max(0, S.cigarMeter) + "%";
-  el.beerFill.style.width  = Math.max(0, S.beerMeter) + "%";
-  el.cigarFill.className = "fill " + meterClass(S.cigarMeter);
-  el.beerFill.className  = "fill " + meterClass(S.beerMeter);
-  document.body.classList.toggle("panic",
-    S.screen === "game" && !S.over && (S.cigarMeter < 20 || S.beerMeter < 20));
-}
-function renderControls(){
-  S.pendingBet = Math.max(0, Math.min(S.pendingBet, S.money));
-  el.betDisplay.textContent = fmtMoney(S.pendingBet);
-  el.betPanel.style.display = S.phase === "betting" ? "" : "none";
-  el.playPanel.style.display = (S.phase === "player") ? "" : "none";
+        d.appendChild(inner);
+        return d;
+      }
+      function totalBadge(cards, hideHole) {
+        const b = document.createElement("div");
+        b.className = "hand-total";
+        if (hideHole) {
+          b.textContent = "showing " + handValue([cards[0]]).total;
+        } else {
+          const v = handValue(cards);
+          b.textContent = (v.soft && v.total <= 21 ? "soft " : "") + v.total;
+        }
+        return b;
+      }
+      function renderZone(container, hand, opts) {
+        container.innerHTML = "";
+        hand.forEach((c, i) => {
+          const node = cardEl(c, i === opts.hideIdx, {
+            dealt: opts.animateLast && i === hand.length - 1,
+            reveal: i === opts.flipIdx,
+          });
+          container.appendChild(node);
+          if (node.classList.contains("dealt")) {
+            // fly in from wherever the shoe actually sits
+            const shoeR = $("shoe").getBoundingClientRect();
+            const cardR = node.getBoundingClientRect();
+            node.style.setProperty("--fx", shoeR.left - cardR.left + "px");
+            node.style.setProperty("--fy", shoeR.top - cardR.top + "px");
+          }
+        });
+        if (hand.length)
+          container.appendChild(totalBadge(hand, opts.hideIdx >= 0));
+      }
+      /* anim: {player, dealer, flipHole} — animate only what just changed */
+      function renderHands(anim) {
+        anim = anim || {};
+        renderZone(el.dealerCards, S.dealerHand, {
+          hideIdx: S.holeHidden ? 1 : -1,
+          animateLast: !!anim.dealer,
+          flipIdx: anim.flipHole ? 1 : -1,
+        });
+        renderZone(el.playerCards, S.playerHand, {
+          hideIdx: -1,
+          animateLast: !!anim.player,
+          flipIdx: -1,
+        });
+      }
+      function meterClass(v) {
+        return v > 50 ? "ok" : v >= 20 ? "warn" : "bad";
+      }
+      function renderMeters() {
+        el.cigarFill.style.width = Math.max(0, S.cigarMeter) + "%";
+        el.beerFill.style.width = Math.max(0, S.beerMeter) + "%";
+        el.cigarFill.className = "fill " + meterClass(S.cigarMeter);
+        el.beerFill.className = "fill " + meterClass(S.beerMeter);
+        document.body.classList.toggle(
+          "panic",
+          S.screen === "game" &&
+            !S.over &&
+            (S.cigarMeter < 20 || S.beerMeter < 20),
+        );
+      }
+      function renderControls() {
+        S.pendingBet = Math.max(0, Math.min(S.pendingBet, S.money));
+        el.betDisplay.textContent = fmtMoney(S.pendingBet);
+        el.betPanel.style.display = S.phase === "betting" ? "" : "none";
+        el.playPanel.style.display = S.phase === "player" ? "" : "none";
 
-  const canBet = S.phase === "betting" && S.money > 0;
-  el.dealBtn.disabled = !canBet;
-  document.querySelectorAll(".preset-btn").forEach(b => b.disabled = !canBet);
-  if (canBet && $("rebetBtn")) $("rebetBtn").disabled = S.lastBet <= 0;
-  renderBetChips(canBet);
-  el.betHint.textContent = S.money <= 0
-    ? "No money. No bets. Only vices remain."
-    : "Chips stack. Min bet $10. The meters don't wait.";
+        const canBet = S.phase === "betting" && S.money > 0;
+        el.dealBtn.disabled = !canBet;
+        document
+          .querySelectorAll(".preset-btn")
+          .forEach((b) => (b.disabled = !canBet));
+        if (canBet && $("rebetBtn")) $("rebetBtn").disabled = S.lastBet <= 0;
+        renderBetChips(canBet);
+        el.betHint.textContent =
+          S.money <= 0
+            ? "No money. No bets. Only vices remain."
+            : "Chips stack. Min bet $10. The meters don't wait.";
 
-  const inPlay = S.phase === "player";
-  el.hitBtn.disabled = !inPlay;
-  el.standBtn.disabled = !inPlay;
-  el.doubleBtn.disabled = !(inPlay && S.playerHand.length === 2 && S.money >= S.bet);
-  el.betInPlay.textContent = inPlay ? "Bet: " + fmtMoney(S.bet) + (S.doubled ? " (doubled)" : "") : "";
+        const inPlay = S.phase === "player";
+        el.hitBtn.disabled = !inPlay;
+        el.standBtn.disabled = !inPlay;
+        el.doubleBtn.disabled = !(
+          inPlay &&
+          S.playerHand.length === 2 &&
+          S.money >= S.bet
+        );
+        el.betInPlay.textContent = inPlay
+          ? "Bet: " + fmtMoney(S.bet) + (S.doubled ? " (doubled)" : "")
+          : "";
 
-  const cigarOff = !(S.cigarInv > 0) || S.over;
-  const beerOff  = !(S.beerInv > 0) || S.over;
-  el.cigarItem.classList.toggle("disabled", cigarOff);
-  el.beerItem.classList.toggle("disabled", beerOff);
-  el.cigarItem.setAttribute("aria-disabled", cigarOff);
-  el.beerItem.setAttribute("aria-disabled", beerOff);
-  el.cigarInv.textContent = "×" + S.cigarInv;
-  el.beerInv.textContent  = "×" + S.beerInv;
+        const cigarOff = !(S.cigarInv > 0) || S.over;
+        const beerOff = !(S.beerInv > 0) || S.over;
+        el.cigarItem.classList.toggle("disabled", cigarOff);
+        el.beerItem.classList.toggle("disabled", beerOff);
+        el.cigarItem.setAttribute("aria-disabled", cigarOff);
+        el.beerItem.setAttribute("aria-disabled", beerOff);
+        el.cigarInv.textContent = "×" + S.cigarInv;
+        el.beerInv.textContent = "×" + S.beerInv;
 
-  el.cigarPrice.textContent = fmtMoney(S.cigarPrice);
-  el.beerPrice.textContent  = fmtMoney(S.beerPrice);
-  el.buyCigar1.disabled = S.money < S.cigarPrice || S.over;
-  el.buyCigar5.disabled = S.money < S.cigarPrice * 5 || S.over;
-  el.buyBeer1.disabled  = S.money < S.beerPrice || S.over;
-  el.buyBeer5.disabled  = S.money < S.beerPrice * 5 || S.over;
+        el.cigarPrice.textContent = fmtMoney(S.cigarPrice);
+        el.beerPrice.textContent = fmtMoney(S.beerPrice);
+        el.buyCigar1.disabled = S.money < S.cigarPrice || S.over;
+        el.buyCigar5.disabled = S.money < S.cigarPrice * 5 || S.over;
+        el.buyBeer1.disabled = S.money < S.beerPrice || S.over;
+        el.buyBeer5.disabled = S.money < S.beerPrice * 5 || S.over;
 
-  el.hands.textContent = S.hands;
-}
+        el.hands.textContent = S.hands;
+      }
 
-/* money counter animation */
-function moneyLoop(){
-  const target = S ? S.money : 0;
-  const diff = target - displayedMoney;
-  if (Math.abs(diff) < 1) displayedMoney = target;
-  else displayedMoney += diff * 0.18;
-  el.money.textContent = fmtMoney(displayedMoney);
-  el.money.className = "money" + (diff > 1 ? " up" : diff < -1 ? " down" : "");
-  rafId = requestAnimationFrame(moneyLoop);
-}
+      /* money counter animation */
+      function moneyLoop() {
+        const target = S ? S.money : 0;
+        const diff = target - displayedMoney;
+        if (Math.abs(diff) < 1) displayedMoney = target;
+        else displayedMoney += diff * 0.18;
+        el.money.textContent = fmtMoney(displayedMoney);
+        el.money.className =
+          "money" + (diff > 1 ? " up" : diff < -1 ? " down" : "");
+        rafId = requestAnimationFrame(moneyLoop);
+      }
 
-/* ---------------- vice meters tick ---------------- */
-function tick(){
-  if (!S || S.over) return;
-  S.elapsed = (Date.now() - S.startTime) / 1000;
-  el.time.textContent = fmtTime(S.elapsed);
+      /* ---------------- vice meters tick ---------------- */
+      function tick() {
+        if (!S || S.over) return;
+        S.elapsed = (Date.now() - S.startTime) / 1000;
+        el.time.textContent = fmtTime(S.elapsed);
 
-  const base = Math.min(RATE_CAP, BASE_RATE + RAMP * Math.floor(S.elapsed / 60));
-  // independent random drift within ±JITTER
-  S.cigarDrift = Math.max(-JITTER, Math.min(JITTER, S.cigarDrift + (Math.random() - .5) * .12));
-  S.beerDrift  = Math.max(-JITTER, Math.min(JITTER, S.beerDrift  + (Math.random() - .5) * .12));
-  const dt = TICK_MS / 1000;
-  S.cigarMeter -= (base + S.cigarDrift) * dt;
-  S.beerMeter  -= (base + S.beerDrift)  * dt;
+        const base = Math.min(
+          RATE_CAP,
+          BASE_RATE + RAMP * Math.floor(S.elapsed / 60),
+        );
+        // independent random drift within ±JITTER
+        S.cigarDrift = Math.max(
+          -JITTER,
+          Math.min(JITTER, S.cigarDrift + (Math.random() - 0.5) * 0.12),
+        );
+        S.beerDrift = Math.max(
+          -JITTER,
+          Math.min(JITTER, S.beerDrift + (Math.random() - 0.5) * 0.12),
+        );
+        const dt = TICK_MS / 1000;
+        S.cigarMeter -= (base + S.cigarDrift) * dt;
+        S.beerMeter -= (base + S.beerDrift) * dt;
 
-  renderMeters();
+        renderMeters();
 
-  if (S.cigarMeter <= 0) return gameOver("DIED OF SOBRIETY (CIGAR WITHDRAWAL)");
-  if (S.beerMeter  <= 0) return gameOver("DIED OF SOBRIETY (DEHYDRATION BY SOBRIETY)");
-}
+        if (S.cigarMeter <= 0)
+          return gameOver("DIED OF SOBRIETY (CIGAR WITHDRAWAL)");
+        if (S.beerMeter <= 0)
+          return gameOver("DIED OF SOBRIETAAAAY (DEHYDRATION BY SOBRIETY)");
+      }
 
-/* ---------------- vices & shop ---------------- */
-function puff(x, y, emoji){
-  if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-  for (let i = 0; i < 4; i++){
-    const p = document.createElement("div");
-    p.className = "puff";
-    p.textContent = emoji;
-    p.style.left = (x + (Math.random() * 50 - 25)) + "px";
-    p.style.top  = (y + (Math.random() * 14 - 7)) + "px";
-    p.style.animationDelay = (i * 90) + "ms";
-    document.body.appendChild(p);
-    later(() => p.remove(), 1800 + i * 90);
-  }
-}
-function smoke(){
-  if (S.over || S.cigarInv < 1) return;
-  S.cigarInv--; S.cigarsSmoked++;
-  S.cigarMeter = METER_MAX;   // a good cigar fixes everything
-  const c = targetCenter();
-  puff(c.x, c.y - 20, "💨");
-  renderMeters(); renderControls();
-}
-function drink(){
-  if (S.over || S.beerInv < 1) return;
-  S.beerInv--; S.beersDrunk++;
-  S.beerMeter = METER_MAX;    // drained to the last drop, refilled to the brim
-  const c = targetCenter();
-  puff(c.x, c.y - 20, "🫧");
-  renderMeters(); renderControls();
-}
-function buy(item, qty){
-  if (S.over) return;
-  const price = (item === "cigar" ? S.cigarPrice : S.beerPrice) * qty;
-  if (S.money < price) return;
-  setMoney(S.money - price);
-  if (item === "cigar") S.cigarInv += qty; else S.beerInv += qty;
-  renderControls();
-}
+      /* ---------------- vices & shop ---------------- */
+      function puff(x, y, emoji) {
+        if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+        for (let i = 0; i < 4; i++) {
+          const p = document.createElement("div");
+          p.className = "puff";
+          p.textContent = emoji;
+          p.style.left = x + (Math.random() * 50 - 25) + "px";
+          p.style.top = y + (Math.random() * 14 - 7) + "px";
+          p.style.animationDelay = i * 90 + "ms";
+          document.body.appendChild(p);
+          later(() => p.remove(), 1800 + i * 90);
+        }
+      }
+      function smoke() {
+        if (S.over || S.cigarInv < 1) return;
+        S.cigarInv--;
+        S.cigarsSmoked++;
+        S.cigarMeter = METER_MAX; // a good cigar fixes everything
+        const c = targetCenter();
+        puff(c.x, c.y - 20, "💨");
+        renderMeters();
+        renderControls();
+      }
+      function drink() {
+        if (S.over || S.beerInv < 1) return;
+        S.beerInv--;
+        S.beersDrunk++;
+        S.beerMeter = METER_MAX; // drained to the last drop, refilled to the brim
+        const c = targetCenter();
+        puff(c.x, c.y - 20, "🫧");
+        renderMeters();
+        renderControls();
+      }
+      function buy(item, qty) {
+        if (S.over) return;
+        const price = (item === "cigar" ? S.cigarPrice : S.beerPrice) * qty;
+        if (S.money < price) return;
+        setMoney(S.money - price);
+        if (item === "cigar") S.cigarInv += qty;
+        else S.beerInv += qty;
+        renderControls();
+      }
 
-/* ---------------- vice rituals (drag mechanics) ---------------- */
-const TARGET_RADIUS = 75;     // px from target center that counts as "in the zone"
-const HOLD_MS = 2500;         // cigar: hold still this long to light
-const STILL_TOLERANCE = 18;   // px of wobble allowed before the lighter gives up
-const SWIPE_MIN = 60;         // beer: swipe up at least this far to start pouring
-const DRAIN_MS = 2000;        // beer: pour time while held up
-const RING_C = 339.3;         // ring circumference
+      /* ---------------- vice rituals (drag mechanics) ---------------- */
+      const TARGET_RADIUS = 75; // px from target center that counts as "in the zone"
+      const HOLD_MS = 2500; // cigar: hold still this long to light
+      const STILL_TOLERANCE = 18; // px of wobble allowed before the lighter gives up
+      const SWIPE_MIN = 60; // beer: swipe up at least this far to start pouring
+      const DRAIN_MS = 2000; // beer: pour time while held up
+      const RING_C = 339.3; // ring circumference
 
-const R = {
-  active: null,     // 'cigar' | 'beer'
-  phase: "idle",    // cigar: drag -> hold ; beer: drag -> primed -> pouring
-  auto: false,
-  x: 0, y: 0,
-  anchorX: 0, anchorY: 0, t0: 0,   // cigar stillness anchor
-  baseY: 0, dy: 0,                 // beer swipe tracking
-  progress: 0,
-  timer: null,
-};
+      const R = {
+        active: null, // 'cigar' | 'beer'
+        phase: "idle", // cigar: drag -> hold ; beer: drag -> primed -> pouring
+        auto: false,
+        x: 0,
+        y: 0,
+        anchorX: 0,
+        anchorY: 0,
+        t0: 0, // cigar stillness anchor
+        baseY: 0,
+        dy: 0, // beer swipe tracking
+        progress: 0,
+        timer: null,
+      };
 
-function targetCenter(){
-  const r = el.dropTarget.getBoundingClientRect();
-  if (r.width || r.height) return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
-  const t = el.table.getBoundingClientRect();
-  return { x: t.left + t.width / 2, y: t.top + t.height * 0.45 };
-}
-function inTargetZone(x, y){
-  const c = targetCenter();
-  return Math.hypot(x - c.x, y - c.y) <= TARGET_RADIUS;
-}
-function setRing(p){
-  el.ringFg.style.strokeDashoffset = RING_C * (1 - Math.max(0, Math.min(1, p)));
-}
-function ghostFor(kind){
-  if (kind === "cigar")
-    return '<div class="tilt-wrap cigar-wrap"><div class="pulse-wrap">'
-      + '<div class="cigar-gfx"><div class="ash"></div><div class="ember"></div><div class="wrap"></div><div class="band"></div><div class="cap-end"></div></div>'
-      + '</div></div>';
-  return '<div class="tilt-wrap bottle-wrap"><div class="bottle-gfx"><div class="body"><div class="liquid"></div><div class="label">LAGER</div><div class="shine"></div></div><div class="cap"></div></div></div>';
-}
-function moveGhost(x, y){
-  el.ghost.style.left = x + "px";
-  el.ghost.style.top  = y + "px";
-}
-function showLighterAt(x, y){
-  // flame rises beneath the ember at the cigar's left tip
-  el.lighter.classList.add("show");
-  el.lighter.style.left = (x - 178) + "px";
-  el.lighter.style.top  = (y - 4) + "px";
-}
-function spill(){
-  if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-  const c = targetCenter();
-  const n = 1 + (Math.random() < 0.4 ? 1 : 0);
-  for (let i = 0; i < n; i++){
-    const drop = document.createElement("div");
-    drop.className = "spill-drop";
-    drop.style.left = (c.x + (Math.random() * 40 - 20)) + "px";
-    drop.style.top  = (c.y - 100 + (Math.random() * 18 - 9)) + "px";
-    drop.style.setProperty("--sx", (Math.random() * 180 - 90) + "px");
-    drop.style.setProperty("--sy", (100 + Math.random() * 180) + "px");
-    document.body.appendChild(drop);
-    later(() => drop.remove(), 700);
-  }
-}
+      function targetCenter() {
+        const r = el.dropTarget.getBoundingClientRect();
+        if (r.width || r.height)
+          return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+        const t = el.table.getBoundingClientRect();
+        return { x: t.left + t.width / 2, y: t.top + t.height * 0.45 };
+      }
+      function inTargetZone(x, y) {
+        const c = targetCenter();
+        return Math.hypot(x - c.x, y - c.y) <= TARGET_RADIUS;
+      }
+      function setRing(p) {
+        el.ringFg.style.strokeDashoffset =
+          RING_C * (1 - Math.max(0, Math.min(1, p)));
+      }
+      function ghostFor(kind) {
+        if (kind === "cigar")
+          return (
+            '<div class="tilt-wrap cigar-wrap"><div class="pulse-wrap">' +
+            '<div class="cigar-gfx"><div class="ash"></div><div class="ember"></div><div class="wrap"></div><div class="band"></div><div class="cap-end"></div></div>' +
+            "</div></div>"
+          );
+        return '<div class="tilt-wrap bottle-wrap"><div class="bottle-gfx"><div class="body"><div class="liquid"></div><div class="label">LAGER</div><div class="shine"></div></div><div class="cap"></div></div></div>';
+      }
+      function moveGhost(x, y) {
+        el.ghost.style.left = x + "px";
+        el.ghost.style.top = y + "px";
+      }
+      function showLighterAt(x, y) {
+        // flame rises beneath the ember at the cigar's left tip
+        el.lighter.classList.add("show");
+        el.lighter.style.left = x - 178 + "px";
+        el.lighter.style.top = y - 4 + "px";
+      }
+      function spill() {
+        if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+        const c = targetCenter();
+        const n = 1 + (Math.random() < 0.4 ? 1 : 0);
+        for (let i = 0; i < n; i++) {
+          const drop = document.createElement("div");
+          drop.className = "spill-drop";
+          drop.style.left = c.x + (Math.random() * 40 - 20) + "px";
+          drop.style.top = c.y - 100 + (Math.random() * 18 - 9) + "px";
+          drop.style.setProperty("--sx", Math.random() * 180 - 90 + "px");
+          drop.style.setProperty("--sy", 100 + Math.random() * 180 + "px");
+          document.body.appendChild(drop);
+          later(() => drop.remove(), 700);
+        }
+      }
 
-function startRitual(kind, x, y, auto){
-  if (!S || S.over || R.active) return;
-  if (kind === "cigar" && S.cigarInv < 1) return;
-  if (kind === "beer"  && S.beerInv  < 1) return;
-  R.active = kind; R.phase = "drag"; R.auto = !!auto;
-  R.progress = 0; R.dy = 0;
-  el.ghost.innerHTML = ghostFor(kind);
-  el.ghost.classList.add("show");
-  el.dropTarget.classList.add("show");
-  el.dropTarget.classList.remove("armed");
-  el.targetLabel.textContent = kind === "cigar" ? "HOLD CIGAR HERE" : "BRING BEER HERE";
-  setRing(0);
-  (kind === "cigar" ? el.cigarItem : el.beerItem).classList.add("held");
-  if (auto){
-    const c = targetCenter();
-    moveGhost(c.x, c.y);
-    ritualMove(c.x, c.y);
-    if (kind === "beer") ritualMove(c.x, c.y - SWIPE_MIN - 20); // auto-tip
-  } else {
-    moveGhost(x, y);
-  }
-  R.timer = setInterval(ritualTick, 50);
-}
-
-function ritualMove(x, y){
-  if (!R.active) return;
-  R.x = x; R.y = y;
-
-  if (R.active === "cigar"){
-    moveGhost(x, y);
-    const inZone = inTargetZone(x, y);
-    if (R.phase === "drag" && inZone){
-      R.phase = "hold";
-      R.anchorX = x; R.anchorY = y; R.t0 = Date.now();
-      el.dropTarget.classList.add("armed");
-      el.targetLabel.textContent = "HOLD STILL…";
-      el.ghost.classList.add("holding");   // cigar rises toward you
-      el.ghost.querySelector(".cigar-gfx").classList.add("gfx-lit");
-      showLighterAt(x, y);
-    } else if (R.phase === "hold"){
-      if (!inZone){
-        R.phase = "drag"; R.progress = 0; setRing(0);
+      function startRitual(kind, x, y, auto) {
+        if (!S || S.over || R.active) return;
+        if (kind === "cigar" && S.cigarInv < 1) return;
+        if (kind === "beer" && S.beerInv < 1) return;
+        R.active = kind;
+        R.phase = "drag";
+        R.auto = !!auto;
+        R.progress = 0;
+        R.dy = 0;
+        el.ghost.innerHTML = ghostFor(kind);
+        el.ghost.classList.add("show");
+        el.dropTarget.classList.add("show");
         el.dropTarget.classList.remove("armed");
-        el.targetLabel.textContent = "HOLD CIGAR HERE";
-        el.ghost.classList.remove("holding");
-        el.ghost.querySelector(".cigar-gfx").classList.remove("gfx-lit");
-        el.lighter.classList.remove("show");
-      } else if (Math.hypot(x - R.anchorX, y - R.anchorY) > STILL_TOLERANCE){
-        // wobbled: the flame restarts
-        R.anchorX = x; R.anchorY = y; R.t0 = Date.now();
-        R.progress = 0; setRing(0);
+        el.targetLabel.textContent =
+          kind === "cigar" ? "HOLD CIGAR HERE" : "BRING BEER HERE";
+        setRing(0);
+        (kind === "cigar" ? el.cigarItem : el.beerItem).classList.add("held");
+        if (auto) {
+          const c = targetCenter();
+          moveGhost(c.x, c.y);
+          ritualMove(c.x, c.y);
+          if (kind === "beer") ritualMove(c.x, c.y - SWIPE_MIN - 20); // auto-tip
+        } else {
+          moveGhost(x, y);
+        }
+        R.timer = setInterval(ritualTick, 50);
       }
-      if (R.phase === "hold") showLighterAt(x, y);
-    }
-  } else { // beer
-    if (R.phase === "drag"){
-      moveGhost(x, y);
-      if (inTargetZone(x, y)){
-        R.phase = "primed";
-        R.baseY = y;
-        el.dropTarget.classList.add("armed");
-        el.targetLabel.textContent = "NOW SWIPE UP & HOLD";
-        el.swipeHint.classList.add("show");
+
+      function ritualMove(x, y) {
+        if (!R.active) return;
+        R.x = x;
+        R.y = y;
+
+        if (R.active === "cigar") {
+          moveGhost(x, y);
+          const inZone = inTargetZone(x, y);
+          if (R.phase === "drag" && inZone) {
+            R.phase = "hold";
+            R.anchorX = x;
+            R.anchorY = y;
+            R.t0 = Date.now();
+            el.dropTarget.classList.add("armed");
+            el.targetLabel.textContent = "HOLD STILL…";
+            el.ghost.classList.add("holding"); // cigar rises toward you
+            el.ghost.querySelector(".cigar-gfx").classList.add("gfx-lit");
+            showLighterAt(x, y);
+          } else if (R.phase === "hold") {
+            if (!inZone) {
+              R.phase = "drag";
+              R.progress = 0;
+              setRing(0);
+              el.dropTarget.classList.remove("armed");
+              el.targetLabel.textContent = "HOLD CIGAR HERE";
+              el.ghost.classList.remove("holding");
+              el.ghost.querySelector(".cigar-gfx").classList.remove("gfx-lit");
+              el.lighter.classList.remove("show");
+            } else if (
+              Math.hypot(x - R.anchorX, y - R.anchorY) > STILL_TOLERANCE
+            ) {
+              // wobbled: the flame restarts
+              R.anchorX = x;
+              R.anchorY = y;
+              R.t0 = Date.now();
+              R.progress = 0;
+              setRing(0);
+            }
+            if (R.phase === "hold") showLighterAt(x, y);
+          }
+        } else {
+          // beer
+          if (R.phase === "drag") {
+            moveGhost(x, y);
+            if (inTargetZone(x, y)) {
+              R.phase = "primed";
+              R.baseY = y;
+              el.dropTarget.classList.add("armed");
+              el.targetLabel.textContent = "NOW SWIPE UP & HOLD";
+              el.swipeHint.classList.add("show");
+            }
+          } else {
+            // primed / pouring: bottle stays planted at target; swipe controls the tilt
+            R.dy = Math.max(0, R.baseY - y);
+            const c = targetCenter();
+            moveGhost(c.x, c.y - Math.min(40, R.dy * 0.3));
+            const wrap = el.ghost.querySelector(".bottle-wrap");
+            if (wrap) {
+              // 2D tip stays primary; lean is now strong enough to read at 550px perspective
+              const tilt = Math.min(110, R.dy);
+              const lean = Math.min(30, R.dy * 0.24);
+              wrap.style.transform = `rotate(${-tilt}deg) rotateX(${-lean}deg) scale(1.55)`;
+            }
+            if (R.dy >= SWIPE_MIN && R.phase === "primed") {
+              R.phase = "pouring";
+              el.swipeHint.classList.remove("show");
+              el.targetLabel.textContent = "KEEP HOLDING…";
+            } else if (R.dy < SWIPE_MIN && R.phase === "pouring") {
+              R.phase = "primed"; // tipped back down: pause the pour, keep progress
+              el.swipeHint.classList.add("show");
+              el.targetLabel.textContent = "SWIPE BACK UP…";
+            }
+            el.ghost.classList.toggle("pouring", R.phase === "pouring");
+            // wandered way off sideways: spill the attempt
+            if (Math.abs(x - c.x) > 220) cancelRitual();
+          }
+        }
       }
-    } else {
-      // primed / pouring: bottle stays planted at target; swipe controls the tilt
-      R.dy = Math.max(0, R.baseY - y);
-      const c = targetCenter();
-      moveGhost(c.x, c.y - Math.min(40, R.dy * 0.3));
-      const wrap = el.ghost.querySelector(".bottle-wrap");
-      if (wrap){
-        // 2D tip stays primary; lean is now strong enough to read at 550px perspective
-        const tilt = Math.min(110, R.dy);
-        const lean = Math.min(30, R.dy * 0.24);
-        wrap.style.transform = `rotate(${-tilt}deg) rotateX(${-lean}deg) scale(1.55)`;
+
+      function ritualTick() {
+        if (!R.active || !S || S.over) return cancelRitual();
+        if (R.active === "cigar" && R.phase === "hold") {
+          R.progress = (Date.now() - R.t0) / HOLD_MS;
+          setRing(R.progress);
+          if (Math.random() < 0.1) {
+            const c = targetCenter();
+            puff(c.x + (Math.random() * 70 - 35), c.y - 60, "💨");
+          }
+          if (R.progress >= 1) return completeRitual();
+        }
+        if (R.active === "beer") {
+          if (R.auto) R.phase = "pouring";
+          if (R.phase === "pouring") {
+            R.progress += 50 / DRAIN_MS;
+            setRing(R.progress);
+            const liq = el.ghost.querySelector(".liquid");
+            if (liq)
+              liq.style.height = Math.max(0, 80 * (1 - R.progress)) + "%";
+            if (Math.random() < 0.65) spill();
+            if (R.progress >= 1) return completeRitual();
+          }
+        }
+        if (R.auto && R.active === "cigar" && R.phase !== "hold") {
+          const c = targetCenter();
+          ritualMove(c.x, c.y);
+        }
       }
-      if (R.dy >= SWIPE_MIN && R.phase === "primed"){
-        R.phase = "pouring";
+
+      function completeRitual() {
+        const kind = R.active;
+        const c = targetCenter();
+        endRitual();
+        if (kind === "cigar") {
+          smoke();
+          puff(c.x, c.y, "💨");
+          puff(c.x + 30, c.y - 10, "💨");
+        } else {
+          drink();
+        }
+      }
+      function cancelRitual() {
+        if (R.active) endRitual();
+      }
+      function endRitual() {
+        if (R.timer) (clearInterval(R.timer), (R.timer = null));
+        R.active = null;
+        R.phase = "idle";
+        R.progress = 0;
+        R.auto = false;
+        el.ghost.classList.remove("show", "holding", "pouring");
+        el.ghost.innerHTML = "";
+        el.dropTarget.classList.remove("show", "armed");
         el.swipeHint.classList.remove("show");
-        el.targetLabel.textContent = "KEEP HOLDING…";
-      } else if (R.dy < SWIPE_MIN && R.phase === "pouring"){
-        R.phase = "primed"; // tipped back down: pause the pour, keep progress
-        el.swipeHint.classList.add("show");
-        el.targetLabel.textContent = "SWIPE BACK UP…";
+        el.lighter.classList.remove("show");
+        el.cigarItem.classList.remove("held");
+        el.beerItem.classList.remove("held");
+        setRing(0);
       }
-      el.ghost.classList.toggle("pouring", R.phase === "pouring");
-      // wandered way off sideways: spill the attempt
-      if (Math.abs(x - c.x) > 220) cancelRitual();
-    }
-  }
-}
 
-function ritualTick(){
-  if (!R.active || !S || S.over) return cancelRitual();
-  if (R.active === "cigar" && R.phase === "hold"){
-    R.progress = (Date.now() - R.t0) / HOLD_MS;
-    setRing(R.progress);
-    if (Math.random() < 0.1){
-      const c = targetCenter();
-      puff(c.x + (Math.random() * 70 - 35), c.y - 60, "💨");
-    }
-    if (R.progress >= 1) return completeRitual();
-  }
-  if (R.active === "beer"){
-    if (R.auto) R.phase = "pouring";
-    if (R.phase === "pouring"){
-      R.progress += 50 / DRAIN_MS;
-      setRing(R.progress);
-      const liq = el.ghost.querySelector(".liquid");
-      if (liq) liq.style.height = Math.max(0, 80 * (1 - R.progress)) + "%";
-      if (Math.random() < 0.65) spill();
-      if (R.progress >= 1) return completeRitual();
-    }
-  }
-  if (R.auto && R.active === "cigar" && R.phase !== "hold"){
-    const c = targetCenter();
-    ritualMove(c.x, c.y);
-  }
-}
+      function bindViceItem(item, kind) {
+        item.addEventListener("pointerdown", (e) => {
+          if (item.classList.contains("disabled")) return;
+          e.preventDefault();
+          if (item.setPointerCapture)
+            try {
+              item.setPointerCapture(e.pointerId);
+            } catch (_) {}
+          startRitual(kind, e.clientX, e.clientY, false);
+        });
+        item.addEventListener("pointermove", (e) => {
+          if (R.active === kind && !R.auto) ritualMove(e.clientX, e.clientY);
+        });
+        const drop = () => {
+          if (R.active === kind && !R.auto) cancelRitual();
+        };
+        item.addEventListener("pointerup", drop);
+        item.addEventListener("pointercancel", drop);
+        // keyboard fallback: same time cost, hands-free ritual
+        item.addEventListener("keydown", (e) => {
+          if (
+            (e.key === "Enter" || e.key === " ") &&
+            !item.classList.contains("disabled")
+          ) {
+            e.preventDefault();
+            startRitual(kind, 0, 0, true);
+          }
+        });
+      }
 
-function completeRitual(){
-  const kind = R.active;
-  const c = targetCenter();
-  endRitual();
-  if (kind === "cigar"){
-    smoke();
-    puff(c.x, c.y, "💨"); puff(c.x + 30, c.y - 10, "💨");
-  } else {
-    drink();
-  }
-}
-function cancelRitual(){ if (R.active) endRitual(); }
-function endRitual(){
-  if (R.timer) clearInterval(R.timer), R.timer = null;
-  R.active = null; R.phase = "idle"; R.progress = 0; R.auto = false;
-  el.ghost.classList.remove("show", "holding", "pouring"); el.ghost.innerHTML = "";
-  el.dropTarget.classList.remove("show", "armed");
-  el.swipeHint.classList.remove("show");
-  el.lighter.classList.remove("show");
-  el.cigarItem.classList.remove("held");
-  el.beerItem.classList.remove("held");
-  setRing(0);
-}
+      /* ---------------- blackjack flow ---------------- */
+      function setPhase(p) {
+        S.phase = p;
+        renderControls();
+      }
 
-function bindViceItem(item, kind){
-  item.addEventListener("pointerdown", e => {
-    if (item.classList.contains("disabled")) return;
-    e.preventDefault();
-    if (item.setPointerCapture) try { item.setPointerCapture(e.pointerId); } catch(_){}
-    startRitual(kind, e.clientX, e.clientY, false);
-  });
-  item.addEventListener("pointermove", e => {
-    if (R.active === kind && !R.auto) ritualMove(e.clientX, e.clientY);
-  });
-  const drop = () => { if (R.active === kind && !R.auto) cancelRitual(); };
-  item.addEventListener("pointerup", drop);
-  item.addEventListener("pointercancel", drop);
-  // keyboard fallback: same time cost, hands-free ritual
-  item.addEventListener("keydown", e => {
-    if ((e.key === "Enter" || e.key === " ") && !item.classList.contains("disabled")){
-      e.preventDefault();
-      startRitual(kind, 0, 0, true);
-    }
-  });
-}
+      function adjustBet(delta) {
+        S.pendingBet += delta;
+        renderControls();
+      }
+      function applyPreset(kind) {
+        if (kind === "min") S.pendingBet = Math.min(10, S.money);
+        if (kind === "half") S.pendingBet = Math.floor(S.money / 2);
+        if (kind === "allin") S.pendingBet = S.money;
+        if (kind === "rebet") S.pendingBet = S.lastBet;
+        renderControls();
+      }
 
-/* ---------------- blackjack flow ---------------- */
-function setPhase(p){ S.phase = p; renderControls(); }
-
-function adjustBet(delta){ S.pendingBet += delta; renderControls(); }
-function applyPreset(kind){
-  if (kind === "min")   S.pendingBet = Math.min(10, S.money);
-  if (kind === "half")  S.pendingBet = Math.floor(S.money / 2);
-  if (kind === "allin") S.pendingBet = S.money;
-  if (kind === "rebet") S.pendingBet = S.lastBet;
-  renderControls();
-}
-
-/* dynamic chip denominations that scale with the bankroll */
-const CHIP_LADDER = [10, 25, 50, 100, 250, 500, 1000, 2500, 5000, 10000,
-                     25000, 50000, 100000, 250000, 500000, 1000000];
-function chipDenoms(money){
-  let hi = 3; // default bottom set: 10/25/50/100
-  for (let i = CHIP_LADDER.length - 1; i >= 3; i--){
-    if (CHIP_LADDER[i] <= Math.max(money / 2, 100)){ hi = i; break; }
-  }
-  return CHIP_LADDER.slice(hi - 3, hi + 1);
-}
-function chipLabel(n){
-  if (n >= 1000) return (n / 1000) + "K";
-  return "$" + n;
-}
-let chipSig = "";
-function renderBetChips(canBet){
-  const denoms = chipDenoms(S.money);
-  const sig = denoms.join(",");
-  if (sig !== chipSig){
-    chipSig = sig;
-    el.chipRack.innerHTML = denoms.map((v, i) =>
-      `<div class="chip-stepper">
+      /* dynamic chip denominations that scale with the bankroll */
+      const CHIP_LADDER = [
+        10, 25, 50, 100, 250, 500, 1000, 2500, 5000, 10000, 25000, 50000,
+        100000, 250000, 500000, 1000000,
+      ];
+      function chipDenoms(money) {
+        let hi = 3; // default bottom set: 10/25/50/100
+        for (let i = CHIP_LADDER.length - 1; i >= 3; i--) {
+          if (CHIP_LADDER[i] <= Math.max(money / 2, 100)) {
+            hi = i;
+            break;
+          }
+        }
+        return CHIP_LADDER.slice(hi - 3, hi + 1);
+      }
+      function chipLabel(n) {
+        if (n >= 1000) return n / 1000 + "K";
+        return "$" + n;
+      }
+      let chipSig = "";
+      function renderBetChips(canBet) {
+        const denoms = chipDenoms(S.money);
+        const sig = denoms.join(",");
+        if (sig !== chipSig) {
+          chipSig = sig;
+          el.chipRack.innerHTML = denoms
+            .map(
+              (v, i) =>
+                `<div class="chip-stepper">
          <button class="chip-step plus" data-denom="${v}" aria-label="Add ${chipLabel(v)} to bet">＋</button>
          <div class="chip-face c${i}">${chipLabel(v)}</div>
          <button class="chip-step minus" data-denom="${v}" aria-label="Remove ${chipLabel(v)} from bet">−</button>
-       </div>`).join("");
-  }
-  el.chipRack.querySelectorAll(".plus").forEach(b => b.disabled = !canBet || S.pendingBet >= S.money);
-  el.chipRack.querySelectorAll(".minus").forEach(b => b.disabled = !canBet || S.pendingBet <= 0);
-}
+       </div>`,
+            )
+            .join("");
+        }
+        el.chipRack
+          .querySelectorAll(".plus")
+          .forEach((b) => (b.disabled = !canBet || S.pendingBet >= S.money));
+        el.chipRack
+          .querySelectorAll(".minus")
+          .forEach((b) => (b.disabled = !canBet || S.pendingBet <= 0));
+      }
 
-const DEAL_STEP = 600;      // ms between cards in the opening deal
-const DEALER_DRAW = 850;    // ms between dealer draws
+      const DEAL_STEP = 600; // ms between cards in the opening deal
+      const DEALER_DRAW = 850; // ms between dealer draws
 
-function deal(){
-  if (S.phase !== "betting" || S.money <= 0) return;
-  const minBet = Math.min(10, S.money);
-  S.bet = Math.max(minBet, Math.min(S.pendingBet, S.money));
-  S.lastBet = S.bet;
-  setMoney(S.money - S.bet);
-  S.doubled = false;
-  S.playerHand = []; S.dealerHand = []; S.holeHidden = true;
-  if (S.shoe.length < RESHUFFLE_AT) S.shoe = buildShoe(DECKS);
-  setPhase("dealing");
-  el.banner.className = ""; el.banner.textContent = "";
+      function deal() {
+        if (S.phase !== "betting" || S.money <= 0) return;
+        const minBet = Math.min(10, S.money);
+        S.bet = Math.max(minBet, Math.min(S.pendingBet, S.money));
+        S.lastBet = S.bet;
+        setMoney(S.money - S.bet);
+        S.doubled = false;
+        S.playerHand = [];
+        S.dealerHand = [];
+        S.holeHidden = true;
+        if (S.shoe.length < RESHUFFLE_AT) S.shoe = buildShoe(DECKS);
+        setPhase("dealing");
+        el.banner.className = "";
+        el.banner.textContent = "";
 
-  const order = [
-    () => { S.playerHand.push(drawFromShoe()); renderHands({ player: true }); },
-    () => { S.dealerHand.push(drawFromShoe()); renderHands({ dealer: true }); },
-    () => { S.playerHand.push(drawFromShoe()); renderHands({ player: true }); },
-    () => { S.dealerHand.push(drawFromShoe()); renderHands({ dealer: true }); },
-  ];
-  order.forEach((fn, i) => later(fn, DEAL_STEP * (i + 1)));
-  later(afterDeal, DEAL_STEP * order.length + 600);
-}
+        const order = [
+          () => {
+            S.playerHand.push(drawFromShoe());
+            renderHands({ player: true });
+          },
+          () => {
+            S.dealerHand.push(drawFromShoe());
+            renderHands({ dealer: true });
+          },
+          () => {
+            S.playerHand.push(drawFromShoe());
+            renderHands({ player: true });
+          },
+          () => {
+            S.dealerHand.push(drawFromShoe());
+            renderHands({ dealer: true });
+          },
+        ];
+        order.forEach((fn, i) => later(fn, DEAL_STEP * (i + 1)));
+        later(afterDeal, DEAL_STEP * order.length + 600);
+      }
 
-function afterDeal(){
-  const up = S.dealerHand[0];
-  const dBJ = isBlackjack(S.dealerHand);
-  const pBJ = isBlackjack(S.playerHand);
-  const peeks = up.r === "A" || cardValue(up.r) === 10;
+      function afterDeal() {
+        const up = S.dealerHand[0];
+        const dBJ = isBlackjack(S.dealerHand);
+        const pBJ = isBlackjack(S.playerHand);
+        const peeks = up.r === "A" || cardValue(up.r) === 10;
 
-  if (peeks && dBJ){          // dealer peeks, finds blackjack
-    S.holeHidden = false;
-    renderHands({ flipHole: true });
-    return later(resolve, 700);
-  }
-  if (pBJ) return resolve();  // player blackjack, dealer already cleared
-  setPhase("player");
-}
+        if (peeks && dBJ) {
+          // dealer peeks, finds blackjack
+          S.holeHidden = false;
+          renderHands({ flipHole: true });
+          return later(resolve, 700);
+        }
+        if (pBJ) return resolve(); // player blackjack, dealer already cleared
+        setPhase("player");
+      }
 
-function hit(){
-  if (S.phase !== "player") return;
-  S.playerHand.push(drawFromShoe());
-  renderHands({ player: true });
-  if (handValue(S.playerHand).total > 21) later(resolve, 750);
-  else renderControls(); // double no longer available
-}
-function doubleDown(){
-  if (S.phase !== "player" || S.playerHand.length !== 2 || S.money < S.bet) return;
-  setMoney(S.money - S.bet);
-  S.bet *= 2; S.doubled = true;
-  S.playerHand.push(drawFromShoe());
-  renderHands({ player: true });
-  if (handValue(S.playerHand).total > 21) later(resolve, 750);
-  else later(dealerPlay, 750);
-}
-function stand(){
-  if (S.phase !== "player") return;
-  dealerPlay();
-}
+      function hit() {
+        if (S.phase !== "player") return;
+        S.playerHand.push(drawFromShoe());
+        renderHands({ player: true });
+        if (handValue(S.playerHand).total > 21) later(resolve, 750);
+        else renderControls(); // double no longer available
+      }
+      function doubleDown() {
+        if (
+          S.phase !== "player" ||
+          S.playerHand.length !== 2 ||
+          S.money < S.bet
+        )
+          return;
+        setMoney(S.money - S.bet);
+        S.bet *= 2;
+        S.doubled = true;
+        S.playerHand.push(drawFromShoe());
+        renderHands({ player: true });
+        if (handValue(S.playerHand).total > 21) later(resolve, 750);
+        else later(dealerPlay, 750);
+      }
+      function stand() {
+        if (S.phase !== "player") return;
+        dealerPlay();
+      }
 
-function dealerPlay(){
-  setPhase("dealer");
-  const wasHidden = S.holeHidden;
-  S.holeHidden = false;
-  renderHands({ flipHole: wasHidden });
-  const step = () => {
-    if (S.over) return;
-    if (handValue(S.dealerHand).total < 17){
-      S.dealerHand.push(drawFromShoe());
-      renderHands({ dealer: true });
-      later(step, DEALER_DRAW);
-    } else resolve();
-  };
-  later(step, DEALER_DRAW);
-}
+      function dealerPlay() {
+        setPhase("dealer");
+        const wasHidden = S.holeHidden;
+        S.holeHidden = false;
+        renderHands({ flipHole: wasHidden });
+        const step = () => {
+          if (S.over) return;
+          if (handValue(S.dealerHand).total < 17) {
+            S.dealerHand.push(drawFromShoe());
+            renderHands({ dealer: true });
+            later(step, DEALER_DRAW);
+          } else resolve();
+        };
+        later(step, DEALER_DRAW);
+      }
 
-function resolve(){
-  setPhase("result");
-  const wasHidden = S.holeHidden;
-  S.holeHidden = false;
-  renderHands({ flipHole: wasHidden });
-  const p = handValue(S.playerHand).total;
-  const d = handValue(S.dealerHand).total;
-  const res = settle(p, d, isBlackjack(S.playerHand), isBlackjack(S.dealerHand), S.bet);
+      function resolve() {
+        setPhase("result");
+        const wasHidden = S.holeHidden;
+        S.holeHidden = false;
+        renderHands({ flipHole: wasHidden });
+        const p = handValue(S.playerHand).total;
+        const d = handValue(S.dealerHand).total;
+        const res = settle(
+          p,
+          d,
+          isBlackjack(S.playerHand),
+          isBlackjack(S.dealerHand),
+          S.bet,
+        );
 
-  setMoney(S.money + res.back);
-  const delta = res.back - S.bet;
-  el.banner.textContent = res.label + (delta > 0 ? "  +" + fmtMoney(delta) : delta < 0 ? "  −" + fmtMoney(-delta) : "");
-  el.banner.className = "show " + res.kind;
-  el.flash.className = res.kind === "win" ? "gold" : res.kind === "lose" ? "red" : "";
-  later(() => el.flash.className = "", 750);
+        setMoney(S.money + res.back);
+        const delta = res.back - S.bet;
+        el.banner.textContent =
+          res.label +
+          (delta > 0
+            ? "  +" + fmtMoney(delta)
+            : delta < 0
+              ? "  −" + fmtMoney(-delta)
+              : "");
+        el.banner.className = "show " + res.kind;
+        el.flash.className =
+          res.kind === "win" ? "gold" : res.kind === "lose" ? "red" : "";
+        later(() => (el.flash.className = ""), 750);
 
-  S.hands++;
-  if (S.hands % 10 === 0){
-    S.cigarPrice = inflate(S.cigarPrice);
-    S.beerPrice  = inflate(S.beerPrice);
-  }
-  renderControls();
+        S.hands++;
+        if (S.hands % 10 === 0) {
+          S.cigarPrice = inflate(S.cigarPrice);
+          S.beerPrice = inflate(S.beerPrice);
+        }
+        renderControls();
 
-  later(() => {
-    if (S.over) return;
-    el.banner.className = ""; el.banner.textContent = "";
-    // between-hands doom check: provably unable to continue
-    if (S.money <= 0 && S.cigarInv === 0 && S.beerInv === 0)
-      return gameOver("BANKRUPT. THE HOUSE ALWAYS WINS.");
-    setPhase("betting");
-  }, 1500);
-}
+        later(() => {
+          if (S.over) return;
+          el.banner.className = "";
+          el.banner.textContent = "";
+          // between-hands doom check: provably unable to continue
+          if (S.money <= 0 && S.cigarInv === 0 && S.beerInv === 0)
+            return gameOver("BANKRUPT. THE HOUSE ALWAYS WINS.");
+          setPhase("betting");
+        }, 1500);
+      }
 
-/* ---------------- flavor ---------------- */
-const FLAVOR = [
-  "The dealer doesn't blink.",
-  "Another beer won't hurt.",
-  "You could stop. You won't.",
-  "The exit sign burned out in 1987.",
-  "Your lungs file a formal complaint. Denied.",
-  "The felt remembers every bad decision.",
-  "Statistically, you've already lost.",
-  "The house always wins. You always stay.",
-  "Somewhere, your money is having a great time.",
-  "The cigar smoke spells out 'why'.",
-  "Last call was three hours ago. Nobody left.",
-  "Luck is a rumor. Thirst is a fact.",
-];
-function cycleFlavor(){
-  el.flavor.style.opacity = 0;
-  later(() => {
-    el.flavor.textContent = FLAVOR[Math.floor(Math.random() * FLAVOR.length)];
-    el.flavor.style.opacity = 1;
-  }, 500);
-}
+      /* ---------------- flavor ---------------- */
+      const FLAVOR = [
+        "The dealer doesn't blink.",
+        "Another beer won't hurt.",
+        "You could stop. You won't.",
+        "The exit sign burned out in 1987.",
+        "Your lungs file a formal complaint. Denied.",
+        "The felt remembers every bad decision.",
+        "Statistically, you've already lost.",
+        "The house always wins. You always stay.",
+        "Somewhere, your money is having a great time.",
+        "The cigar smoke spells out 'why'.",
+        "Last call was three hours ago. Nobody left.",
+        "Luck is a rumor. Thirst is a fact.",
+      ];
+      function cycleFlavor() {
+        el.flavor.style.opacity = 0;
+        later(() => {
+          el.flavor.textContent =
+            FLAVOR[Math.floor(Math.random() * FLAVOR.length)];
+          el.flavor.style.opacity = 1;
+        }, 500);
+      }
 
-/* ---------------- lifecycle ---------------- */
-function startRun(){
-  clearTimers();
-  if (typeof cancelRitual === "function") cancelRitual();
-  S = freshState();
-  S.screen = "game";
-  S.startTime = Date.now();
-  displayedMoney = START_MONEY;
-  document.body.classList.remove("panic");
-  el.banner.className = ""; el.banner.textContent = "";
-  el.flash.className = "";
-  renderHands(); renderMeters(); renderControls();
-  el.time.textContent = "00:00";
-  setScreen("game");
-  tickTimer = setInterval(tick, TICK_MS);
-  flavorTimer = setInterval(cycleFlavor, 8000);
-  rafId = requestAnimationFrame(moneyLoop);
-}
-function gameOver(cause){
-  if (S.over) return;
-  S.over = true;
-  S.screen = "over";
-  clearTimers();
-  cancelRitual();
-  document.body.classList.remove("panic");
-  el.deathCause.textContent = cause;
-  el.overStats.innerHTML =
-    `Hands played ......... <b>${S.hands}</b><br>` +
-    `Peak money ........... <b>${fmtMoney(S.peakMoney)}</b><br>` +
-    `Final money .......... <b>${fmtMoney(S.money)}</b><br>` +
-    `Cigars smoked ........ <b>${S.cigarsSmoked}</b><br>` +
-    `Beers drunk .......... <b>${S.beersDrunk}</b><br>` +
-    `Time survived ........ <b>${fmtTime(S.elapsed)}</b>`;
-  setScreen("over");
-}
+      /* ---------------- lifecycle ---------------- */
+      function startRun() {
+        clearTimers();
+        if (typeof cancelRitual === "function") cancelRitual();
+        S = freshState();
+        S.screen = "game";
+        S.startTime = Date.now();
+        displayedMoney = START_MONEY;
+        document.body.classList.remove("panic");
+        el.banner.className = "";
+        el.banner.textContent = "";
+        el.flash.className = "";
+        renderHands();
+        renderMeters();
+        renderControls();
+        el.time.textContent = "00:00";
+        setScreen("game");
+        tickTimer = setInterval(tick, TICK_MS);
+        flavorTimer = setInterval(cycleFlavor, 8000);
+        rafId = requestAnimationFrame(moneyLoop);
+      }
+      function gameOver(cause) {
+        if (S.over) return;
+        S.over = true;
+        S.screen = "over";
+        clearTimers();
+        cancelRitual();
+        document.body.classList.remove("panic");
+        el.deathCause.textContent = cause;
+        el.overStats.innerHTML =
+          `Hands played ......... <b>${S.hands}</b><br>` +
+          `Peak money ........... <b>${fmtMoney(S.peakMoney)}</b><br>` +
+          `Final money .......... <b>${fmtMoney(S.money)}</b><br>` +
+          `Cigars smoked ........ <b>${S.cigarsSmoked}</b><br>` +
+          `Beers drunk .......... <b>${S.beersDrunk}</b><br>` +
+          `Time survived ........ <b>${fmtTime(S.elapsed)}</b>`;
+        setScreen("over");
+      }
 
-/* ---------------- wiring ---------------- */
-$("startBtn").addEventListener("click", startRun);
-$("retryBtn").addEventListener("click", startRun);
-el.dealBtn.addEventListener("click", deal);
-el.hitBtn.addEventListener("click", hit);
-el.standBtn.addEventListener("click", stand);
-el.doubleBtn.addEventListener("click", doubleDown);
-bindViceItem(el.cigarItem, "cigar");
-bindViceItem(el.beerItem, "beer");
-el.chipRack.addEventListener("click", e => {
-  const b = e.target.closest(".chip-step");
-  if (!b || b.disabled) return;
-  adjustBet(b.classList.contains("plus") ? +b.dataset.denom : -b.dataset.denom);
-});
-$("betClear").addEventListener("click", () => { S.pendingBet = 0; renderControls(); });
-document.querySelectorAll(".preset-btn[data-preset]").forEach(b =>
-  b.addEventListener("click", () => applyPreset(b.dataset.preset)));
-el.buyCigar1.addEventListener("click", () => buy("cigar", 1));
-el.buyCigar5.addEventListener("click", () => buy("cigar", 5));
-el.buyBeer1.addEventListener("click", () => buy("beer", 1));
-el.buyBeer5.addEventListener("click", () => buy("beer", 5));
-</script>
-</body>
+      /* ---------------- wiring ---------------- */
+      $("startBtn").addEventListener("click", startRun);
+      $("retryBtn").addEventListener("click", startRun);
+      el.dealBtn.addEventListener("click", deal);
+      el.hitBtn.addEventListener("click", hit);
+      el.standBtn.addEventListener("click", stand);
+      el.doubleBtn.addEventListener("click", doubleDown);
+      bindViceItem(el.cigarItem, "cigar");
+      bindViceItem(el.beerItem, "beer");
+      el.chipRack.addEventListener("click", (e) => {
+        const b = e.target.closest(".chip-step");
+        if (!b || b.disabled) return;
+        adjustBet(
+          b.classList.contains("plus") ? +b.dataset.denom : -b.dataset.denom,
+        );
+      });
+      $("betClear").addEventListener("click", () => {
+        S.pendingBet = 0;
+        renderControls();
+      });
+      document
+        .querySelectorAll(".preset-btn[data-preset]")
+        .forEach((b) =>
+          b.addEventListener("click", () => applyPreset(b.dataset.preset)),
+        );
+      el.buyCigar1.addEventListener("click", () => buy("cigar", 1));
+      el.buyCigar5.addEventListener("click", () => buy("cigar", 5));
+      el.buyBeer1.addEventListener("click", () => buy("beer", 1));
+      el.buyBeer5.addEventListener("click", () => buy("beer", 5));
+    </script>
+  </body>
 </html>
