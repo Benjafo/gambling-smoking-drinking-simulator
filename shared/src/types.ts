@@ -54,6 +54,7 @@ export type SimEvent =
   | { t: "result"; playerId: string; label: string; kind: ResultKind; delta: number }
   | { t: "impact"; speed: number; pos: V3 }
   | { t: "fling"; playerId: string; id: number }
+  | { t: "moneyDrop"; playerId: string; pos: V3; amount: number }
   | { t: "eliminated"; playerId: string; cause: string };
 
 export interface Snapshot {

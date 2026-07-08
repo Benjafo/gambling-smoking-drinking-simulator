@@ -140,6 +140,9 @@ export class CardZone {
   private cards: CardObj[] = [];
   private scale: number;
   private lean: number;
+  /* 0..1: when the viewer's stake in the next reveal is high, flips hang
+     an extra beat before turning — anticipation is the payoff */
+  private tension = 0;
   private badge: THREE.Sprite | null = null;
   private badgeText: string | null = null;
   private badgeOffset: THREE.Vector3;
@@ -157,6 +160,10 @@ export class CardZone {
     const bo = opts?.badgeOffset ?? { x: 0, y: 0.14 * this.scale, z: 0 };
     this.badgeOffset = new THREE.Vector3(bo.x, bo.y, bo.z);
     this.badgeScale = opts?.badgeScale ?? 1;
+  }
+
+  setTension(v: number): void {
+    this.tension = v;
   }
 
   private slotPos(i: number): THREE.Vector3 {
@@ -256,12 +263,25 @@ export class CardZone {
   private flip(obj: CardObj): void {
     obj.faceUp = true;
     const base = obj.group.position.clone();
+    const tense = this.tension > 0;
+    const hang = tense ? 450 : 0; // the card lifts... and hovers
+    if (tense) {
+      tween({
+        duration: hang,
+        ease: easeInOut,
+        update: (t) => {
+          obj.group.position.y = base.y + t * 0.05;
+        },
+      });
+    }
     tween({
-      duration: 380,
+      duration: 380 + (tense ? 200 : 0),
+      delay: hang,
       ease: easeInOut,
       update: (t) => {
         obj.inner.rotation.y = Math.PI * (1 - t);
-        obj.group.position.y = base.y + Math.sin(t * Math.PI) * 0.08;
+        obj.group.position.y =
+          base.y + (tense ? 0.05 * (1 - t) : 0) + Math.sin(t * Math.PI) * 0.08;
       },
       done: () => {
         obj.inner.rotation.y = 0;

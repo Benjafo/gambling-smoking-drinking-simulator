@@ -34,6 +34,9 @@ import {
   ACT_TIMEOUT_MS,
   MAX_DEBRIS,
   MAX_FLING_SPEED,
+  MONEY_DROP_CHANCE,
+  MONEY_DROP_MIN,
+  MONEY_DROP_MAX,
   REACH_RADIUS,
   SEAT_COUNT,
   seatEye,
@@ -76,7 +79,9 @@ interface Player {
      ritual engaged (cigar held still in the zone / beer tipped up). The sim
      owns the clock, so the time cost can't be skipped. */
   ritual: { kind: ViceKind; progressTicks: number; engaged: boolean } | null;
-  held: { id: number; kind: ViceKind; sinceTick: number } | null;
+  /* earned: minted by finishing a ritual, not scavenged off the floor —
+     only earned empties are eligible for the settle-time money drop */
+  held: { id: number; kind: ViceKind; sinceTick: number; earned: boolean } | null;
   alive: boolean;
   causeOfDeath: string | null;
   stats: { handsPlayed: number; cigarsSmoked: number; beersDrunk: number; peakMoney: number };
@@ -91,6 +96,10 @@ interface Debris {
   rot: Quat;
   bornTick: number;
   stillTicks: number;
+  /* money-drop eligibility: who flung it, and whether it was earned (fresh
+     from a ritual). Consumed by the one roll at settle time. */
+  owner: string | null;
+  earned: boolean;
 }
 
 interface ScheduledAction {
@@ -498,7 +507,7 @@ export class Simulation {
       p.beerMeter = METER_MAX; // drained to the last drop
     }
     if (p.held) this.autoDrop(p); // hands full: old empty tumbles off
-    p.held = { id: this.nextDebrisId++, kind, sinceTick: this.tick };
+    p.held = { id: this.nextDebrisId++, kind, sinceTick: this.tick, earned: true };
   }
 
   /* ---------------- debris & fling ---------------- */
@@ -523,7 +532,7 @@ export class Simulation {
       y: Math.max(-maxSpin, Math.min(maxSpin, angVel.y)),
       z: Math.max(-maxSpin, Math.min(maxSpin, angVel.z)),
     };
-    this.spawnDebris(p.held.kind, o, v, av);
+    this.spawnDebris(p.held.kind, o, v, av, p.id, p.held.earned);
     this.events.push({ t: "fling", playerId: p.id, id: p.held.id });
     p.held = null;
   }
@@ -547,7 +556,14 @@ export class Simulation {
     p.held = null;
   }
 
-  private spawnDebris(kind: ViceKind, origin: V3, vel: V3, angVel: V3): void {
+  private spawnDebris(
+    kind: ViceKind,
+    origin: V3,
+    vel: V3,
+    angVel: V3,
+    owner: string | null = null,
+    earned = false
+  ): void {
     const id = this.nextDebrisId++;
     const body = spawnDebrisBody(this.world, kind, origin, vel, angVel);
     this.debris.set(id, {
@@ -559,6 +575,8 @@ export class Simulation {
       rot: { x: 0, y: 0, z: 0, w: 1 },
       bornTick: this.tick,
       stillTicks: 0,
+      owner,
+      earned,
     });
     this.enforceDebrisCap();
   }
@@ -585,7 +603,8 @@ export class Simulation {
     const eye = seatEye(p.seat);
     if (Math.hypot(d.pos.x - eye.x, d.pos.y - eye.y, d.pos.z - eye.z) > REACH_RADIUS) return;
     this.removeDebris(d);
-    p.held = { id: this.nextDebrisId++, kind: d.kind, sinceTick: this.tick };
+    // scavenged, not earned: re-flinging floor litter never pays
+    p.held = { id: this.nextDebrisId++, kind: d.kind, sinceTick: this.tick, earned: false };
   }
 
   /* ---------------- tick ---------------- */
@@ -701,8 +720,22 @@ export class Simulation {
         // freeze into scenery: fixed body keeps the collider, costs nothing
         d.body.setBodyType(RAPIER.RigidBodyType.Fixed, false);
         d.phase = "settled";
+        this.rollMoneyDrop(d);
       }
     }
+  }
+
+  /* variable-ratio littering payout: only an earned empty rolls, exactly
+     once, when it first settles — the pickup→refling loop can't be farmed */
+  private rollMoneyDrop(d: Debris): void {
+    if (!d.earned) return;
+    d.earned = false;
+    const p = d.owner ? this.players.get(d.owner) : null;
+    if (!p || !p.alive) return;
+    if (this.rng.next() >= MONEY_DROP_CHANCE) return;
+    const amount = Math.round(this.rng.range(MONEY_DROP_MIN, MONEY_DROP_MAX));
+    this.setMoney(p, p.money + amount);
+    this.events.push({ t: "moneyDrop", playerId: p.id, pos: { ...d.pos }, amount });
   }
 
   private later(delayTicks: number, run: () => void): void {

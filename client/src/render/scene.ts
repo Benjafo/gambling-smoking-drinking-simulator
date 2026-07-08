@@ -15,11 +15,21 @@ import {
 import type { Intent, PlayerSnap, Snapshot } from "@shared/types";
 import type { ViceKind } from "@shared/types";
 import { handValue } from "@shared/blackjack";
+import { feltTexture, woodTexture, carpetTexture, leatherTexture } from "./textures";
 import { CardZone } from "./cards";
 import { DebrisView } from "./debris";
 import { HeldItemControl, makeBottleMesh, makeCigarMesh } from "./held";
-import { SmokeSystem, impactSound, dealSound, denySound } from "./effects";
-import { updateTweens } from "./tween";
+import {
+  SmokeSystem,
+  CashBurst,
+  impactSound,
+  dealSound,
+  denySound,
+  cashSound,
+  whooshSound,
+  chipRiffleSound,
+} from "./effects";
+import { updateTweens, tween, easeInOut } from "./tween";
 
 const CENTER = new THREE.Vector3(0, TABLE.height + 0.05, 0);
 const SHOE_POS = new THREE.Vector3(0.72, TABLE.height + 0.09, -0.78);
@@ -34,6 +44,7 @@ export class SceneView {
   private avatars = new Map<number, THREE.Group>();
   private debrisView: DebrisView;
   private smoke: SmokeSystem;
+  private cash: CashBurst;
   held: HeldItemControl;
   private raycaster = new THREE.Raycaster();
 
@@ -41,6 +52,9 @@ export class SceneView {
   private ritualGhostKind: ViceKind | null = null;
   private ritualRay = new THREE.Raycaster();
   private mySeat = 2;
+  private eyePos = new THREE.Vector3();
+  private shakeLeft = 0; // seconds of camera shake remaining
+  private shakeAmp = 0;
   private yawOff = 0;
   private pitchOff = 0;
   private looking = false;
@@ -70,6 +84,7 @@ export class SceneView {
     this.buildDealer();
 
     this.smoke = new SmokeSystem(this.scene);
+    this.cash = new CashBurst(this.scene);
     this.debrisView = new DebrisView(this.scene);
     this.held = new HeldItemControl(this.scene, this.camera, send);
     this.dealerZone = new CardZone(
@@ -95,8 +110,9 @@ export class SceneView {
   /* ---------------- static world ---------------- */
   private buildLights(): void {
     this.scene.add(new THREE.AmbientLight(0x342b1e, 1.6));
-    const spot = new THREE.SpotLight(0xffdca8, 115, 14, Math.PI / 3.6, 0.55, 1.6);
-    spot.position.set(0, 4.2, 0);
+    // the spot hangs from the lamp over the table
+    const spot = new THREE.SpotLight(0xffdca8, 70, 12, Math.PI / 3.1, 0.5, 1.5);
+    spot.position.set(0, 2.65, 0);
     spot.target.position.set(0, TABLE.height, 0);
     spot.castShadow = true;
     spot.shadow.mapSize.set(1024, 1024);
@@ -110,67 +126,150 @@ export class SceneView {
     const fill = new THREE.PointLight(0xffe6c0, 0.9, 2.2, 2);
     fill.position.set(0.1, 0.15, 0.1);
     this.camera.add(fill);
+
+    // the hanging lamp itself: cord, brass-trimmed shade, glowing bulb
+    const lamp = new THREE.Group();
+    const cord = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.008, 0.008, 1.6, 6),
+      new THREE.MeshStandardMaterial({ color: 0x0d0b08, roughness: 0.9 })
+    );
+    cord.position.y = 3.55;
+    const shade = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.09, 0.42, 0.3, 24, 1, true),
+      new THREE.MeshStandardMaterial({
+        color: 0x1e3a28,
+        roughness: 0.5,
+        metalness: 0.3,
+        side: THREE.DoubleSide,
+      })
+    );
+    shade.position.y = 2.78;
+    const shadeInner = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.088, 0.41, 0.29, 24, 1, true),
+      new THREE.MeshBasicMaterial({ color: 0xffe2ae, side: THREE.BackSide })
+    );
+    shadeInner.position.y = 2.78;
+    const trim = new THREE.Mesh(
+      new THREE.TorusGeometry(0.42, 0.014, 8, 28),
+      new THREE.MeshStandardMaterial({ color: 0xe8c469, metalness: 0.8, roughness: 0.3 })
+    );
+    trim.rotation.x = Math.PI / 2;
+    trim.position.y = 2.63;
+    const bulb = new THREE.Mesh(
+      new THREE.SphereGeometry(0.045, 12, 10),
+      new THREE.MeshBasicMaterial({ color: 0xfff2cf })
+    );
+    bulb.position.y = 2.72;
+    lamp.add(cord, shade, shadeInner, trim, bulb);
+    this.scene.add(lamp);
   }
 
   private buildRoom(): void {
     const floor = new THREE.Mesh(
       new THREE.CircleGeometry(11, 40),
-      new THREE.MeshStandardMaterial({ color: 0x1a140d, roughness: 0.95 })
+      new THREE.MeshStandardMaterial({ map: carpetTexture(), roughness: 0.97 })
     );
     floor.rotation.x = -Math.PI / 2;
     floor.receiveShadow = true;
     this.scene.add(floor);
+
+    // far-off bar lights: dim amber orbs floating in the dark, softened by fog
+    const orbMat = new THREE.MeshBasicMaterial({ color: 0xd99a4e });
+    const orbGeo = new THREE.SphereGeometry(0.05, 8, 6);
+    const ORBS: [number, number, number][] = [
+      [-7.5, 2.2, -4], [-8.2, 1.7, 1.5], [-5.5, 2.5, -6.5], [6.8, 2.1, -5],
+      [8.4, 1.8, 0.5], [5.8, 2.4, -7.2], [-2.5, 2.6, -8.5], [2.8, 2.0, -8.8],
+    ];
+    for (const [x, y, z] of ORBS) {
+      const orb = new THREE.Mesh(orbGeo, orbMat);
+      orb.position.set(x, y, z);
+      this.scene.add(orb);
+    }
   }
 
   private buildTable(): void {
+    const wood = woodTexture();
+    const seatAngles = Array.from({ length: SEAT_COUNT }, (_, i) => seatAngle(i));
     const felt = new THREE.Mesh(
-      new THREE.CylinderGeometry(TABLE.radius, TABLE.radius, 0.08, 48),
-      new THREE.MeshStandardMaterial({ color: 0x1d4a30, roughness: 0.92 })
+      new THREE.CylinderGeometry(TABLE.radius, TABLE.radius, 0.08, 64),
+      new THREE.MeshStandardMaterial({ map: feltTexture(seatAngles), roughness: 0.94 })
     );
     felt.position.y = TABLE.height - 0.04;
     felt.receiveShadow = true;
     felt.castShadow = true;
 
+    const rimWood = new THREE.MeshStandardMaterial({
+      map: wood,
+      roughness: 0.35,
+      metalness: 0.05,
+    });
+    rimWood.map!.repeat.set(6, 1);
     const rim = new THREE.Mesh(
-      new THREE.TorusGeometry(TABLE.rimRadius, TABLE.rimTube, 14, 48),
-      new THREE.MeshStandardMaterial({ color: 0x3a2a18, roughness: 0.55 })
+      new THREE.TorusGeometry(TABLE.rimRadius, TABLE.rimTube, 16, 64),
+      rimWood
     );
     rim.rotation.x = Math.PI / 2;
     rim.position.y = TABLE.height + TABLE.rimTube * 0.5;
     rim.castShadow = true;
 
+    // brass inlay ring between felt and rim
+    const inlay = new THREE.Mesh(
+      new THREE.TorusGeometry(TABLE.rimRadius - TABLE.rimTube - 0.012, 0.008, 8, 64),
+      new THREE.MeshStandardMaterial({ color: 0xe8c469, metalness: 0.85, roughness: 0.3 })
+    );
+    inlay.rotation.x = Math.PI / 2;
+    inlay.position.y = TABLE.height + 0.004;
+
+    const pedestalWood = new THREE.MeshStandardMaterial({ map: woodTexture(), roughness: 0.7 });
     const pedestal = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.32, 0.5, TABLE.height - 0.08, 24),
-      new THREE.MeshStandardMaterial({ color: 0x241809, roughness: 0.8 })
+      new THREE.CylinderGeometry(0.32, 0.52, TABLE.height - 0.08, 24),
+      pedestalWood
     );
     pedestal.position.y = (TABLE.height - 0.08) / 2;
-
-    // the shoe
-    const shoe = new THREE.Mesh(
-      new THREE.BoxGeometry(0.22, 0.14, 0.16),
-      new THREE.MeshStandardMaterial({ color: 0x241809, roughness: 0.5 })
+    const base = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.58, 0.62, 0.05, 24),
+      pedestalWood
     );
+    base.position.y = 0.025;
+
+    // the shoe: wooden body with a brass lip
+    const shoe = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.14, 0.16), rimWood);
     shoe.position.copy(SHOE_POS);
     shoe.rotation.y = -0.25;
     shoe.castShadow = true;
+    const shoeLip = new THREE.Mesh(
+      new THREE.BoxGeometry(0.23, 0.014, 0.17),
+      new THREE.MeshStandardMaterial({ color: 0xe8c469, metalness: 0.8, roughness: 0.35 })
+    );
+    shoeLip.position.copy(SHOE_POS).add(new THREE.Vector3(0, 0.077, 0));
+    shoeLip.rotation.y = -0.25;
 
-    this.scene.add(felt, rim, pedestal, shoe);
+    this.scene.add(felt, rim, inlay, pedestal, base, shoe, shoeLip);
 
-    // stools at every seat
+    // stools: worn leather tops with a brass trim ring
+    const leather = new THREE.MeshStandardMaterial({ map: leatherTexture(), roughness: 0.65 });
+    const brass = new THREE.MeshStandardMaterial({
+      color: 0xe8c469,
+      metalness: 0.8,
+      roughness: 0.35,
+    });
     for (let i = 0; i < SEAT_COUNT; i++) {
       const p = seatPosition(i);
       const stool = new THREE.Group();
-      const top = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.22, 0.22, 0.06, 18),
-        new THREE.MeshStandardMaterial({ color: 0x5d1517, roughness: 0.7 })
-      );
+      const top = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.2, 0.08, 18), leather);
       top.position.y = 0.62;
+      const ring = new THREE.Mesh(new THREE.TorusGeometry(0.205, 0.011, 8, 24), brass);
+      ring.rotation.x = Math.PI / 2;
+      ring.position.y = 0.585;
       const leg = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.04, 0.09, 0.62, 10),
+        new THREE.CylinderGeometry(0.04, 0.09, 0.6, 10),
         new THREE.MeshStandardMaterial({ color: 0x17130d, roughness: 0.6 })
       );
-      leg.position.y = 0.31;
-      stool.add(top, leg);
+      leg.position.y = 0.3;
+      const foot = new THREE.Mesh(new THREE.TorusGeometry(0.14, 0.012, 8, 20), brass);
+      foot.rotation.x = Math.PI / 2;
+      foot.position.y = 0.16;
+      stool.add(top, ring, leg, foot);
       stool.position.set(p.x, 0, p.z);
       stool.castShadow = true;
       this.scene.add(stool);
@@ -198,8 +297,34 @@ export class SceneView {
   private setCameraSeat(seat: number): void {
     this.mySeat = seat;
     const eye = seatEye(seat);
-    this.camera.position.set(eye.x, eye.y, eye.z);
+    this.eyePos.set(eye.x, eye.y, eye.z);
+    this.camera.position.copy(this.eyePos);
     this.applyLook();
+  }
+
+  private addShake(amp: number, dur = 0.16): void {
+    this.shakeAmp = Math.max(this.shakeAmp, amp);
+    this.shakeLeft = Math.max(this.shakeLeft, dur);
+  }
+
+  /* quick punch-in and settle — blackjack should land in the chest */
+  private fovPunch(): void {
+    tween({
+      duration: 90,
+      update: (t) => {
+        this.camera.fov = 58 - 7 * t;
+        this.camera.updateProjectionMatrix();
+      },
+      done: () =>
+        tween({
+          duration: 320,
+          ease: easeInOut,
+          update: (t) => {
+            this.camera.fov = 51 + 7 * t;
+            this.camera.updateProjectionMatrix();
+          },
+        }),
+    });
   }
 
   private applyLook(): void {
@@ -376,6 +501,11 @@ export class SceneView {
     const me = snap.players.find((p) => p.id === myId);
     if (me && me.seat !== this.mySeat) this.setCameraSeat(me.seat);
 
+    // dealer reveals (hole card, draw-out cards) hang an extra beat when
+    // you're sweating a made hand — anticipation is the whole show
+    const myTotal = me && me.alive && me.bet > 0 ? handValue(me.hand).total : 0;
+    this.dealerZone.setTension(myTotal >= 19 && myTotal <= 21 ? 1 : 0);
+
     this.dealerZone.reconcile(snap.dealerHand);
     this.dealerZone.setBadge(
       snap.dealerHand.length === 0
@@ -404,6 +534,13 @@ export class SceneView {
         );
         this.playerZones.set(p.id, zone);
       }
+      // your own hit card hesitates when the hit could bust you
+      if (p.id === myId && p.hand.length > 2) {
+        const prior = handValue(p.hand.slice(0, -1)).total;
+        zone.setTension(prior >= 14 && prior <= 16 ? 1 : 0);
+      } else {
+        zone.setTension(0);
+      }
       zone.reconcile(p.hand);
       const hv = handValue(p.hand);
       zone.setBadge(
@@ -423,8 +560,75 @@ export class SceneView {
     this.held.apply(me);
 
     for (const ev of snap.events) {
-      if (ev.t === "impact") impactSound(ev.speed);
+      if (ev.t === "impact") {
+        impactSound(ev.speed);
+        this.addShake(Math.min(0.012, 0.002 + ev.speed * 0.001));
+      } else if (ev.t === "moneyDrop") {
+        this.cash.emit(new THREE.Vector3(ev.pos.x, ev.pos.y + 0.04, ev.pos.z), ev.amount);
+        cashSound();
+      } else if (ev.t === "fling") {
+        whooshSound();
+      } else if (ev.t === "result" && ev.delta > 0) {
+        const winner = snap.players.find((q) => q.id === ev.playerId);
+        if (winner) this.payoutChips(winner.seat, ev.delta);
+        if (ev.playerId === myId && ev.label === "BLACKJACK!") this.fovPunch();
+      }
     }
+  }
+
+  /* winnings slide across the felt from the dealer's bank — money you can
+     watch arrive beats a number ticking up */
+  private payoutChips(seat: number, amount: number): void {
+    chipRiffleSound();
+    const n = Math.min(14, Math.max(3, Math.round(Math.log2(amount / 5 + 1) * 2)));
+    const colors = [0x2c3c60, 0x6a1f1f, 0x24512f, 0x101010];
+    const group = new THREE.Group();
+    for (let i = 0; i < n; i++) {
+      const chip = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.035, 0.035, 0.008, 16),
+        new THREE.MeshStandardMaterial({ color: colors[i % 4], roughness: 0.4 })
+      );
+      chip.position.set(
+        (Math.random() - 0.5) * 0.006,
+        0.006 + i * 0.009,
+        (Math.random() - 0.5) * 0.006
+      );
+      chip.rotation.y = Math.random() * Math.PI;
+      chip.castShadow = true;
+      group.add(chip);
+    }
+    group.position.set(0, TABLE.height, -0.25); // the dealer's bank
+    this.scene.add(group);
+
+    const from = group.position.clone();
+    const spot = seatTablePoint(seat, 0.62);
+    const a = seatAngle(seat);
+    const dest = new THREE.Vector3(spot.x, spot.y, spot.z).addScaledVector(
+      new THREE.Vector3(Math.cos(a), 0, -Math.sin(a)),
+      -0.3
+    );
+    const dispose = () => {
+      this.scene.remove(group);
+      for (const c of group.children as THREE.Mesh[]) {
+        c.geometry.dispose();
+        (c.material as THREE.Material).dispose();
+      }
+    };
+    tween({
+      duration: 700,
+      ease: easeInOut,
+      update: (t) => {
+        group.position.lerpVectors(from, dest, t);
+        group.position.y += Math.sin(t * Math.PI) * 0.05;
+      },
+      done: () =>
+        tween({
+          duration: 400,
+          delay: 550,
+          update: (t) => group.scale.setScalar(1 - t),
+          done: dispose,
+        }),
+    });
   }
 
   private reconcileChips(p: PlayerSnap): void {
@@ -479,9 +683,23 @@ export class SceneView {
     this.lastFrame = now;
 
     updateTweens(now);
+    if (this.shakeLeft > 0) {
+      this.shakeLeft = Math.max(0, this.shakeLeft - dt);
+      const k = this.shakeLeft > 0 ? this.shakeLeft / 0.16 : 0;
+      this.camera.position.set(
+        this.eyePos.x + (Math.random() - 0.5) * this.shakeAmp * k * 2,
+        this.eyePos.y + (Math.random() - 0.5) * this.shakeAmp * k * 2,
+        this.eyePos.z + (Math.random() - 0.5) * this.shakeAmp * k * 2
+      );
+      if (this.shakeLeft === 0) {
+        this.camera.position.copy(this.eyePos);
+        this.shakeAmp = 0;
+      }
+    }
     this.debrisView.frame(dt);
     this.held.frame(dt);
     this.smoke.frame(dt);
+    this.cash.frame(dt);
     this.renderer.render(this.scene, this.camera);
     requestAnimationFrame(() => this.frame());
   }

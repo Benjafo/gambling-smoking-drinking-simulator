@@ -169,11 +169,23 @@ export class Hud {
     $("flingHint").classList.toggle("show", me.held !== null);
 
     for (const ev of snap.events) {
-      if (ev.t === "result" && ev.playerId === this.myId)
+      if (ev.t === "result" && ev.playerId === this.myId) {
+        // near-misses sting harder than wins feel good — say them out loud
+        let label = ev.label;
+        if (ev.kind === "lose") {
+          const myT = handValue(me.hand).total;
+          const dT = handValue(snap.dealerHand).total;
+          if (myT <= 21 && dT <= 21 && dT - myT === 1) label = "LOST BY ONE. OF COURSE.";
+          else if (myT <= 21 && dT === 21 && snap.dealerHand.length >= 4)
+            label = "DEALER DREW OUT TO 21. CRIMINAL.";
+        }
+        if (ev.label === "BLACKJACK!") this.goldFlash();
         this.banner(
-          ev.label + (ev.delta > 0 ? "  +" + fmtMoney(ev.delta) : ev.delta < 0 ? "  −" + fmtMoney(-ev.delta) : ""),
+          label + (ev.delta > 0 ? "  +" + fmtMoney(ev.delta) : ev.delta < 0 ? "  −" + fmtMoney(-ev.delta) : ""),
           ev.kind
         );
+      } else if (ev.t === "moneyDrop" && ev.playerId === this.myId)
+        this.banner("FOUND " + fmtMoney(ev.amount) + " IN THE FILTH", "win");
     }
 
     if (snap.phase === "over" && !this.wasOver) {
@@ -259,6 +271,26 @@ export class Hud {
   private meter(fill: HTMLElement, v: number): void {
     fill.style.width = Math.max(0, v) + "%";
     fill.className = "fill " + (v > 50 ? "ok" : v >= 20 ? "warn" : "bad");
+  }
+
+  private flashEl: HTMLElement | null = null;
+  private goldFlash(): void {
+    if (!this.flashEl) {
+      const el = document.createElement("div");
+      el.style.cssText =
+        "position:fixed;inset:0;pointer-events:none;z-index:60;opacity:0;" +
+        "background:radial-gradient(circle at 50% 45%,rgba(255,214,110,.55),rgba(255,180,60,.12) 55%,transparent 75%);" +
+        "transition:opacity .1s ease-out";
+      document.body.appendChild(el);
+      this.flashEl = el;
+    }
+    const el = this.flashEl;
+    el.style.transition = "opacity .1s ease-out";
+    el.style.opacity = "1";
+    setTimeout(() => {
+      el.style.transition = "opacity .5s ease-in";
+      el.style.opacity = "0";
+    }, 140);
   }
 
   private banner(text: string, kind: string): void {

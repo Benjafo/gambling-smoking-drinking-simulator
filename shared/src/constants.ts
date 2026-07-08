@@ -31,6 +31,11 @@ export const ACT_TIMEOUT_MS = 30000; // auto-stand an AFK player
 
 export const MAX_DEBRIS = 200;
 export const MAX_FLING_SPEED = 12;
+/* littering payout: a fresh empty (straight from a ritual, not scavenged
+   off the floor) rolls once when it settles — sometimes the filth pays */
+export const MONEY_DROP_CHANCE = 0.06;
+export const MONEY_DROP_MIN = 5;
+export const MONEY_DROP_MAX = 25;
 /* pickup range, from the seat's eye. Effectively room-wide: you're stuck on
    the stool, so debris you can't retrieve is dead content, and multiplayer
    "reach" fairness matters less than keeping the toy alive. */
