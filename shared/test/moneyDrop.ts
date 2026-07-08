@@ -37,6 +37,7 @@ function snap(): Snapshot {
 }
 
 sim.applyIntent(ME, { type: "join", name: "LITTERBUG" });
+sim.applyIntent(ME, { type: "startGame" });
 
 let spent = 0;
 function me() {

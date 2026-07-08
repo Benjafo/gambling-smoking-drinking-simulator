@@ -15,6 +15,7 @@
 <div id="hud">
   <div id="topBar">
     <span class="money" id="moneyDisplay">$1000</span>
+    <span class="stat">Score: <b id="scoreDisplay">0</b></span>
     <span class="stat">Hands: <b id="handsDisplay">0</b></span>
     <span class="stat">Time: <b id="timeDisplay">00:00</b></span>
     <span class="stat" id="phaseDisplay"></span>
@@ -110,16 +111,28 @@
 <div id="titleScreen" class="screen active">
   <div class="marquee">DEGENERATE<br>BLACKJACK<small class="vices-title">🚬 3D SIMULATOR 🍺</small></div>
   <p class="tagline">One thousand dollars. Infinite hands. Keep smoking. Keep drinking.
-    Fling the empties wherever you like — the floor belongs to the house too.</p>
+    Fling the empties wherever you like — the floor belongs to the house too.
+    Last degenerate breathing takes the crown.</p>
+  <input id="nameInput" maxlength="24" placeholder="YOUR NAME" autocomplete="off" spellcheck="false">
   <button class="big-btn" id="startBtn">DEAL ME IN</button>
+</div>
+
+<!-- ============ LOBBY ============ -->
+<div id="lobbyScreen" class="screen">
+  <div class="marquee" style="font-size:clamp(28px,4vw,48px)">THE TABLE</div>
+  <div id="lobbyList" class="lobby-list"></div>
+  <p class="tagline" id="lobbyHint"></p>
+  <button class="big-btn" id="lobbyStartBtn">START THE GAME</button>
 </div>
 
 <!-- ============ GAME OVER ============ -->
 <div id="overScreen" class="screen">
   <div id="deathCause"></div>
+  <div id="leaderboard"></div>
   <div id="overStats"></div>
   <p class="epitaph">The stool is still warm. The bottles stay where they landed.</p>
   <button class="big-btn" id="retryBtn">RUN IT BACK</button>
+  <p class="tagline" id="retryHint" style="margin-top:-14px"></p>
 </div>
 
 <script type="module" src="/src/main.ts"></script>

@@ -34,6 +34,9 @@ import {
   MAX_DEBRIS,
   MAX_FLING_SPEED,
   LITTER_POINTS,
+  SCORE_HAND_PLAYED,
+  SCORE_HAND_WON,
+  SCORE_VICE,
   MONEY_DROP_CHANCE,
   MONEY_DROP_MIN,
   MONEY_DROP_MAX,
@@ -84,8 +87,17 @@ interface Player {
      only earned empties are eligible for the settle-time money drop */
   held: { id: number; kind: ViceKind; sinceTick: number; earned: boolean } | null;
   alive: boolean;
+  /* joined mid-run: seated but spectating until the next game starts */
+  waiting: boolean;
   causeOfDeath: string | null;
-  stats: { handsPlayed: number; cigarsSmoked: number; beersDrunk: number; peakMoney: number };
+  score: number;
+  stats: {
+    handsPlayed: number;
+    handsWon: number;
+    cigarsSmoked: number;
+    beersDrunk: number;
+    peakMoney: number;
+  };
 }
 
 interface Debris {
@@ -115,6 +127,11 @@ export class Simulation {
   eventQueue: RAPIER_NS.EventQueue;
 
   phase: RoomPhase = "lobby";
+  /* first to sit down runs the table; passes down the join order on leave */
+  leaderId: string | null = null;
+  winnerId: string | null = null;
+  /* participants when the run started: 2+ means last-alive wins */
+  runPlayerCount = 0;
   players = new Map<string, Player>();
   seatTaken: (string | null)[] = new Array(SEAT_COUNT).fill(null);
   shoe: Card[] = [];
@@ -152,9 +169,15 @@ export class Simulation {
     const p = this.players.get(playerId);
     if (!p) return;
 
+    // spectators watch; they get their hands back when the next game starts
+    if (p.waiting && intent.type !== "leave" && intent.type !== "restart") return;
+
     switch (intent.type) {
       case "leave":
         this.removePlayer(p);
+        break;
+      case "startGame":
+        this.startGame(p);
         break;
       case "setBet":
         if (this.phase === "betting" && p.alive && !p.committed)
@@ -194,7 +217,7 @@ export class Simulation {
         this.pickup(p, intent.itemId);
         break;
       case "restart":
-        this.restart();
+        this.restart(p);
         break;
     }
   }
@@ -227,24 +250,37 @@ export class Simulation {
       ritual: null,
       held: null,
       alive: true,
+      waiting: this.phase !== "lobby",
       causeOfDeath: null,
-      stats: { handsPlayed: 0, cigarsSmoked: 0, beersDrunk: 0, peakMoney: START_MONEY },
+      score: 0,
+      stats: { handsPlayed: 0, handsWon: 0, cigarsSmoked: 0, beersDrunk: 0, peakMoney: START_MONEY },
     });
-    if (this.phase === "lobby") {
-      this.phase = "betting";
-      this.runStartTick = this.tick;
-    }
+    if (this.leaderId === null) this.leaderId = playerId;
+  }
+
+  private startGame(p: Player): void {
+    if (this.phase !== "lobby" || p.id !== this.leaderId) return;
+    for (const q of this.players.values()) q.waiting = false;
+    this.runPlayerCount = this.players.size;
+    this.winnerId = null;
+    this.runStartTick = this.tick;
+    this.phase = "betting";
   }
 
   private removePlayer(p: Player): void {
     if (p.held) this.autoDrop(p); // don't vanish a held bottle
     this.seatTaken[p.seat] = null;
     this.players.delete(p.id);
+    if (this.leaderId === p.id)
+      this.leaderId = this.players.keys().next().value ?? null;
     if (this.turnPlayerId === p.id) this.advanceTurn();
     if (this.players.size === 0) {
       this.phase = "lobby";
       this.schedule = [];
+      return;
     }
+    // a rage-quit counts as an elimination for the last-alive check
+    this.checkWin();
   }
 
   /* ---------------- betting / dealing ---------------- */
@@ -415,6 +451,11 @@ export class Simulation {
       const res = settle(handValue(p.hand).total, d, isBlackjack(p.hand), dBJ, p.bet);
       this.setMoney(p, p.money + res.back);
       p.stats.handsPlayed++;
+      p.score += SCORE_HAND_PLAYED;
+      if (res.kind === "win") {
+        p.stats.handsWon++;
+        p.score += SCORE_HAND_WON;
+      }
       this.events.push({
         t: "result",
         playerId: p.id,
@@ -439,36 +480,36 @@ export class Simulation {
       if (p.alive && p.money <= 0 && p.cigarInv === 0 && p.beerInv === 0)
         this.eliminate(p, "BANKRUPT. THE HOUSE ALWAYS WINS.");
     }
-    if (![...this.players.values()].some((p) => p.alive)) {
-      this.phase = "over";
-      this.schedule = [];
-      return;
-    }
+    if (this.phase === "over") return; // eliminations above may end the run
     this.phase = "betting";
     this.dealerHand = [];
     this.holeHidden = true;
   }
 
-  private restart(): void {
-    if (this.phase !== "over") return;
+  /* leader-only: back to the lobby, everyone reset (mid-run joiners get
+     seated for real), leader starts the next run from there */
+  private restart(p: Player): void {
+    if (this.phase !== "over" || p.id !== this.leaderId) return;
     // debris persists across runs — the den stays filthy
-    for (const p of this.players.values()) {
-      p.money = START_MONEY;
-      p.pendingBet = 0;
-      p.lastBet = 0;
-      p.committed = false;
-      p.bet = 0;
-      p.hand = [];
-      p.stood = false;
-      p.doubled = false;
-      p.cigarMeter = METER_MAX;
-      p.beerMeter = METER_MAX;
-      p.cigarInv = 3;
-      p.beerInv = 3;
-      p.ritual = null;
-      p.alive = true;
-      p.causeOfDeath = null;
-      p.stats = { handsPlayed: 0, cigarsSmoked: 0, beersDrunk: 0, peakMoney: START_MONEY };
+    for (const q of this.players.values()) {
+      q.money = START_MONEY;
+      q.pendingBet = 0;
+      q.lastBet = 0;
+      q.committed = false;
+      q.bet = 0;
+      q.hand = [];
+      q.stood = false;
+      q.doubled = false;
+      q.cigarMeter = METER_MAX;
+      q.beerMeter = METER_MAX;
+      q.cigarInv = 3;
+      q.beerInv = 3;
+      q.ritual = null;
+      q.alive = true;
+      q.waiting = false;
+      q.causeOfDeath = null;
+      q.score = 0;
+      q.stats = { handsPlayed: 0, handsWon: 0, cigarsSmoked: 0, beersDrunk: 0, peakMoney: START_MONEY };
     }
     this.cigarPrice = CIGAR_PRICE_0;
     this.beerPrice = BEER_PRICE_0;
@@ -477,7 +518,9 @@ export class Simulation {
     this.holeHidden = true;
     this.shoe = buildShoe(DECKS, this.rng);
     this.runStartTick = this.tick;
-    this.phase = "betting";
+    this.winnerId = null;
+    this.runPlayerCount = 0;
+    this.phase = "lobby";
   }
 
   /* ---------------- vices ---------------- */
@@ -518,6 +561,7 @@ export class Simulation {
       p.stats.beersDrunk++;
       p.beerMeter = METER_MAX; // drained to the last drop
     }
+    p.score += SCORE_VICE;
     // hands are guaranteed empty here: consumeStart refuses while holding
     p.held = { id: this.nextDebrisId++, kind, sinceTick: this.tick, earned: true };
   }
@@ -660,7 +704,7 @@ export class Simulation {
     const dt = 1 / TICK_RATE;
 
     for (const p of this.players.values()) {
-      if (!p.alive) continue;
+      if (!p.alive || p.waiting) continue;
       p.cigarDrift = Math.max(
         -JITTER,
         Math.min(JITTER, p.cigarDrift + (this.rng.next() - 0.5) * 0.12)
@@ -690,10 +734,19 @@ export class Simulation {
     if (p.held) this.autoDrop(p);
     this.events.push({ t: "eliminated", playerId: p.id, cause });
     if (this.turnPlayerId === p.id) this.advanceTurn();
-    if (![...this.players.values()].some((q) => q.alive)) {
-      this.phase = "over";
-      this.schedule = [];
-    }
+    this.checkWin();
+  }
+
+  /* solo runs end when the lone degenerate dies; with 2+ participants the
+     last one still breathing takes the crown */
+  private checkWin(): void {
+    if (this.phase === "lobby" || this.phase === "over") return;
+    const alive = [...this.players.values()].filter((p) => !p.waiting && p.alive);
+    const done = this.runPlayerCount >= 2 ? alive.length <= 1 : alive.length === 0;
+    if (!done) return;
+    this.winnerId = alive[0]?.id ?? null;
+    this.phase = "over";
+    this.schedule = [];
   }
 
   private stepPhysics(): void {
@@ -764,6 +817,7 @@ export class Simulation {
     const p = d.owner ? this.players.get(d.owner) : null;
     if (!p || !p.alive) return;
     this.events.push({ t: "litter", playerId: p.id, pos: { ...d.pos }, points: LITTER_POINTS });
+    p.score += LITTER_POINTS;
     if (this.rng.next() >= MONEY_DROP_CHANCE) return;
     const amount = Math.round(this.rng.range(MONEY_DROP_MIN, MONEY_DROP_MAX));
     this.setMoney(p, p.money + amount);
@@ -800,7 +854,9 @@ export class Simulation {
         : null,
       held: p.held ? { id: p.held.id, kind: p.held.kind } : null,
       alive: p.alive,
+      waiting: p.waiting,
       causeOfDeath: p.causeOfDeath,
+      score: Math.round(p.score),
       stats: { ...p.stats },
     }));
 
@@ -818,6 +874,8 @@ export class Simulation {
     return {
       tick: this.tick,
       phase: this.phase,
+      leaderId: this.leaderId,
+      winnerId: this.winnerId,
       dealerHand: this.holeHidden
         ? this.dealerHand.map((c, i) => (i === 1 ? { r: "?", s: "?" } : c))
         : this.dealerHand,

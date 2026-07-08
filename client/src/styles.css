@@ -58,6 +58,41 @@ button:focus-visible{outline:2px solid var(--amber);outline-offset:2px}
 #overStats b{color:var(--amber)}
 .epitaph{font-family:var(--serif);font-style:italic;color:var(--ash)}
 
+/* ---------- lobby ---------- */
+#lobbyScreen{background:radial-gradient(ellipse at 50% 35%, #24301f 0%, var(--void) 72%)}
+#nameInput{
+  background:rgba(0,0,0,.4);border:1px solid #6e4c12;border-radius:6px;
+  color:var(--cream);font-family:var(--mono);font-size:18px;letter-spacing:.12em;
+  padding:12px 18px;text-align:center;width:min(320px,80vw);text-transform:uppercase;
+}
+#nameInput:focus{outline:2px solid var(--amber);outline-offset:2px}
+.lobby-list{
+  font-family:var(--mono);font-size:16px;min-width:min(420px,86vw);
+  background:rgba(0,0,0,.35);border:1px solid #2c2317;border-radius:8px;padding:10px 0;
+}
+.lobby-row{display:flex;justify-content:space-between;gap:24px;padding:8px 26px}
+.lobby-row .who{color:var(--cream)}
+.lobby-row.you .who{color:var(--amber)}
+.lobby-row .tag{color:var(--ash);letter-spacing:.15em}
+.lobby-row .tag.leader{color:var(--amber)}
+
+/* ---------- leaderboard ---------- */
+#leaderboard{
+  font-family:var(--mono);font-size:15px;
+  background:rgba(0,0,0,.35);border:1px solid #2c2317;border-radius:8px;padding:14px 10px;
+}
+#leaderboard table{border-collapse:collapse}
+#leaderboard th{
+  color:var(--ash);font-weight:400;letter-spacing:.2em;font-size:11px;
+  padding:4px 18px;text-align:left;border-bottom:1px solid #2c2317;
+}
+#leaderboard td{padding:7px 18px;text-align:left;color:var(--cream)}
+#leaderboard td.num,#leaderboard th.num{text-align:right}
+#leaderboard td.score{color:var(--amber);font-weight:700}
+#leaderboard tr.winner td{background:rgba(233,166,58,.12)}
+#leaderboard tr.you td.who::after{content:" ← YOU";color:var(--ash);font-size:11px}
+#leaderboard tr.dead td.who{color:var(--ash)}
+
 /* ---------- HUD chrome ---------- */
 #hud{position:fixed;inset:0;pointer-events:none;z-index:10;display:none}
 #hud.active{display:block}

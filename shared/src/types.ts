@@ -14,6 +14,7 @@ export interface Quat {
 
 export interface PlayerStats {
   handsPlayed: number;
+  handsWon: number;
   cigarsSmoked: number;
   beersDrunk: number;
   peakMoney: number;
@@ -38,7 +39,10 @@ export interface PlayerSnap {
   ritual: { kind: ViceKind; progress: number } | null;
   held: { id: number; kind: ViceKind } | null;
   alive: boolean;
+  /* joined mid-run: spectates until the next game starts */
+  waiting: boolean;
   causeOfDeath: string | null;
+  score: number;
   stats: PlayerStats;
 }
 
@@ -61,6 +65,8 @@ export type SimEvent =
 export interface Snapshot {
   tick: number;
   phase: RoomPhase;
+  leaderId: string | null;
+  winnerId: string | null;
   dealerHand: Card[];
   holeHidden: boolean;
   turnPlayerId: string | null;
@@ -76,6 +82,7 @@ export interface Snapshot {
 export type Intent =
   | { type: "join"; name: string }
   | { type: "leave" }
+  | { type: "startGame" }
   | { type: "setBet"; amount: number }
   | { type: "commitBet" }
   | { type: "hit" }

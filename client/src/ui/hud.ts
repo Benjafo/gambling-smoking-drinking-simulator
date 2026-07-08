@@ -31,6 +31,13 @@ function fmtTime(sec: number): string {
     s = Math.floor(sec % 60);
   return String(m).padStart(2, "0") + ":" + String(s).padStart(2, "0");
 }
+/* player names are user input rendered via innerHTML — escape them */
+function esc(s: string): string {
+  return s.replace(
+    /[&<>"']/g,
+    (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!
+  );
+}
 
 const FLAVOR = [
   "The dealer doesn't blink.",
@@ -56,7 +63,8 @@ export class Hud {
   private displayedMoney = 0;
   private chipSig = "";
   private bannerTimer: number | undefined;
-  private wasOver = false;
+  private lobbySig = "";
+  private overSig = "";
 
   constructor(private send: (i: Intent) => void) {
     this.wire();
@@ -70,16 +78,24 @@ export class Hud {
 
   /* ---------------- wiring ---------------- */
   private wire(): void {
+    const nameInput = $("nameInput") as HTMLInputElement;
+    nameInput.value =
+      new URLSearchParams(location.search).get("name") ??
+      localStorage.getItem("degen-name") ??
+      "";
     $("startBtn").addEventListener("click", () => {
-      this.send({ type: "join", name: "YOU" });
+      const name = nameInput.value.trim().slice(0, 24);
+      if (name) localStorage.setItem("degen-name", name);
+      this.send({ type: "join", name: name || "DEGENERATE" });
       $("titleScreen").classList.remove("active");
       $("hud").classList.add("active");
     });
-    $("retryBtn").addEventListener("click", () => {
-      this.send({ type: "restart" });
-      $("overScreen").classList.remove("active");
-      this.wasOver = false;
+    nameInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") $("startBtn").click();
     });
+    // leader-only intents: the sim ignores them from anyone else
+    $("lobbyStartBtn").addEventListener("click", () => this.send({ type: "startGame" }));
+    $("retryBtn").addEventListener("click", () => this.send({ type: "restart" }));
 
     $("dealBtn").addEventListener("click", () => {
       this.send({ type: "setBet", amount: this.localPending });
@@ -135,9 +151,18 @@ export class Hud {
     if (!this.pendingDirty) this.localPending = me.pendingBet;
     this.pendingDirty = false;
 
+    $("scoreDisplay").textContent = String(me.score);
     $("handsDisplay").textContent = String(me.stats.handsPlayed);
     $("timeDisplay").textContent = fmtTime(snap.elapsed);
     $("phaseDisplay").textContent = this.phaseLabel(snap, me);
+
+    // lobby / game-over overlays follow the authoritative phase
+    $("lobbyScreen").classList.toggle("active", snap.phase === "lobby");
+    $("overScreen").classList.toggle("active", snap.phase === "over");
+    if (snap.phase === "lobby") this.renderLobby(snap);
+    else this.lobbySig = "";
+    if (snap.phase === "over") this.renderOver(snap, me);
+    else this.overSig = "";
 
     // meters
     this.meter($("cigarFill"), me.cigarMeter);
@@ -151,8 +176,9 @@ export class Hud {
 
     // vice items (draggable; RitualControl refuses to start when one is
     // running). Holding an empty also blocks: fling your litter first.
-    const cigarOff = !me.alive || me.cigarInv < 1 || me.held !== null;
-    const beerOff = !me.alive || me.beerInv < 1 || me.held !== null;
+    const benched = !me.alive || me.waiting;
+    const cigarOff = benched || me.cigarInv < 1 || me.held !== null;
+    const beerOff = benched || me.beerInv < 1 || me.held !== null;
     $("cigarItem").classList.toggle("disabled", cigarOff);
     $("beerItem").classList.toggle("disabled", beerOff);
     $("cigarItem").setAttribute("aria-disabled", String(cigarOff));
@@ -161,10 +187,10 @@ export class Hud {
     // shop
     $("cigarPrice").textContent = fmtMoney(snap.cigarPrice);
     $("beerPrice").textContent = fmtMoney(snap.beerPrice);
-    ($("buyCigar1") as HTMLButtonElement).disabled = !me.alive || me.money < snap.cigarPrice;
-    ($("buyCigar5") as HTMLButtonElement).disabled = !me.alive || me.money < snap.cigarPrice * 5;
-    ($("buyBeer1") as HTMLButtonElement).disabled = !me.alive || me.money < snap.beerPrice;
-    ($("buyBeer5") as HTMLButtonElement).disabled = !me.alive || me.money < snap.beerPrice * 5;
+    ($("buyCigar1") as HTMLButtonElement).disabled = benched || me.money < snap.cigarPrice;
+    ($("buyCigar5") as HTMLButtonElement).disabled = benched || me.money < snap.cigarPrice * 5;
+    ($("buyBeer1") as HTMLButtonElement).disabled = benched || me.money < snap.beerPrice;
+    ($("buyBeer5") as HTMLButtonElement).disabled = benched || me.money < snap.beerPrice * 5;
 
     this.renderBetting();
     $("flingHint").classList.toggle("show", me.held !== null);
@@ -187,17 +213,19 @@ export class Hud {
         );
       } else if (ev.t === "moneyDrop" && ev.playerId === this.myId)
         this.banner("FOUND " + fmtMoney(ev.amount) + " IN THE FILTH", "win");
-    }
-
-    if (snap.phase === "over" && !this.wasOver) {
-      this.wasOver = true;
-      this.showOver(me);
+      else if (ev.t === "eliminated" && ev.playerId !== this.myId) {
+        const who = snap.players.find((p) => p.id === ev.playerId);
+        if (who) this.banner(who.name + " IS OUT", "lose"); // textContent: no escaping
+      }
     }
   }
 
   private phaseLabel(snap: Snapshot, me: PlayerSnap): string {
+    if (me.waiting) return "SPECTATING — IN NEXT GAME";
     if (!me.alive) return "DEAD";
     switch (snap.phase) {
+      case "lobby":
+        return "LOBBY";
       case "betting":
         return me.committed ? "WAITING FOR THE TABLE" : "PLACE YOUR BET";
       case "dealing":
@@ -217,20 +245,23 @@ export class Hud {
     const snap = this.snap;
     const me = this.me;
     if (!snap || !me) return;
-    const betting = snap.phase === "betting" && me.alive && !me.committed && me.money > 0;
+    const betting =
+      snap.phase === "betting" && me.alive && !me.waiting && !me.committed && me.money > 0;
     const myTurn = snap.phase === "acting" && snap.turnPlayerId === this.myId;
 
     $("betPanel").style.display = betting ? "" : "none";
     $("playPanel").style.display = myTurn ? "" : "none";
     $("betDisplay").textContent = fmtMoney(this.localPending);
 
-    const hint = !me.alive
-      ? "You are a cautionary tale now."
-      : me.money <= 0 && !me.committed
-        ? "No money. No bets. Only vices remain."
-        : betting
-          ? "Chips stack. Min bet $10. The meters don't wait."
-          : "";
+    const hint = me.waiting
+      ? "Game in progress. You're dealt in when the next one starts."
+      : !me.alive
+        ? "You are a cautionary tale now."
+        : me.money <= 0 && !me.committed
+          ? "No money. No bets. Only vices remain."
+          : betting
+            ? "Chips stack. Min bet $10. The meters don't wait."
+            : "";
     $("dockHint").textContent = hint;
 
     if (betting) {
@@ -302,17 +333,83 @@ export class Hud {
     this.bannerTimer = window.setTimeout(() => (b.className = ""), 1500);
   }
 
-  private showOver(me: PlayerSnap): void {
-    $("deathCause").textContent = me.causeOfDeath ?? "THE HOUSE OUTLASTED YOU.";
+  private renderLobby(snap: Snapshot): void {
+    const amLeader = snap.leaderId === this.myId;
+    const sig = snap.players.map((p) => p.id + ":" + p.name).join() + "|" + snap.leaderId;
+    if (sig === this.lobbySig) return;
+    this.lobbySig = sig;
+
+    $("lobbyList").innerHTML = snap.players
+      .map(
+        (p) =>
+          `<div class="lobby-row${p.id === this.myId ? " you" : ""}">
+             <span class="who">${esc(p.name)}${p.id === this.myId ? " (you)" : ""}</span>
+             <span class="tag${p.id === snap.leaderId ? " leader" : ""}">${
+               p.id === snap.leaderId ? "★ LEADER" : "AT THE TABLE"
+             }</span>
+           </div>`
+      )
+      .join("");
+    ($("lobbyStartBtn") as HTMLButtonElement).style.display = amLeader ? "" : "none";
+    $("lobbyHint").textContent = amLeader
+      ? snap.players.length === 1
+        ? "Drinking alone is still drinking. Start whenever — or wait for company."
+        : `${snap.players.length} degenerates seated. Start when ready.`
+      : "The lobby leader starts the game. Sit tight.";
+  }
+
+  /* ranked leaderboard; re-renders only when scores/winner change (the
+     winner's last empties can still settle and score after the run ends) */
+  private renderOver(snap: Snapshot, me: PlayerSnap): void {
+    const ranked = [...snap.players].sort((a, b) => b.score - a.score);
+    const sig =
+      snap.winnerId + "|" + snap.leaderId + "|" + ranked.map((p) => p.id + ":" + p.score).join();
+    if (sig === this.overSig) return;
+    this.overSig = sig;
+
+    const winner = snap.players.find((p) => p.id === snap.winnerId);
+    const cause = $("deathCause");
+    if (snap.winnerId === this.myId) {
+      cause.textContent = "LAST DEGENERATE STANDING";
+      cause.style.color = "var(--amber)";
+      cause.style.textShadow = "0 0 20px rgba(233,166,58,.5)";
+    } else {
+      cause.textContent =
+        me.causeOfDeath ?? (winner ? winner.name + " OUTLASTED THE TABLE" : "THE HOUSE OUTLASTED YOU.");
+      cause.style.color = "";
+      cause.style.textShadow = "";
+    }
+
+    $("leaderboard").innerHTML =
+      `<table>
+         <tr><th class="num">#</th><th>DEGENERATE</th><th class="num">SCORE</th>
+             <th class="num">HANDS</th><th class="num">WON</th><th class="num">VICES</th></tr>` +
+      ranked
+        .map((p, i) => {
+          const cls =
+            (p.id === snap.winnerId ? "winner " : "") +
+            (p.id === this.myId ? "you " : "") +
+            (p.alive ? "" : "dead");
+          const badge = p.id === snap.winnerId ? "👑 " : p.alive ? "" : "💀 ";
+          return `<tr class="${cls}">
+              <td class="num">${i + 1}</td><td class="who">${badge}${esc(p.name)}</td>
+              <td class="num score">${p.score}</td>
+              <td class="num">${p.stats.handsPlayed}</td><td class="num">${p.stats.handsWon}</td>
+              <td class="num">${p.stats.cigarsSmoked + p.stats.beersDrunk}</td>
+            </tr>`;
+        })
+        .join("") +
+      `</table>`;
+
     $("overStats").innerHTML =
-      `Hands played ......... <b>${me.stats.handsPlayed}</b><br>` +
-      `Peak money ........... <b>${fmtMoney(me.stats.peakMoney)}</b><br>` +
-      `Final money .......... <b>${fmtMoney(me.money)}</b><br>` +
-      `Cigars smoked ........ <b>${me.stats.cigarsSmoked}</b><br>` +
-      `Beers drunk .......... <b>${me.stats.beersDrunk}</b><br>` +
-      `Litter on the floor .. <b>${this.snap?.debris.length ?? 0}</b><br>` +
-      `Time survived ........ <b>${fmtTime(this.snap?.elapsed ?? 0)}</b>`;
-    $("overScreen").classList.add("active");
+      `Peak money <b>${fmtMoney(me.stats.peakMoney)}</b> · Final <b>${fmtMoney(me.money)}</b> · ` +
+      `Litter on the floor <b>${snap.debris.length}</b> · Survived <b>${fmtTime(snap.elapsed)}</b>`;
+
+    const amLeader = snap.leaderId === this.myId;
+    ($("retryBtn") as HTMLButtonElement).disabled = !amLeader;
+    $("retryHint").textContent = amLeader
+      ? "Back to the lobby. Everyone resets. The filth stays."
+      : "The leader decides when to run it back.";
   }
 
   private moneyFrame(): void {

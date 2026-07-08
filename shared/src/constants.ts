@@ -33,9 +33,14 @@ export const MAX_FLING_SPEED = 12;
 /* littering payout: a fresh empty (straight from a ritual, not scavenged
    off the floor) rolls once when it settles — sometimes the filth pays */
 export const MONEY_DROP_CHANCE = 0.06;
-/* every earned empty scores points when it settles (the full scoring system
-   — round wins, vices, etc. — comes later; the litter hook lands first) */
+/* every earned empty scores points when it settles */
 export const LITTER_POINTS = 25;
+
+/* ---- scoring: the leaderboard currency. Rounds gambled pay, winning pays
+   more, vices and littering pay — dying just stops the meter running. */
+export const SCORE_HAND_PLAYED = 10;
+export const SCORE_HAND_WON = 25; // on top of SCORE_HAND_PLAYED
+export const SCORE_VICE = 15; // per cigar smoked / beer drunk
 export const MONEY_DROP_MIN = 5;
 export const MONEY_DROP_MAX = 25;
 /* pickup range, from the seat's eye. Effectively room-wide: you're stuck on

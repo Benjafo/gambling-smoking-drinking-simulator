@@ -18,7 +18,12 @@ const ME = "p1";
 sim.applyIntent(ME, { type: "join", name: "TESTER" });
 let snap = sim.snapshot();
 assert(snap.players.length === 1, "player joined");
-assert(snap.phase === "betting", "room enters betting");
+assert(snap.phase === "lobby", "room waits in the lobby");
+assert(snap.leaderId === ME, "first joiner leads the lobby");
+
+sim.applyIntent(ME, { type: "startGame" });
+snap = sim.snapshot();
+assert(snap.phase === "betting", "leader start enters betting");
 
 sim.applyIntent(ME, { type: "setBet", amount: 100 });
 sim.applyIntent(ME, { type: "commitBet" });
