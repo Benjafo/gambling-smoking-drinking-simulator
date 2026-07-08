@@ -33,8 +33,27 @@ Multiplayer (same machine):
 
 ```sh
 npm run server       # websocket room on :8081
-npm run dev          # then open http://localhost:5173/?server=ws://localhost:8081
+npm run dev          # then open http://localhost:5173/?server=auto
 ```
+
+`?server=auto` dials `ws://<the page's host>:8081`, so the same URL works
+from any machine. Also accepted: `?server=8090` (port on the page's host)
+and a full `?server=ws://host:port`. Beware `ws://localhost:8081` on another
+machine: that's the *other machine's* localhost. If the table can't be
+reached, DEAL ME IN stays disabled and the title screen says why.
+
+Multiplayer across two machines on your LAN (second machine joins the same
+room; `?name=` skips typing a name):
+
+```sh
+npm run server
+npm run dev -- --host        # vite must listen beyond localhost
+# this machine:   http://localhost:5173/?server=auto
+# other machine:  http://<this-machine-ip>:5173/?server=auto&name=BOB
+```
+
+(The docker dev profile already runs vite with `--host`, so with
+`docker compose --profile dev up` the same two URLs work as-is.)
 
 Checks:
 
@@ -69,7 +88,7 @@ docker compose --profile dev up --build
 ```
 
 - `http://localhost:5173` — vite dev server (single player).
-- `http://localhost:5173/?server=ws://localhost:8081` — multiplayer.
+- `http://localhost:5173/?server=auto` — multiplayer.
 
 ## Controls
 

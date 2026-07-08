@@ -4,6 +4,8 @@
 export const TICK_RATE = 60;
 export const TICK_DT = 1 / TICK_RATE;
 export const SNAPSHOT_EVERY_TICKS = 3; // 20 Hz
+/* default room port: the server binds it, ?server=auto dials it */
+export const WS_PORT_DEFAULT = 8081;
 
 export const START_MONEY = 1000;
 export const METER_MAX = 100;
@@ -33,8 +35,16 @@ export const MAX_FLING_SPEED = 12;
 /* littering payout: a fresh empty (straight from a ritual, not scavenged
    off the floor) rolls once when it settles — sometimes the filth pays */
 export const MONEY_DROP_CHANCE = 0.06;
-/* every earned empty scores points when it settles */
+/* every earned empty scores points, landing a beat after its first impact —
+   mid-clatter, not when it finally stops rolling */
 export const LITTER_POINTS = 25;
+export const LITTER_IMPACT_DELAY_MS = 250;
+
+/* head-tracking limits: the camera clamps here and the sim re-clamps
+   whatever clients report */
+export const LOOK_YAW_LIMIT = 1.45;
+export const LOOK_PITCH_MIN = -0.5;
+export const LOOK_PITCH_MAX = 0.35;
 
 /* ---- scoring: the leaderboard currency. Rounds gambled pay, winning pays
    more, vices and littering pay — dying just stops the meter running. */

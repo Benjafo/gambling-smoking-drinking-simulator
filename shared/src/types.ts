@@ -38,6 +38,9 @@ export interface PlayerSnap {
   beerInv: number;
   ritual: { kind: ViceKind; progress: number } | null;
   held: { id: number; kind: ViceKind } | null;
+  /* where this player's camera is pointed, relative to facing the table
+     center — drives the avatar's head on everyone else's screen */
+  look: { yaw: number; pitch: number };
   alive: boolean;
   /* joined mid-run: spectates until the next game starts */
   waiting: boolean;
@@ -95,6 +98,7 @@ export type Intent =
   | { type: "consumeCancel" }
   | { type: "fling"; itemId: number; origin: V3; vel: V3; angVel: V3 }
   | { type: "pickup"; itemId: number }
+  | { type: "look"; yaw: number; pitch: number }
   | { type: "restart" };
 
 /* transport-level messages (worker postMessage and websocket share these) */

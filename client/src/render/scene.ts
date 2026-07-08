@@ -7,6 +7,9 @@ import {
   SEAT_COUNT,
   DEALER_POS,
   REACH_RADIUS,
+  LOOK_YAW_LIMIT,
+  LOOK_PITCH_MIN,
+  LOOK_PITCH_MAX,
   seatAngle,
   seatPosition,
   seatEye,
@@ -36,6 +39,41 @@ import { updateTweens, tween, easeInOut } from "./tween";
 const CENTER = new THREE.Vector3(0, TABLE.height + 0.05, 0);
 const SHOE_POS = new THREE.Vector3(0.72, TABLE.height + 0.09, -0.78);
 
+/* another player's presence at the table: their figure, the head that
+   tracks where they're looking, and whatever vice is in their hand */
+interface AvatarView {
+  seat: number;
+  group: THREE.Group;
+  head: THREE.Group;
+  prop: THREE.Group | null;
+  propKey: string | null; // "ritual:beer" | "held:cigar" | …
+  lastProgress: number;
+  targetYaw: number;
+  targetPitch: number;
+}
+
+const UP = new THREE.Vector3(0, 1, 0);
+const ORIGIN = new THREE.Vector3(0, 0, 0);
+const _dir = new THREE.Vector3();
+const _right = new THREE.Vector3();
+const _q = new THREE.Quaternion();
+const _qParent = new THREE.Quaternion();
+const _m = new THREE.Matrix4();
+
+/* The exact ray a player's camera looks along, given their seat and look
+   offsets: from the seat's eye toward the table center, yawed about
+   world-up, then pitched about the right axis. The local camera and every
+   remote avatar head use THIS same function — that shared math is what
+   makes eye contact land where the looker actually aimed. */
+function lookDir(seat: number, yaw: number, pitch: number, out: THREE.Vector3): THREE.Vector3 {
+  const eye = seatEye(seat);
+  out.set(CENTER.x - eye.x, CENTER.y - eye.y, CENTER.z - eye.z).normalize();
+  out.applyQuaternion(_q.setFromAxisAngle(UP, yaw));
+  _right.crossVectors(out, UP).normalize();
+  out.applyQuaternion(_q.setFromAxisAngle(_right, pitch));
+  return out;
+}
+
 export class SceneView {
   private renderer: THREE.WebGLRenderer;
   private scene = new THREE.Scene();
@@ -43,7 +81,7 @@ export class SceneView {
   private dealerZone: CardZone;
   private playerZones = new Map<string, CardZone>();
   private chipStacks = new Map<string, { group: THREE.Group; bet: number }>();
-  private avatars = new Map<number, THREE.Group>();
+  private avatars = new Map<number, AvatarView>();
   private debrisView: DebrisView;
   private smoke: SmokeSystem;
   private cash: CashBurst;
@@ -64,6 +102,8 @@ export class SceneView {
   private yawOff = 0;
   private pitchOff = 0;
   private looking = false;
+  private lookDirty = false;
+  private lastLookSent = 0;
   private lastPointer = { x: 0, y: 0 };
   private lastFrame = performance.now();
   private latest: Snapshot | null = null;
@@ -127,6 +167,12 @@ export class SceneView {
     const rim = new THREE.PointLight(0xe0522b, 6, 7, 2);
     rim.position.set(-3, 1.6, -2.5);
     this.scene.add(rim);
+
+    // warm den glow hung over the seat ring: the other degenerates are
+    // meant to be SEEN — the fog still swallows the room beyond the table
+    const ring = new THREE.PointLight(0xffd9a0, 9, 7.5, 1.8);
+    ring.position.set(0, 2.35, 0.5);
+    this.scene.add(ring);
 
     // camera-attached fill so held items / ritual ghosts aren't silhouettes
     this.scene.add(this.camera);
@@ -284,20 +330,29 @@ export class SceneView {
   }
 
   private buildDealer(): void {
-    const g = makeFigure(0xd9d2c0, 0x17130d);
-    g.position.set(DEALER_POS.x, 0, DEALER_POS.z);
-    g.lookAt(0, 1.0, 0);
-    this.scene.add(g);
+    const { group } = makeFigure(0xd9d2c0, 0x17130d, { seated: false, hat: 0x1e3a28 });
+    group.position.set(DEALER_POS.x, 0, DEALER_POS.z);
+    group.lookAt(0, 1.0, 0);
+    this.scene.add(group);
   }
 
-  private makeAvatar(seat: number): THREE.Group {
+  private makeAvatar(seat: number): AvatarView {
     const colors = [0x4a3b2a, 0x2c3c60, 0x6a1f1f, 0x24512f, 0x3a3226];
-    const g = makeFigure(colors[seat % colors.length], 0x8a7560);
+    const { group, head } = makeFigure(colors[seat % colors.length], 0x8a7560);
     const p = seatPosition(seat);
-    g.position.set(p.x, 0.28, p.z);
-    g.lookAt(0, 1.0, 0);
-    this.scene.add(g);
-    return g;
+    group.position.set(p.x, 0.28, p.z);
+    group.lookAt(0, 1.0, 0);
+    this.scene.add(group);
+    return {
+      seat,
+      group,
+      head,
+      prop: null,
+      propKey: null,
+      lastProgress: 0,
+      targetYaw: 0,
+      targetPitch: 0,
+    };
   }
 
   /* ---------------- camera ---------------- */
@@ -335,13 +390,12 @@ export class SceneView {
   }
 
   private applyLook(): void {
-    const dir = CENTER.clone().sub(this.camera.position).normalize();
-    const yawQ = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), this.yawOff);
-    dir.applyQuaternion(yawQ);
-    const right = new THREE.Vector3().crossVectors(dir, new THREE.Vector3(0, 1, 0)).normalize();
-    const pitchQ = new THREE.Quaternion().setFromAxisAngle(right, this.pitchOff);
-    dir.applyQuaternion(pitchQ);
-    this.camera.lookAt(this.camera.position.clone().add(dir));
+    const dir = lookDir(this.mySeat, this.yawOff, this.pitchOff, _dir);
+    this.camera.lookAt(
+      this.camera.position.x + dir.x,
+      this.camera.position.y + dir.y,
+      this.camera.position.z + dir.z
+    );
   }
 
   /* ---------------- pointer routing ---------------- */
@@ -388,10 +442,20 @@ export class SceneView {
         return;
       }
       if (this.looking) {
-        this.yawOff = clamp(this.yawOff - (e.clientX - this.lastPointer.x) * 0.003, -0.85, 0.85);
-        this.pitchOff = clamp(this.pitchOff + (e.clientY - this.lastPointer.y) * 0.003, -0.5, 0.35);
+        // wide enough to center the neighboring seats (~74° off-axis)
+        this.yawOff = clamp(
+          this.yawOff - (e.clientX - this.lastPointer.x) * 0.003,
+          -LOOK_YAW_LIMIT,
+          LOOK_YAW_LIMIT
+        );
+        this.pitchOff = clamp(
+          this.pitchOff + (e.clientY - this.lastPointer.y) * 0.003,
+          LOOK_PITCH_MIN,
+          LOOK_PITCH_MAX
+        );
         this.lastPointer = { x: e.clientX, y: e.clientY };
         this.applyLook();
+        this.lookDirty = true; // everyone else gets to watch the head turn
         return;
       }
       this.updateHover(this.ndc(e));
@@ -572,7 +636,7 @@ export class SceneView {
         if (seat !== undefined) {
           const avatar = this.avatars.get(seat);
           if (avatar) {
-            this.scene.remove(avatar);
+            this.scene.remove(avatar.group);
             this.avatars.delete(seat);
           }
         }
@@ -589,8 +653,11 @@ export class SceneView {
         this.cash.emit(new THREE.Vector3(ev.pos.x, ev.pos.y + 0.04, ev.pos.z), ev.amount);
         cashSound();
       } else if (ev.t === "litter") {
-        this.points.emit(new THREE.Vector3(ev.pos.x, ev.pos.y + 0.03, ev.pos.z), ev.points);
-        pointsSound();
+        // your mess, your dopamine — nobody else sees the points pop
+        if (ev.playerId === myId) {
+          this.points.emit(new THREE.Vector3(ev.pos.x, ev.pos.y + 0.03, ev.pos.z), ev.points);
+          pointsSound();
+        }
       } else if (ev.t === "fling") {
         whooshSound();
       } else if (ev.t === "result" && ev.delta > 0) {
@@ -693,12 +760,56 @@ export class SceneView {
     const existing = this.avatars.get(p.seat);
     if (isMe) {
       if (existing) {
-        this.scene.remove(existing);
+        this.scene.remove(existing.group);
         this.avatars.delete(p.seat);
       }
       return;
     }
-    if (!existing) this.avatars.set(p.seat, this.makeAvatar(p.seat));
+    let av = existing;
+    if (!av) {
+      av = this.makeAvatar(p.seat);
+      this.avatars.set(p.seat, av);
+    }
+    av.targetYaw = p.look.yaw;
+    av.targetPitch = p.look.pitch;
+    this.reconcileViceProp(av, p);
+  }
+
+  /* what's in their hand, for everyone to see: mid-ritual the cigar sits at
+     the mouth (puffing smoke as progress accrues) and the bottle tips back
+     with the pour; a finished empty rests in the hand until they fling it */
+  private reconcileViceProp(av: AvatarView, p: PlayerSnap): void {
+    const key = p.ritual ? "ritual:" + p.ritual.kind : p.held ? "held:" + p.held.kind : null;
+    if (key !== av.propKey) {
+      if (av.prop) av.group.remove(av.prop);
+      av.prop = null;
+      av.propKey = key;
+      av.lastProgress = 0;
+      if (key) {
+        av.prop = key.endsWith("beer") ? makeBottleMesh() : makeCigarMesh(key.startsWith("held"));
+        av.group.add(av.prop);
+      }
+    }
+    if (!av.prop) return;
+    if (p.ritual) {
+      const t = p.ritual.progress;
+      if (p.ritual.kind === "beer") {
+        av.prop.position.set(0.13, 1.04 + t * 0.14, 0.21);
+        av.prop.rotation.set(-(0.15 + t * 1.1), 0, 0.15);
+      } else {
+        av.prop.position.set(0.1, 1.17, 0.18);
+        av.prop.rotation.set(-1.1, 0, 0.35);
+        if (t > av.lastProgress && Math.random() < 0.35) {
+          av.group.updateMatrixWorld(true);
+          this.smoke.emit(av.prop.localToWorld(new THREE.Vector3(0, 0.062, 0)));
+        }
+      }
+      av.lastProgress = t;
+    } else {
+      // the spent empty dangles from the hand
+      av.prop.position.set(0.16, 0.88, 0.33);
+      av.prop.rotation.set(0.9, 0, -0.5);
+    }
   }
 
   /* ---------------- frame loop ---------------- */
@@ -708,6 +819,28 @@ export class SceneView {
     this.lastFrame = now;
 
     updateTweens(now);
+
+    // heads ease toward their owner's actual camera ray — reproduced in
+    // world space, so the avatar frame's lean can't skew the gaze
+    const k = Math.min(1, dt * 10);
+    for (const av of this.avatars.values()) {
+      lookDir(av.seat, av.targetYaw, av.targetPitch, _dir);
+      _m.lookAt(_dir, ORIGIN, UP); // basis with +Z along the gaze ray
+      _q.setFromRotationMatrix(_m);
+      av.group.getWorldQuaternion(_qParent).invert();
+      av.head.quaternion.slerp(_qParent.multiply(_q), k);
+    }
+    // share my own look at ~10 Hz, only when it changed
+    if (this.lookDirty && now - this.lastLookSent > 100) {
+      this.lastLookSent = now;
+      this.lookDirty = false;
+      this.send({
+        type: "look",
+        yaw: Math.round(this.yawOff * 100) / 100,
+        pitch: Math.round(this.pitchOff * 100) / 100,
+      });
+    }
+
     if (this.shakeLeft > 0) {
       this.shakeLeft = Math.max(0, this.shakeLeft - dt);
       const k = this.shakeLeft > 0 ? this.shakeLeft / 0.16 : 0;
@@ -731,22 +864,82 @@ export class SceneView {
   }
 }
 
-function makeFigure(shirt: number, skin: number): THREE.Group {
+/* A regular at the table, still built from primitives: slumped torso, arms
+   resting toward the felt, hat, and just enough face to read a stare. The
+   group's +Z is the front (lookAt points it at the table). Everything above
+   the shoulders lives in `head`, pivoted at the neck, so a remote player's
+   look direction turns the whole face, eyes, and hat together. `seated`
+   adds thighs on the stool; the dealer stands, hidden behind the table. */
+function makeFigure(
+  shirt: number,
+  skin: number,
+  opts: { hat?: number; seated?: boolean } = {}
+): { group: THREE.Group; head: THREE.Group } {
   const g = new THREE.Group();
-  const body = new THREE.Mesh(
-    new THREE.CapsuleGeometry(0.17, 0.36, 4, 12),
-    new THREE.MeshStandardMaterial({ color: shirt, roughness: 0.9 })
-  );
+  const shirtMat = new THREE.MeshStandardMaterial({ color: shirt, roughness: 0.9 });
+  const skinMat = new THREE.MeshStandardMaterial({ color: skin, roughness: 0.75 });
+  const darkMat = new THREE.MeshStandardMaterial({ color: opts.hat ?? 0x17130d, roughness: 0.8 });
+
+  const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.17, 0.36, 4, 12), shirtMat);
   body.position.y = 0.85;
+  body.rotation.x = 0.08; // a slump — nobody here sits up straight
   body.castShadow = true;
-  const head = new THREE.Mesh(
-    new THREE.SphereGeometry(0.115, 16, 12),
-    new THREE.MeshStandardMaterial({ color: skin, roughness: 0.75 })
-  );
+  g.add(body);
+
+  const head = new THREE.Group();
   head.position.y = 1.26;
-  head.castShadow = true;
-  g.add(body, head);
-  return g;
+  g.add(head);
+
+  const skull = new THREE.Mesh(new THREE.SphereGeometry(0.115, 16, 12), skinMat);
+  skull.castShadow = true;
+  head.add(skull);
+
+  // eyes: fixed on the table like everything else in their life
+  const eyeGeo = new THREE.SphereGeometry(0.014, 6, 6);
+  const eyeMat = new THREE.MeshStandardMaterial({ color: 0x14100a, roughness: 0.35 });
+  for (const s of [-1, 1]) {
+    const eye = new THREE.Mesh(eyeGeo, eyeMat);
+    eye.position.set(s * 0.042, 0.015, 0.1);
+    head.add(eye);
+  }
+
+  // hat: brim + tapered crown, tipped a touch — silhouette does the work
+  const brim = new THREE.Mesh(new THREE.CylinderGeometry(0.155, 0.155, 0.014, 18), darkMat);
+  brim.position.y = 0.075;
+  const crown = new THREE.Mesh(new THREE.CylinderGeometry(0.078, 0.098, 0.1, 14), darkMat);
+  crown.position.y = 0.13;
+  brim.castShadow = crown.castShadow = true;
+  const hat = new THREE.Group();
+  hat.add(brim, crown);
+  hat.position.y = 0.01;
+  hat.rotation.z = 0.09;
+  head.add(hat);
+
+  // arms slanting from the shoulders down toward the felt, hands at the ends
+  const armGeo = new THREE.CapsuleGeometry(0.048, 0.24, 3, 8);
+  for (const s of [-1, 1]) {
+    const arm = new THREE.Mesh(armGeo, shirtMat);
+    arm.position.set(s * 0.175, 0.945, 0.165);
+    arm.rotation.x = 2.0;
+    arm.rotation.z = s * -0.22;
+    arm.castShadow = true;
+    const hand = new THREE.Mesh(new THREE.SphereGeometry(0.05, 8, 6), skinMat);
+    hand.position.set(s * 0.14, 0.85, 0.33);
+    hand.castShadow = true;
+    g.add(arm, hand);
+  }
+
+  if (opts.seated !== false) {
+    const legGeo = new THREE.CapsuleGeometry(0.065, 0.2, 3, 8);
+    for (const s of [-1, 1]) {
+      const leg = new THREE.Mesh(legGeo, darkMat);
+      leg.position.set(s * 0.085, 0.47, 0.14);
+      leg.rotation.x = 1.35;
+      leg.castShadow = true;
+      g.add(leg);
+    }
+  }
+  return { group: g, head };
 }
 
 function clamp(v: number, lo: number, hi: number): number {

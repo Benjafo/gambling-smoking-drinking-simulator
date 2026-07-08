@@ -1,8 +1,8 @@
 /* Littering rules: an empty flung fresh from a ritual scores litter points
-   and rolls the money payout exactly once when it settles; scavenged
-   (picked-up) litter never pays. There is no auto-drop — the empty stays in
-   hand, blocking the next vice, until the player flings it. Deterministic
-   under the fixed seed.
+   exactly once, a beat after its first impact; the money payout rolls once
+   at settle. Scavenged (picked-up) litter never pays either way. There is
+   no auto-drop — the empty stays in hand, blocking the next vice, until the
+   player flings it. Deterministic under the fixed seed.
    Run with: npm run test:sim */
 import { Simulation } from "../src/sim";
 import {

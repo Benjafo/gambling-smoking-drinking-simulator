@@ -66,6 +66,9 @@ button:focus-visible{outline:2px solid var(--amber);outline-offset:2px}
   padding:12px 18px;text-align:center;width:min(320px,80vw);text-transform:uppercase;
 }
 #nameInput:focus{outline:2px solid var(--amber);outline-offset:2px}
+.conn{font-family:var(--mono);font-size:13px;letter-spacing:.08em;color:var(--ash);min-height:18px;max-width:640px}
+.conn.ok{color:var(--ok)}
+.conn.bad{color:var(--bad)}
 .lobby-list{
   font-family:var(--mono);font-size:16px;min-width:min(420px,86vw);
   background:rgba(0,0,0,.35);border:1px solid #2c2317;border-radius:8px;padding:10px 0;

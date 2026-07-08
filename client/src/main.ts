@@ -9,6 +9,8 @@ const scene = new SceneView(document.getElementById("stage")!, send);
 const hud = new Hud(send);
 const ritual = new RitualControl(send, scene);
 
+transport.onStatus((s) => hud.connection(s, transport.serverUrl));
+
 transport.onSnapshot((snap) => {
   scene.apply(snap, transport.playerId);
   hud.apply(snap, transport.playerId);

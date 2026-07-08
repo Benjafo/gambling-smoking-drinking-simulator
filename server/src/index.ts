@@ -1,6 +1,6 @@
 /* Multiplayer host: the exact same authoritative Simulation the client
    worker runs, behind a websocket. Clients connect with
-   http://localhost:5173/?server=ws://localhost:8081
+   http://<vite host>:5173/?server=auto  (dials ws://<page host>:8081)
    Lobby/matchmaking/persistence layer on later — this is one shared room. */
 import { WebSocketServer, WebSocket } from "ws";
 import { Simulation } from "../../shared/src/sim";

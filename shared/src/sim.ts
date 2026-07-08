@@ -34,6 +34,10 @@ import {
   MAX_DEBRIS,
   MAX_FLING_SPEED,
   LITTER_POINTS,
+  LITTER_IMPACT_DELAY_MS,
+  LOOK_YAW_LIMIT,
+  LOOK_PITCH_MIN,
+  LOOK_PITCH_MAX,
   SCORE_HAND_PLAYED,
   SCORE_HAND_WON,
   SCORE_VICE,
@@ -86,6 +90,9 @@ interface Player {
   /* earned: minted by finishing a ritual, not scavenged off the floor —
      only earned empties are eligible for the settle-time money drop */
   held: { id: number; kind: ViceKind; sinceTick: number; earned: boolean } | null;
+  /* camera direction relative to facing the table center, client-reported */
+  lookYaw: number;
+  lookPitch: number;
   alive: boolean;
   /* joined mid-run: seated but spectating until the next game starts */
   waiting: boolean;
@@ -113,6 +120,10 @@ interface Debris {
      from a ritual). Consumed by the one roll at settle time. */
   owner: string | null;
   earned: boolean;
+  /* litter points arm on the FIRST contact with anything and pay out a beat
+     later (mid-clatter); `touched` makes the arming one-shot */
+  touched: boolean;
+  litterAt: number | null;
 }
 
 interface ScheduledAction {
@@ -146,6 +157,7 @@ export class Simulation {
   runStartTick = 0;
 
   debris = new Map<number, Debris>();
+  private colliderDebris = new Map<number, number>(); // collider handle → debris id
   nextDebrisId = 1;
   private events: SimEvent[] = [];
   private schedule: ScheduledAction[] = [];
@@ -170,7 +182,8 @@ export class Simulation {
     if (!p) return;
 
     // spectators watch; they get their hands back when the next game starts
-    if (p.waiting && intent.type !== "leave" && intent.type !== "restart") return;
+    // (looking around is watching — that stays live)
+    if (p.waiting && !["leave", "restart", "look"].includes(intent.type)) return;
 
     switch (intent.type) {
       case "leave":
@@ -216,6 +229,10 @@ export class Simulation {
       case "pickup":
         this.pickup(p, intent.itemId);
         break;
+      case "look":
+        p.lookYaw = Math.max(-LOOK_YAW_LIMIT, Math.min(LOOK_YAW_LIMIT, intent.yaw));
+        p.lookPitch = Math.max(LOOK_PITCH_MIN, Math.min(LOOK_PITCH_MAX, intent.pitch));
+        break;
       case "restart":
         this.restart(p);
         break;
@@ -249,6 +266,8 @@ export class Simulation {
       beerInv: 3,
       ritual: null,
       held: null,
+      lookYaw: 0,
+      lookPitch: 0,
       alive: true,
       waiting: this.phase !== "lobby",
       causeOfDeath: null,
@@ -622,6 +641,7 @@ export class Simulation {
   ): void {
     const id = this.nextDebrisId++;
     const body = spawnDebrisBody(this.world, kind, origin, vel, angVel);
+    this.colliderDebris.set(body.collider(0).handle, id);
     this.debris.set(id, {
       id,
       kind,
@@ -633,6 +653,8 @@ export class Simulation {
       stillTicks: 0,
       owner,
       earned,
+      touched: false,
+      litterAt: null,
     });
     this.enforceDebrisCap();
   }
@@ -652,7 +674,10 @@ export class Simulation {
   }
 
   private removeDebris(d: Debris): void {
-    if (d.body) this.world.removeRigidBody(d.body);
+    if (d.body) {
+      this.colliderDebris.delete(d.body.collider(0).handle);
+      this.world.removeRigidBody(d.body);
+    }
     this.debris.delete(d.id);
   }
 
@@ -752,9 +777,21 @@ export class Simulation {
   private stepPhysics(): void {
     this.world.step(this.eventQueue);
 
-    // impact events for sound, throttled
     this.eventQueue.drainCollisionEvents((h1, h2, started) => {
-      if (!started || this.tick - this.lastImpactTick < 4) return;
+      if (!started) return;
+      // first contact with ANYTHING (felt, floor, rim, other debris) arms
+      // the litter payout — one-shot per flung empty
+      for (const h of [h1, h2]) {
+        const id = this.colliderDebris.get(h);
+        const d = id === undefined ? undefined : this.debris.get(id);
+        if (d && !d.touched) {
+          d.touched = true;
+          if (d.earned && d.owner)
+            d.litterAt = this.tick + msTicks(LITTER_IMPACT_DELAY_MS);
+        }
+      }
+      // impact events for sound, throttled
+      if (this.tick - this.lastImpactTick < 4) return;
       const c1 = this.world.getCollider(h1);
       const c2 = this.world.getCollider(h2);
       const body = c1?.parent() ?? c2?.parent();
@@ -768,6 +805,10 @@ export class Simulation {
     });
 
     for (const d of [...this.debris.values()]) {
+      if (d.litterAt !== null && this.tick >= d.litterAt) {
+        d.litterAt = null;
+        this.scoreLitter(d);
+      }
       if (d.phase !== "flying" || !d.body) continue;
       let t = d.body.translation();
       const r = d.body.rotation();
@@ -807,17 +848,23 @@ export class Simulation {
     }
   }
 
-  /* littering rewards, rolled exactly once when an earned empty first
-     settles — the pickup→refling loop can't be farmed. Every earned settle
-     scores litter points (the flat feedback hook for the future scoring
-     system); the money drop stays a rare variable-ratio bonus on top. */
+  /* litter points land a beat after the empty's first impact (armed in the
+     collision handler above) — earned empties only, exactly once, so the
+     pickup→refling loop still can't be farmed */
+  private scoreLitter(d: Debris): void {
+    const p = d.owner ? this.players.get(d.owner) : null;
+    if (!p || !p.alive) return;
+    this.events.push({ t: "litter", playerId: p.id, pos: { ...d.pos }, points: LITTER_POINTS });
+    p.score += LITTER_POINTS;
+  }
+
+  /* the money drop stays a rare variable-ratio bonus rolled once at settle —
+     sometimes the filth pays, but only after it has come to rest */
   private rollMoneyDrop(d: Debris): void {
     if (!d.earned) return;
     d.earned = false;
     const p = d.owner ? this.players.get(d.owner) : null;
     if (!p || !p.alive) return;
-    this.events.push({ t: "litter", playerId: p.id, pos: { ...d.pos }, points: LITTER_POINTS });
-    p.score += LITTER_POINTS;
     if (this.rng.next() >= MONEY_DROP_CHANCE) return;
     const amount = Math.round(this.rng.range(MONEY_DROP_MIN, MONEY_DROP_MAX));
     this.setMoney(p, p.money + amount);
@@ -853,6 +900,10 @@ export class Simulation {
           }
         : null,
       held: p.held ? { id: p.held.id, kind: p.held.kind } : null,
+      look: {
+        yaw: Math.round(p.lookYaw * 100) / 100,
+        pitch: Math.round(p.lookPitch * 100) / 100,
+      },
       alive: p.alive,
       waiting: p.waiting,
       causeOfDeath: p.causeOfDeath,

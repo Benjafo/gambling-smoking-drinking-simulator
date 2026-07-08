@@ -1,11 +1,3 @@
-# Production:   docker compose --profile prod up --build
-# Hot reload:   docker compose --profile dev up --build
-#
-# The dev profile bind-mounts the repo into both containers, so edits on the
-# host apply immediately: tsx watch restarts the websocket room, vite HMR
-# patches the browser. The anonymous volumes mask every node_modules dir so
-# the Linux-native binaries installed in the image (esbuild etc.) aren't
-# shadowed by the host's macOS ones.
 services:
   server:
     profiles: ["prod"]
@@ -39,6 +31,7 @@ services:
       - "8081:8081"
     environment:
       - PORT=8081
+      - CHOKIDAR_USEPOLLING=1
     volumes:
       - .:/app
       - /app/node_modules

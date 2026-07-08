@@ -3,6 +3,7 @@
 import { MIN_BET } from "@shared/constants";
 import { handValue } from "@shared/blackjack";
 import type { Intent, PlayerSnap, Snapshot } from "@shared/types";
+import type { ConnStatus } from "../transport";
 
 const $ = (id: string): HTMLElement => document.getElementById(id)!;
 
@@ -138,6 +139,43 @@ export class Hud {
     if (kind === "half") this.setPending(Math.floor(money / 2));
     if (kind === "allin") this.setPending(money);
     if (kind === "rebet") this.setPending(this.me?.lastBet ?? 0);
+  }
+
+  /* ---------------- connection status ---------------- */
+  /* the join button only works with a live table behind it — a dead socket
+     rendering default state looks exactly like a real game otherwise */
+  connection(status: ConnStatus, url: string | null): void {
+    const el = $("connStatus");
+    const btn = $("startBtn") as HTMLButtonElement;
+    switch (status) {
+      case "connecting":
+        btn.disabled = true;
+        el.className = "conn";
+        el.textContent = url ? `CONNECTING TO ${url} …` : "WARMING UP THE TABLE…";
+        break;
+      case "open":
+        btn.disabled = false;
+        el.className = "conn ok";
+        el.textContent = url ? `TABLE FOUND — ${url}` : "PRIVATE TABLE — SINGLE PLAYER";
+        break;
+      case "unreachable":
+        btn.disabled = true;
+        el.className = "conn bad";
+        el.textContent =
+          `NO TABLE AT ${url}. Is the server running there? ` +
+          `Tip: ?server=auto dials ws://<this page's host>:8081.`;
+        break;
+      case "lost":
+        // the game state left with the socket — back to the door, honestly
+        btn.disabled = true;
+        el.className = "conn bad";
+        el.textContent = "CONNECTION TO THE TABLE LOST — refresh to rejoin.";
+        $("hud").classList.remove("active");
+        $("lobbyScreen").classList.remove("active");
+        $("overScreen").classList.remove("active");
+        $("titleScreen").classList.add("active");
+        break;
+    }
   }
 
   /* ---------------- snapshot → DOM ---------------- */

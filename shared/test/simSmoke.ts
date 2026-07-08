@@ -25,6 +25,16 @@ sim.applyIntent(ME, { type: "startGame" });
 snap = sim.snapshot();
 assert(snap.phase === "betting", "leader start enters betting");
 
+// look direction: mirrored to snapshots, clamped server-side
+sim.applyIntent(ME, { type: "look", yaw: 9, pitch: -9 });
+snap = sim.snapshot();
+assert(
+  snap.players[0].look.yaw === 1.45 && snap.players[0].look.pitch === -0.5,
+  "look intent mirrored and clamped"
+);
+sim.applyIntent(ME, { type: "look", yaw: 0.4, pitch: 0.1 });
+assert(sim.snapshot().players[0].look.yaw === 0.4, "look tracks in real time");
+
 sim.applyIntent(ME, { type: "setBet", amount: 100 });
 sim.applyIntent(ME, { type: "commitBet" });
 snap = sim.snapshot();
@@ -81,11 +91,19 @@ snap = sim.snapshot();
 assert(snap.players[0].held === null, "hand empty after fling");
 assert(snap.debris.length === 1 && snap.debris[0].phase === "flying", "debris body flying");
 
-// let physics run until it settles
+// let physics run until it settles; the litter payout must land mid-clatter
+// (a beat after first impact), NOT at settle
 let settled = false;
+let litterWhileFlying = false;
+let litterSeen = false;
 for (let i = 0; i < 60 * 20; i++) {
   sim.step();
-  const d = sim.snapshot().debris[0];
+  const s = sim.snapshot();
+  const d = s.debris[0];
+  if (s.events.some((e) => e.t === "litter")) {
+    litterSeen = true;
+    litterWhileFlying = !!d && d.phase === "flying";
+  }
   if (d && d.phase === "settled") {
     settled = true;
     break;
@@ -93,6 +111,8 @@ for (let i = 0; i < 60 * 20; i++) {
 }
 snap = sim.snapshot();
 assert(settled, "debris settled and froze");
+assert(litterSeen, "earned fling scored litter points");
+assert(litterWhileFlying, "litter fires shortly after first impact, before settling");
 assert(snap.debris[0].pos.y > -5, "debris rests in-bounds at y=" + snap.debris[0].pos.y.toFixed(2));
 
 // pick the settled butt back up — it landed across the room, still in reach
