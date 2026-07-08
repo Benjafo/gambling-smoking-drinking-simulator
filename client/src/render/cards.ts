@@ -47,13 +47,15 @@ function faceTexture(card: Card): THREE.CanvasTexture {
   ctx.fillText(card.r, 62, 92);
   ctx.font = "72px Georgia, serif";
   ctx.fillText(card.s, 62, 164);
+  // exact 180° mirror of the top-left index (baselines 92/164 from the top
+  // edge) — offsets beyond that push the rank glyph past the canvas bottom
   ctx.save();
   ctx.translate(194, 280);
   ctx.rotate(Math.PI);
   ctx.font = "700 96px Georgia, serif";
-  ctx.fillText(card.r, 0, -72);
+  ctx.fillText(card.r, 0, 0);
   ctx.font = "72px Georgia, serif";
-  ctx.fillText(card.s, 0, 0);
+  ctx.fillText(card.s, 0, 72);
   ctx.restore();
   ctx.font = "140px Georgia, serif";
   ctx.fillText(card.s, 172, 330);
@@ -147,6 +149,11 @@ export class CardZone {
   private badgeText: string | null = null;
   private badgeOffset: THREE.Vector3;
   private badgeScale: number;
+  /* deals/flips in flight: the total pill must not spoil a card that hasn't
+     turned over yet, so badge updates wait for the animations to finish */
+  private animating = 0;
+  private pendingBadge: string | null = null;
+  private badgeDirty = false;
   constructor(
     private scene: THREE.Scene,
     private anchor: THREE.Vector3,
@@ -174,9 +181,26 @@ export class CardZone {
     return p;
   }
 
+  private beginAnim(): void {
+    this.animating++;
+  }
+
+  private endAnim(): void {
+    this.animating = Math.max(0, this.animating - 1);
+    if (this.animating === 0 && this.badgeDirty) this.applyBadge(this.pendingBadge);
+  }
+
   /* floating total pill above the hand — readable at any distance, and in
-     multiplayer it's how you read the table at a glance */
+     multiplayer it's how you read the table at a glance. Deferred while
+     cards are still flying/flipping: the reveal comes before the arithmetic. */
   setBadge(text: string | null): void {
+    this.pendingBadge = text;
+    if (this.animating === 0) this.applyBadge(text);
+    else this.badgeDirty = true;
+  }
+
+  private applyBadge(text: string | null): void {
+    this.badgeDirty = false;
     if (text === this.badgeText) return;
     this.badgeText = text;
     if (this.badge) {
@@ -247,6 +271,7 @@ export class CardZone {
 
     const from = this.shoePos.clone();
     const lift = 0.28;
+    this.beginAnim();
     tween({
       duration: 420,
       update: (t) => {
@@ -255,13 +280,17 @@ export class CardZone {
       },
       done: () => {
         obj.group.position.copy(target);
+        // start the flip before releasing the deal: the badge hold must
+        // span both animations without a gap
         if (!faceDown) this.flip(obj);
+        this.endAnim();
       },
     });
   }
 
   private flip(obj: CardObj): void {
     obj.faceUp = true;
+    this.beginAnim();
     const base = obj.group.position.clone();
     const tense = this.tension > 0;
     const hang = tense ? 450 : 0; // the card lifts... and hovers
@@ -286,6 +315,7 @@ export class CardZone {
       done: () => {
         obj.inner.rotation.y = 0;
         obj.group.position.y = base.y;
+        this.endAnim();
       },
     });
   }
@@ -293,6 +323,8 @@ export class CardZone {
   clear(): void {
     for (const c of this.cards) this.scene.remove(c.group);
     this.cards = [];
-    this.setBadge(null);
+    // a cleared hand hides its pill immediately — nothing left to spoil
+    this.pendingBadge = null;
+    this.applyBadge(null);
   }
 }

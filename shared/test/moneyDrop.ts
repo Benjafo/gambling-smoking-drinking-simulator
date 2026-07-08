@@ -1,13 +1,15 @@
-/* Money-drop rules: an empty flung fresh from a ritual rolls the payout
-   exactly once when it settles; scavenged (picked-up) litter and auto-dropped
-   items never pay. Deterministic under the fixed seed.
+/* Littering rules: an empty flung fresh from a ritual scores litter points
+   and rolls the money payout exactly once when it settles; scavenged
+   (picked-up) litter never pays. There is no auto-drop — the empty stays in
+   hand, blocking the next vice, until the player flings it. Deterministic
+   under the fixed seed.
    Run with: npm run test:sim */
 import { Simulation } from "../src/sim";
 import {
+  LITTER_POINTS,
   MONEY_DROP_MIN,
   MONEY_DROP_MAX,
   START_MONEY,
-  HELD_AUTODROP_MS,
 } from "../src/constants";
 import type { Snapshot } from "../src/types";
 
@@ -24,9 +26,13 @@ const ME = "p1";
 
 /* snapshot() drains the event queue, so every snapshot flows through here */
 const drops: { amount: number }[] = [];
+const litters: { points: number }[] = [];
 function snap(): Snapshot {
   const s = sim.snapshot();
-  for (const ev of s.events) if (ev.t === "moneyDrop") drops.push({ amount: ev.amount });
+  for (const ev of s.events) {
+    if (ev.t === "moneyDrop") drops.push({ amount: ev.amount });
+    if (ev.t === "litter") litters.push({ points: ev.points });
+  }
   return s;
 }
 
@@ -83,6 +89,11 @@ for (let i = 0; i < CYCLES; i++) {
 }
 console.log(`     ${drops.length} drops over ${CYCLES} earned flings`);
 assert(drops.length >= 1, "at least one money drop over " + CYCLES + " earned flings");
+assert(litters.length === CYCLES, "every earned fling scored litter points exactly once");
+assert(
+  litters.every((l) => l.points === LITTER_POINTS),
+  "litter events carry LITTER_POINTS"
+);
 assert(
   drops.every((d) => d.amount >= MONEY_DROP_MIN && d.amount <= MONEY_DROP_MAX),
   "drop amounts within [MIN, MAX]"
@@ -103,7 +114,7 @@ for (let i = 0; i < 8; i++) {
   flingHeld(upkeep.id);
   stepUntilAllSettled();
 
-  const before = { count: drops.length, money: me().money };
+  const before = { count: drops.length, litters: litters.length, money: me().money };
   const target = snap().debris.find((d) => d.phase === "settled");
   assert(target !== undefined, "settled litter available to scavenge");
   sim.applyIntent(ME, { type: "pickup", itemId: target!.id });
@@ -113,25 +124,26 @@ for (let i = 0; i < 8; i++) {
   flingHeld(held!.id);
   stepUntilAllSettled();
   assert(drops.length === before.count, "re-flung floor litter never rolls a drop");
+  assert(litters.length === before.litters, "re-flung floor litter scores no points");
   assert(me().money === before.money, "no money credited for the scavenged fling");
 }
 
-/* ---- auto-dropped earned empties don't pay either ---- */
-{
-  const upkeep = ritualUntilHeld(); // top up before the 5s timeout wait
-  flingHeld(upkeep.id);
-  stepUntilAllSettled();
-}
-const preAuto = { count: drops.length, money: me().money, spent };
-ritualUntilHeld(); // hold it and let it time out
-for (let i = 0; i < (HELD_AUTODROP_MS / 1000) * 60 + 30; i++) sim.step();
-assert(me().held === null, "held empty auto-dropped after timeout");
-stepUntilAllSettled();
-assert(drops.length === preAuto.count, "auto-dropped empty never rolls a drop");
+/* ---- no auto-drop: the empty stays in hand until the player deals with it,
+   and hands-full blocks the next ritual ---- */
+const heldForever = ritualUntilHeld();
+for (let i = 0; i < 60 * 10; i++) sim.step(); // 10 simulated seconds
 assert(
-  me().money === preAuto.money - (spent - preAuto.spent),
-  "no money credited for the auto-drop"
+  me().held !== null && me().held!.id === heldForever.id,
+  "held empty persists indefinitely — no auto-drop"
 );
+sim.applyIntent(ME, { type: "buy", item: "cigar", qty: 1 });
+spent += snap().cigarPrice;
+sim.applyIntent(ME, { type: "consumeStart", kind: "cigar" });
+sim.step();
+assert(me().ritual === null, "ritual refused while holding an empty");
+flingHeld(heldForever.id);
+stepUntilAllSettled();
+assert(me().held === null, "fling finally clears the hand");
 
 assert(me().alive, "player survived the whole test (assertions weren't vacuous)");
 

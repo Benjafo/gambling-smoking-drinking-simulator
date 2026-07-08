@@ -26,7 +26,6 @@ import {
   BEER_PRICE_0,
   INFLATE_EVERY_HANDS,
   RITUAL_MS,
-  HELD_AUTODROP_MS,
   DEAL_STEP_MS,
   DEALER_DRAW_MS,
   RESULT_PAUSE_MS,
@@ -34,11 +33,13 @@ import {
   ACT_TIMEOUT_MS,
   MAX_DEBRIS,
   MAX_FLING_SPEED,
+  LITTER_POINTS,
   MONEY_DROP_CHANCE,
   MONEY_DROP_MIN,
   MONEY_DROP_MAX,
   REACH_RADIUS,
   SEAT_COUNT,
+  TABLE,
   seatEye,
   type V3,
 } from "./constants";
@@ -343,19 +344,28 @@ export class Simulation {
     this.dealerPlay();
   }
 
+  /* delayed advances are guarded: if anything else already moved the turn
+     (a second click, the AFK timeout, the player leaving), a stale scheduled
+     advance must not fire again and skip the next player's turn */
+  private advanceLater(delayTicks: number, from: Player): void {
+    this.later(delayTicks, () => {
+      if (this.turnPlayerId === from.id) this.advanceTurn();
+    });
+  }
+
   private hit(p: Player): void {
     if (this.phase !== "acting" || this.turnPlayerId !== p.id) return;
     if (p.stood || handValue(p.hand).total >= 21) return;
     p.hand.push(this.draw());
     this.turnDeadline = this.tick + msTicks(ACT_TIMEOUT_MS);
-    if (handValue(p.hand).total >= 21) this.later(msTicks(750), () => this.advanceTurn());
+    if (handValue(p.hand).total >= 21) this.advanceLater(msTicks(750), p);
   }
 
   private stand(p: Player): void {
-    if (this.phase !== "acting" || this.turnPlayerId !== p.id) return;
+    if (this.phase !== "acting" || this.turnPlayerId !== p.id || p.stood) return;
     // stood=true makes the turn holder inert until advanceTurn scans past them
     p.stood = true;
-    this.later(msTicks(300), () => this.advanceTurn());
+    this.advanceLater(msTicks(300), p);
   }
 
   private double(p: Player): void {
@@ -371,7 +381,7 @@ export class Simulation {
     p.doubled = true;
     p.hand.push(this.draw());
     p.stood = true;
-    this.later(msTicks(750), () => this.advanceTurn());
+    this.advanceLater(msTicks(750), p);
   }
 
   private dealerPlay(): void {
@@ -486,7 +496,9 @@ export class Simulation {
   }
 
   private consumeStart(p: Player, kind: ViceKind): void {
-    if (!p.alive || p.ritual) return;
+    // hands full blocks the next vice: the empty never drops itself — you
+    // fling it or you stay thirsty. Litter is the player's problem.
+    if (!p.alive || p.ritual || p.held) return;
     if (kind === "cigar" && p.cigarInv < 1) return;
     if (kind === "beer" && p.beerInv < 1) return;
     p.ritual = { kind, progressTicks: 0, engaged: false };
@@ -506,7 +518,7 @@ export class Simulation {
       p.stats.beersDrunk++;
       p.beerMeter = METER_MAX; // drained to the last drop
     }
-    if (p.held) this.autoDrop(p); // hands full: old empty tumbles off
+    // hands are guaranteed empty here: consumeStart refuses while holding
     p.held = { id: this.nextDebrisId++, kind, sinceTick: this.tick, earned: true };
   }
 
@@ -583,9 +595,15 @@ export class Simulation {
 
   private enforceDebrisCap(): void {
     if (this.debris.size <= MAX_DEBRIS) return;
+    // prefer evicting settled scenery, but never exceed the cap: the renderer
+    // draws at most MAX_DEBRIS instances, so overflow would be invisible yet
+    // still collidable
     let oldest: Debris | null = null;
     for (const d of this.debris.values())
       if (d.phase === "settled" && (!oldest || d.bornTick < oldest.bornTick)) oldest = d;
+    if (!oldest)
+      for (const d of this.debris.values())
+        if (!oldest || d.bornTick < oldest.bornTick) oldest = d;
     if (oldest) this.removeDebris(oldest);
   }
 
@@ -659,8 +677,6 @@ export class Simulation {
         if (p.ritual.progressTicks >= msTicks(RITUAL_MS[p.ritual.kind])) this.completeRitual(p);
       }
 
-      if (p.held && this.tick - p.held.sinceTick > msTicks(HELD_AUTODROP_MS)) this.autoDrop(p);
-
       if (p.cigarMeter <= 0) this.eliminate(p, "DIED OF SOBRIETY (CIGAR WITHDRAWAL)");
       else if (p.beerMeter <= 0) this.eliminate(p, "DIED OF SOBRIETY (DEHYDRATION BY SOBRIETY)");
     }
@@ -700,8 +716,21 @@ export class Simulation {
 
     for (const d of [...this.debris.values()]) {
       if (d.phase !== "flying" || !d.body) continue;
-      const t = d.body.translation();
+      let t = d.body.translation();
       const r = d.body.rotation();
+      // safety net: a body detected inside the solid tabletop slab has
+      // tunneled (rare residual even with cuboid planks + CCD) — pop it
+      // back onto the felt instead of letting it visibly sink through
+      if (
+        Math.hypot(t.x, t.z) < TABLE.radius - 0.05 &&
+        t.y > 0.15 &&
+        t.y < TABLE.height - 0.05
+      ) {
+        const lv = d.body.linvel();
+        d.body.setTranslation({ x: t.x, y: TABLE.height + 0.03, z: t.z }, true);
+        d.body.setLinvel({ x: lv.x, y: Math.max(0, lv.y), z: lv.z }, true);
+        t = d.body.translation();
+      }
       d.pos = { x: t.x, y: t.y, z: t.z };
       d.rot = { x: r.x, y: r.y, z: r.z, w: r.w };
       if (t.y < -5) {
@@ -725,13 +754,16 @@ export class Simulation {
     }
   }
 
-  /* variable-ratio littering payout: only an earned empty rolls, exactly
-     once, when it first settles — the pickup→refling loop can't be farmed */
+  /* littering rewards, rolled exactly once when an earned empty first
+     settles — the pickup→refling loop can't be farmed. Every earned settle
+     scores litter points (the flat feedback hook for the future scoring
+     system); the money drop stays a rare variable-ratio bonus on top. */
   private rollMoneyDrop(d: Debris): void {
     if (!d.earned) return;
     d.earned = false;
     const p = d.owner ? this.players.get(d.owner) : null;
     if (!p || !p.alive) return;
+    this.events.push({ t: "litter", playerId: p.id, pos: { ...d.pos }, points: LITTER_POINTS });
     if (this.rng.next() >= MONEY_DROP_CHANCE) return;
     const amount = Math.round(this.rng.range(MONEY_DROP_MIN, MONEY_DROP_MAX));
     this.setMoney(p, p.money + amount);

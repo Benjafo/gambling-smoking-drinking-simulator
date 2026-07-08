@@ -149,9 +149,10 @@ export class Hud {
       me.alive && snap.phase !== "over" && (me.cigarMeter < 20 || me.beerMeter < 20)
     );
 
-    // vice items (draggable; RitualControl refuses to start when one is running)
-    const cigarOff = !me.alive || me.cigarInv < 1;
-    const beerOff = !me.alive || me.beerInv < 1;
+    // vice items (draggable; RitualControl refuses to start when one is
+    // running). Holding an empty also blocks: fling your litter first.
+    const cigarOff = !me.alive || me.cigarInv < 1 || me.held !== null;
+    const beerOff = !me.alive || me.beerInv < 1 || me.held !== null;
     $("cigarItem").classList.toggle("disabled", cigarOff);
     $("beerItem").classList.toggle("disabled", beerOff);
     $("cigarItem").setAttribute("aria-disabled", String(cigarOff));

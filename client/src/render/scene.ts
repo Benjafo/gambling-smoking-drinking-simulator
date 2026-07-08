@@ -22,10 +22,12 @@ import { HeldItemControl, makeBottleMesh, makeCigarMesh } from "./held";
 import {
   SmokeSystem,
   CashBurst,
+  PointsBurst,
   impactSound,
   dealSound,
   denySound,
   cashSound,
+  pointsSound,
   whooshSound,
   chipRiffleSound,
 } from "./effects";
@@ -45,6 +47,10 @@ export class SceneView {
   private debrisView: DebrisView;
   private smoke: SmokeSystem;
   private cash: CashBurst;
+  private points: PointsBurst;
+  /* last known seat per player id — needed to clear a departed player's
+     avatar/chips after they vanish from snapshots */
+  private lastSeat = new Map<string, number>();
   held: HeldItemControl;
   private raycaster = new THREE.Raycaster();
 
@@ -85,6 +91,7 @@ export class SceneView {
 
     this.smoke = new SmokeSystem(this.scene);
     this.cash = new CashBurst(this.scene);
+    this.points = new PointsBurst(this.scene);
     this.debrisView = new DebrisView(this.scene);
     this.held = new HeldItemControl(this.scene, this.camera, send);
     this.dealerZone = new CardZone(
@@ -546,14 +553,29 @@ export class SceneView {
       zone.setBadge(
         p.hand.length ? `${hv.soft && hv.total <= 21 ? "soft " : ""}${hv.total}` : null
       );
+      this.lastSeat.set(p.id, p.seat);
       this.reconcileChips(p);
       this.reconcileAvatar(p);
     }
-    // players who left
+    // players who left: sweep their cards, chips, and avatar
     for (const [id, zone] of this.playerZones)
       if (!snap.players.some((p) => p.id === id)) {
         zone.clear();
         this.playerZones.delete(id);
+        const chips = this.chipStacks.get(id);
+        if (chips) {
+          this.scene.remove(chips.group);
+          this.chipStacks.delete(id);
+        }
+        const seat = this.lastSeat.get(id);
+        this.lastSeat.delete(id);
+        if (seat !== undefined) {
+          const avatar = this.avatars.get(seat);
+          if (avatar) {
+            this.scene.remove(avatar);
+            this.avatars.delete(seat);
+          }
+        }
       }
 
     this.debrisView.apply(snap.debris);
@@ -566,6 +588,9 @@ export class SceneView {
       } else if (ev.t === "moneyDrop") {
         this.cash.emit(new THREE.Vector3(ev.pos.x, ev.pos.y + 0.04, ev.pos.z), ev.amount);
         cashSound();
+      } else if (ev.t === "litter") {
+        this.points.emit(new THREE.Vector3(ev.pos.x, ev.pos.y + 0.03, ev.pos.z), ev.points);
+        pointsSound();
       } else if (ev.t === "fling") {
         whooshSound();
       } else if (ev.t === "result" && ev.delta > 0) {
@@ -700,6 +725,7 @@ export class SceneView {
     this.held.frame(dt);
     this.smoke.frame(dt);
     this.cash.frame(dt);
+    this.points.frame(dt);
     this.renderer.render(this.scene, this.camera);
     requestAnimationFrame(() => this.frame());
   }

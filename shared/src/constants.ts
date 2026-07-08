@@ -21,7 +21,6 @@ export const BEER_PRICE_0 = 10;
 export const INFLATE_EVERY_HANDS = 10;
 
 export const RITUAL_MS: Record<"cigar" | "beer", number> = { cigar: 2500, beer: 2000 };
-export const HELD_AUTODROP_MS = 5000;
 
 export const DEAL_STEP_MS = 600;
 export const DEALER_DRAW_MS = 850;
@@ -34,6 +33,9 @@ export const MAX_FLING_SPEED = 12;
 /* littering payout: a fresh empty (straight from a ritual, not scavenged
    off the floor) rolls once when it settles — sometimes the filth pays */
 export const MONEY_DROP_CHANCE = 0.06;
+/* every earned empty scores points when it settles (the full scoring system
+   — round wins, vices, etc. — comes later; the litter hook lands first) */
+export const LITTER_POINTS = 25;
 export const MONEY_DROP_MIN = 5;
 export const MONEY_DROP_MAX = 25;
 /* pickup range, from the seat's eye. Effectively room-wide: you're stuck on

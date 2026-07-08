@@ -29,19 +29,30 @@ export function createWorld(): RAPIER.World {
       .setRestitution(0.3)
   );
 
-  // table top: felt, deadens bounces
-  world.createCollider(
-    RAPIER.ColliderDesc.cylinder(0.04, TABLE.radius)
-      .setTranslation(0, TABLE.height - 0.04, 0)
-      .setFriction(0.9)
-      .setRestitution(0.05)
-  );
+  // table top: felt, deadens bounces. NOT a cylinder collider — Rapier's
+  // analytic cylinder generates single-point contact manifolds against thin
+  // capsules, which let resting debris embed and slowly sink through the
+  // slab (measured: 4.5% of hard flings fell through). Eight overlapping
+  // rotated planks give polygon-clipped cuboid contacts with coplanar tops.
+  const PLANKS = 8;
+  const feltHalfThick = 0.35;
+  for (let i = 0; i < PLANKS; i++) {
+    const rot = (i / PLANKS) * Math.PI;
+    world.createCollider(
+      RAPIER.ColliderDesc.cuboid(TABLE.radius, feltHalfThick, 0.34)
+        .setTranslation(0, TABLE.height - feltHalfThick, 0)
+        .setRotation({ x: 0, y: Math.sin(rot / 2), z: 0, w: Math.cos(rot / 2) })
+        .setFriction(0.9)
+        .setRestitution(0.05)
+    );
+  }
 
   // wooden rim approximated by 14 cuboid segments around the edge
   const SEGS = 14;
   for (let i = 0; i < SEGS; i++) {
     const a = (i / SEGS) * Math.PI * 2;
     const halfLen = (Math.PI * TABLE.rimRadius) / SEGS + 0.02;
+    // long axis rotated to the tangent at angle a (from +z toward +x)
     world.createCollider(
       RAPIER.ColliderDesc.cuboid(halfLen, TABLE.rimTube, TABLE.rimTube)
         .setTranslation(
@@ -49,7 +60,7 @@ export function createWorld(): RAPIER.World {
           TABLE.height + TABLE.rimTube * 0.6,
           Math.cos(a) * TABLE.rimRadius
         )
-        .setRotation({ x: 0, y: Math.sin((a + Math.PI / 2) / 2), z: 0, w: Math.cos((a + Math.PI / 2) / 2) })
+        .setRotation({ x: 0, y: Math.sin(a / 2), z: 0, w: Math.cos(a / 2) })
         .setFriction(0.6)
         .setRestitution(0.2)
     );

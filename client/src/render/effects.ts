@@ -110,6 +110,28 @@ export function chipRiffleSound(): void {
   }
 }
 
+export function pointsSound(): void {
+  const ac = audio();
+  if (!ac) return;
+  // a quick rising triad blip — cheekier and thinner than the cash chime
+  for (const [freq, at] of [
+    [660, 0],
+    [830, 0.05],
+    [990, 0.1],
+  ] as const) {
+    const osc = ac.createOscillator();
+    osc.type = "triangle";
+    osc.frequency.value = freq;
+    const gain = ac.createGain();
+    gain.gain.setValueAtTime(0.0001, ac.currentTime + at);
+    gain.gain.exponentialRampToValueAtTime(0.06, ac.currentTime + at + 0.012);
+    gain.gain.exponentialRampToValueAtTime(0.001, ac.currentTime + at + 0.22);
+    osc.connect(gain).connect(ac.destination);
+    osc.start(ac.currentTime + at);
+    osc.stop(ac.currentTime + at + 0.25);
+  }
+}
+
 export function cashSound(): void {
   const ac = audio();
   if (!ac) return;
@@ -283,6 +305,126 @@ export class CashBurst {
       b.sprite.position.addScaledVector(b.vel, dt);
       const t = b.age / b.life;
       mat.opacity = t < 0.7 ? 1 : 1 - (t - 0.7) / 0.3;
+    }
+  }
+}
+
+/* ---- litter points ---- */
+let sparkTex: THREE.CanvasTexture | null = null;
+function sparkTexture(): THREE.CanvasTexture {
+  if (sparkTex) return sparkTex;
+  const cv = document.createElement("canvas");
+  cv.width = cv.height = 64;
+  const c = cv.getContext("2d")!;
+  // four-point star: two soft crossed lobes over a hot core
+  const g = c.createRadialGradient(32, 32, 2, 32, 32, 30);
+  g.addColorStop(0, "rgba(255,240,190,0.95)");
+  g.addColorStop(0.35, "rgba(232,196,105,0.55)");
+  g.addColorStop(1, "rgba(232,196,105,0)");
+  c.fillStyle = g;
+  c.beginPath();
+  c.moveTo(32, 2);
+  c.quadraticCurveTo(38, 26, 62, 32);
+  c.quadraticCurveTo(38, 38, 32, 62);
+  c.quadraticCurveTo(26, 38, 2, 32);
+  c.quadraticCurveTo(26, 26, 32, 2);
+  c.fill();
+  sparkTex = new THREE.CanvasTexture(cv);
+  return sparkTex;
+}
+
+function pointsTexture(points: number): THREE.CanvasTexture {
+  const cv = document.createElement("canvas");
+  cv.width = 256;
+  cv.height = 96;
+  const c = cv.getContext("2d")!;
+  c.font = "bold 48px monospace";
+  c.textAlign = "center";
+  c.textBaseline = "middle";
+  c.shadowColor = "rgba(255,214,110,0.9)";
+  c.shadowBlur = 16;
+  c.fillStyle = "#ffe9b0";
+  c.fillText(`+${points} PTS`, 128, 48);
+  return new THREE.CanvasTexture(cv);
+}
+
+interface Spark {
+  sprite: THREE.Sprite;
+  vel: THREE.Vector3;
+  life: number;
+  age: number;
+  rise: boolean; // the +N PTS label floats straight up
+}
+
+/* gold sparkle burst + rising "+N PTS" label where litter settles — the
+   visible promise that filth is worth something (scoring system to come) */
+export class PointsBurst {
+  private sparks: Spark[] = [];
+  constructor(private scene: THREE.Scene) {}
+
+  emit(at: THREE.Vector3, points: number): void {
+    for (let i = 0; i < 10; i++) {
+      const mat = new THREE.SpriteMaterial({
+        map: sparkTexture(),
+        transparent: true,
+        depthWrite: false,
+        rotation: Math.random() * Math.PI * 2,
+      });
+      const sprite = new THREE.Sprite(mat);
+      sprite.position.copy(at);
+      sprite.scale.setScalar(0.03 + Math.random() * 0.03);
+      this.scene.add(sprite);
+      const a = Math.random() * Math.PI * 2;
+      this.sparks.push({
+        sprite,
+        vel: new THREE.Vector3(
+          Math.cos(a) * (0.15 + Math.random() * 0.25),
+          0.5 + Math.random() * 0.6,
+          Math.sin(a) * (0.15 + Math.random() * 0.25)
+        ),
+        life: 0.7 + Math.random() * 0.4,
+        age: 0,
+        rise: false,
+      });
+    }
+    const labelMat = new THREE.SpriteMaterial({
+      map: pointsTexture(points),
+      transparent: true,
+      depthWrite: false,
+      depthTest: false, // readable even when the litter lands behind furniture
+    });
+    const label = new THREE.Sprite(labelMat);
+    label.position.copy(at).add(new THREE.Vector3(0, 0.12, 0));
+    label.scale.set(0.28, 0.105, 1);
+    this.scene.add(label);
+    this.sparks.push({
+      sprite: label,
+      vel: new THREE.Vector3(0, 0.2, 0),
+      life: 1.5,
+      age: 0,
+      rise: true,
+    });
+  }
+
+  frame(dt: number): void {
+    for (let i = this.sparks.length - 1; i >= 0; i--) {
+      const s = this.sparks[i];
+      s.age += dt;
+      const mat = s.sprite.material as THREE.SpriteMaterial;
+      if (s.age >= s.life) {
+        this.scene.remove(s.sprite);
+        if (s.rise) mat.map?.dispose(); // per-emit points texture
+        mat.dispose();
+        this.sparks.splice(i, 1);
+        continue;
+      }
+      if (!s.rise) {
+        s.vel.y -= 1.6 * dt; // sparks pop up, hang, drift back down
+        mat.rotation += 2.5 * dt;
+      }
+      s.sprite.position.addScaledVector(s.vel, dt);
+      const t = s.age / s.life;
+      mat.opacity = t < 0.6 ? 1 : 1 - (t - 0.6) / 0.4;
     }
   }
 }

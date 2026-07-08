@@ -108,7 +108,9 @@ sim.applyIntent(ME, {
   vel: { x: 0, y: 0.5, z: -2 },
   angVel: { x: 1, y: 0, z: 1 },
 });
-for (let i = 0; i < 60 * 6; i++) sim.step();
+// a gentle lob rolls on clean felt contacts for a good while before the
+// settle policy trips — give it room
+for (let i = 0; i < 60 * 10; i++) sim.step();
 snap = sim.snapshot();
 const buttOnFloor = snap.debris.find((d) => d.kind === "cigar" && d.phase === "settled");
 assert(buttOnFloor !== undefined, "butt settled again");
@@ -143,6 +145,21 @@ sim.step();
 snap = sim.snapshot();
 assert(snap.players[0].held?.kind === "beer", "snatched the bottle mid-flight");
 assert(!snap.debris.some((d) => d.id === flying!.id), "mid-flight body removed from the world");
+
+// hands full blocks the next ritual — no auto-drop, fling it yourself
+sim.applyIntent(ME, { type: "consumeStart", kind: "beer" });
+sim.step();
+assert(sim.snapshot().players[0].ritual === null, "ritual refused while hands are full");
+const snatched = sim.snapshot().players[0].held!;
+sim.applyIntent(ME, {
+  type: "fling",
+  itemId: snatched.id,
+  origin: { x: 0, y: 1.3, z: 1.6 },
+  vel: { x: -1, y: 2, z: -4 },
+  angVel: { x: 2, y: 1, z: 2 },
+});
+sim.step();
+assert(sim.snapshot().players[0].held === null, "hand cleared by the fling");
 
 // fling speed clamp: absurd velocity must be capped server-side
 sim.applyIntent(ME, { type: "consumeStart", kind: "beer" });
