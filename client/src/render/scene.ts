@@ -41,6 +41,15 @@ import { updateTweens, tween, easeInOut } from "./tween";
 const CENTER = new THREE.Vector3(0, TABLE.height + 0.05, 0);
 const SHOE_POS = new THREE.Vector3(0.72, TABLE.height + 0.09, -0.78);
 
+const BASE_FOV = 62;
+/* player figures only (the dealer looms full-size): smaller silhouettes make
+   a direct bottle hit a skill shot. The sim's PLAYER_HIT_* capsule constants
+   are derived from this — keep them in sync. */
+const AVATAR_SCALE = 0.88;
+/* world-space head/chest anchors of a scaled figure (group sits at y 0.28) */
+const AVATAR_HEAD_Y = 0.28 + 1.26 * AVATAR_SCALE;
+const AVATAR_CHEST_Y = 0.28 + 0.85 * AVATAR_SCALE;
+
 /* another player's presence at the table: their figure, the head that
    tracks where they're looking, and whatever vice is in their hand */
 /* one arm: shoulder-anchored capsule aimed at the hand sphere; poseArm()
@@ -178,7 +187,7 @@ export class SceneView {
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     container.appendChild(this.renderer.domElement);
 
-    this.camera = new THREE.PerspectiveCamera(58, innerWidth / innerHeight, 0.05, 60);
+    this.camera = new THREE.PerspectiveCamera(BASE_FOV, innerWidth / innerHeight, 0.05, 60);
     this.setCameraSeat(2);
 
     this.scene.background = new THREE.Color(0x0d0b08);
@@ -406,6 +415,9 @@ export class SceneView {
     const p = seatPosition(seat);
     group.position.set(p.x, 0.28, p.z);
     group.lookAt(0, 0.28, 0); // yaw-only: upright on the seat axis (see buildDealer)
+    // uniform scale: the arm rigs and prop anchors all pose in group-local
+    // space (worldToLocal), so everything stays glued at any scale
+    group.scale.setScalar(AVATAR_SCALE);
     this.scene.add(group);
     return {
       seat,
@@ -449,7 +461,7 @@ export class SceneView {
     tween({
       duration: 90,
       update: (t) => {
-        this.camera.fov = 58 - 7 * t;
+        this.camera.fov = BASE_FOV - 7 * t;
         this.camera.updateProjectionMatrix();
       },
       done: () =>
@@ -457,7 +469,7 @@ export class SceneView {
           duration: 320,
           ease: easeInOut,
           update: (t) => {
-            this.camera.fov = 51 + 7 * t;
+            this.camera.fov = BASE_FOV - 7 + 7 * t;
             this.camera.updateProjectionMatrix();
           },
         }),
@@ -989,7 +1001,7 @@ export class SceneView {
           consider(this.eyePos.x, this.eyePos.z, this.eyePos.y, this.eyePos.y - 0.42, this.eyePos.y);
         else {
           const p = seatPosition(q.seat);
-          consider(p.x, p.z, 1.54, 1.1, 1.5);
+          consider(p.x, p.z, AVATAR_HEAD_Y, AVATAR_CHEST_Y, AVATAR_HEAD_Y - 0.04);
         }
       }
     consider(DEALER_POS.x, DEALER_POS.z, 1.26, 0.9, 1.26); // staring down the dealer

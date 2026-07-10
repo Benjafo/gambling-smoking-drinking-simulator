@@ -43,10 +43,11 @@ export const LITTER_IMPACT_DELAY_MS = 250;
    pays more than mere littering */
 export const SCORE_PLAYER_HIT = 40;
 /* seated player approximated as a vertical capsule for the direct-hit test:
-   torso spans ~0.78-1.48, head center 1.54 (see client makeFigure/snapGaze) */
-export const PLAYER_HIT_Y_MIN = 0.78;
-export const PLAYER_HIT_Y_MAX = 1.6;
-export const PLAYER_HIT_RADIUS = 0.35; // includes debris-size slop
+   torso spans ~0.72-1.34, head center ~1.39 (see client makeFigure and
+   AVATAR_SCALE in scene.ts — keep in sync). Max still covers the local eye. */
+export const PLAYER_HIT_Y_MIN = 0.72;
+export const PLAYER_HIT_Y_MAX = 1.5;
+export const PLAYER_HIT_RADIUS = 0.3; // includes debris-size slop
 
 /* head-tracking limits: the camera clamps here and the sim re-clamps
    whatever clients report */
@@ -69,7 +70,9 @@ export const REACH_RADIUS = 10;
 /* ---- world geometry ---- */
 export const TABLE = { radius: 1.5, height: 0.76, rimRadius: 1.47, rimTube: 0.055 };
 export const SEAT_COUNT: number = 5;
-export const SEAT_RADIUS = 2.05;
+/* pushed out from 2.05: with smaller avatars this keeps a direct hit a
+   skill shot instead of a gimme (adjacent seats ~1.23m apart) */
+export const SEAT_RADIUS = 2.2;
 /* eye sits high enough to look DOWN at the felt — flat cards at a grazing
    angle are unreadable */
 export const EYE_HEIGHT = 1.5;
