@@ -13,6 +13,7 @@ import {
 } from "./blackjack";
 import {
   TICK_RATE,
+  TICK_DT,
   START_MONEY,
   METER_MAX,
   BASE_RATE,
@@ -56,6 +57,7 @@ import {
   type V3,
 } from "./constants";
 import { Rng } from "./rng";
+import { LOBBY_SPAWNS, stepLobbyMove } from "./lobbyRoom";
 import { RAPIER, createWorld, spawnDebrisBody, initPhysics } from "./physics";
 import type {
   Intent,
@@ -110,6 +112,11 @@ interface Player {
   /* camera direction relative to facing the table center, client-reported */
   lookYaw: number;
   lookPitch: number;
+  /* lobby-room presence: kinematic position, the held input direction the
+     step loop integrates while phase === "lobby", and facing */
+  pos: V3;
+  moveDir: { x: number; z: number };
+  moveYaw: number;
   alive: boolean;
   /* joined mid-run: seated but spectating until the next game starts */
   waiting: boolean;
@@ -253,6 +260,13 @@ export class Simulation {
         p.lookYaw = Math.max(-LOOK_YAW_LIMIT, Math.min(LOOK_YAW_LIMIT, intent.yaw));
         p.lookPitch = Math.max(LOOK_PITCH_MIN, Math.min(LOOK_PITCH_MAX, intent.pitch));
         break;
+      case "move":
+        // held input, integrated per tick while in the lobby room; length is
+        // re-clamped inside stepLobbyMove so this can't speed-hack
+        p.moveDir.x = Number.isFinite(intent.dirX) ? Math.max(-1, Math.min(1, intent.dirX)) : 0;
+        p.moveDir.z = Number.isFinite(intent.dirZ) ? Math.max(-1, Math.min(1, intent.dirZ)) : 0;
+        if (Number.isFinite(intent.yaw)) p.moveYaw = Math.max(-Math.PI, Math.min(Math.PI, intent.yaw));
+        break;
       case "restart":
         this.restart(p);
         break;
@@ -288,6 +302,9 @@ export class Simulation {
       held: null,
       lookYaw: 0,
       lookPitch: 0,
+      pos: { x: LOBBY_SPAWNS[seat].x, y: 0, z: LOBBY_SPAWNS[seat].z },
+      moveDir: { x: 0, z: 0 },
+      moveYaw: LOBBY_SPAWNS[seat].yaw,
       alive: true,
       waiting: this.phase !== "lobby",
       causeOfDeath: null,
@@ -300,7 +317,10 @@ export class Simulation {
 
   private startGame(p: Player): void {
     if (this.phase !== "lobby" || p.id !== this.leaderId) return;
-    for (const q of this.players.values()) q.waiting = false;
+    for (const q of this.players.values()) {
+      q.waiting = false;
+      q.moveDir = { x: 0, z: 0 }; // everyone stops mid-stride and takes a seat
+    }
     this.runPlayerCount = this.players.size;
     this.winnerId = null;
     this.runStartTick = this.tick;
@@ -551,6 +571,10 @@ export class Simulation {
       q.diedTick = null;
       q.score = 0;
       q.stats = freshStats();
+      // back on their feet in the waiting room
+      q.pos = { x: LOBBY_SPAWNS[q.seat].x, y: 0, z: LOBBY_SPAWNS[q.seat].z };
+      q.moveDir = { x: 0, z: 0 };
+      q.moveYaw = LOBBY_SPAWNS[q.seat].yaw;
     }
     this.cigarPrice = CIGAR_PRICE_0;
     this.beerPrice = BEER_PRICE_0;
@@ -737,7 +761,13 @@ export class Simulation {
   /* ---------------- tick ---------------- */
   step(): void {
     this.tick++;
-    if (this.phase === "lobby") return;
+    if (this.phase === "lobby") {
+      // the waiting room: integrate everyone's held walk input
+      for (const p of this.players.values())
+        if (p.moveDir.x !== 0 || p.moveDir.z !== 0)
+          stepLobbyMove(p.pos, p.moveDir.x, p.moveDir.z, TICK_DT);
+      return;
+    }
 
     // scheduled round actions
     if (this.schedule.length) {
@@ -1035,6 +1065,13 @@ export class Simulation {
         yaw: Math.round(p.lookYaw * 100) / 100,
         pitch: Math.round(p.lookPitch * 100) / 100,
       },
+      pos: {
+        x: Math.round(p.pos.x * 1000) / 1000,
+        y: 0,
+        z: Math.round(p.pos.z * 1000) / 1000,
+      },
+      moveYaw: Math.round(p.moveYaw * 100) / 100,
+      moving: p.moveDir.x !== 0 || p.moveDir.z !== 0,
       alive: p.alive,
       waiting: p.waiting,
       causeOfDeath: p.causeOfDeath,

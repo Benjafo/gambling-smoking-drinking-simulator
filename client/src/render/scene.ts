@@ -19,6 +19,8 @@ import type { Intent, PlayerSnap, Snapshot } from "@shared/types";
 import type { ViceKind } from "@shared/types";
 import { handValue } from "@shared/blackjack";
 import { feltTexture, woodTexture, carpetTexture, leatherTexture } from "./textures";
+import { makeFigure, poseArm, type ArmRig } from "./figure";
+import { LobbyRoomView } from "./lobbyRoom";
 import { CardZone } from "./cards";
 import { DebrisView } from "./debris";
 import { HeldItemControl, makeBottleMesh, makeCigarMesh } from "./held";
@@ -52,15 +54,6 @@ const AVATAR_CHEST_Y = 0.28 + 0.85 * AVATAR_SCALE;
 
 /* another player's presence at the table: their figure, the head that
    tracks where they're looking, and whatever vice is in their hand */
-/* one arm: shoulder-anchored capsule aimed at the hand sphere; poseArm()
-   glues the hand to a target and stretches the arm to it */
-interface ArmRig {
-  arm: THREE.Mesh;
-  hand: THREE.Mesh;
-  shoulder: THREE.Vector3;
-  rest: THREE.Vector3;
-}
-
 interface AvatarView {
   seat: number;
   group: THREE.Group;
@@ -101,7 +94,6 @@ const _qParent = new THREE.Quaternion();
 const _m = new THREE.Matrix4();
 const _e = new THREE.Euler();
 const _grip = new THREE.Vector3();
-const _seg = new THREE.Vector3();
 const _from = new THREE.Vector3();
 const _cand = new THREE.Vector3();
 const _best = new THREE.Vector3();
@@ -110,21 +102,6 @@ const _best = new THREE.Vector3();
    someone's head locks onto it exactly (aiming through a HUD-cluttered,
    wide-FOV viewport is ~10-15° imprecise — social reads shouldn't be) */
 const GAZE_SNAP = 0.3;
-
-/* natural capsule length of an arm (0.24 shaft + two 0.048 caps) */
-const ARM_LEN = 0.336;
-
-/* Single-segment stretchy IK, true to the clay-figure look: the hand sits
-   exactly on `target`, and the arm capsule spans shoulder→hand, aimed and
-   length-scaled to fit. All positions are avatar-group-local. */
-function poseArm(rig: ArmRig, target: THREE.Vector3): void {
-  rig.hand.position.copy(target);
-  _seg.subVectors(target, rig.shoulder);
-  const len = Math.max(0.1, _seg.length());
-  rig.arm.position.copy(rig.shoulder).addScaledVector(_seg, 0.5);
-  rig.arm.quaternion.setFromUnitVectors(UP, _seg.normalize());
-  rig.arm.scale.set(1, len / ARM_LEN, 1);
-}
 
 /* The exact ray a player's camera looks along, given their seat and look
    offsets: from the seat's eye toward the table center, yawed about
@@ -177,6 +154,10 @@ export class SceneView {
   private lastFrame = performance.now();
   private latest: Snapshot | null = null;
   private myId = "";
+  /* which scene the renderer shows: the table, or the waiting room the sim
+     calls the "lobby" phase */
+  private mode: "table" | "lobby" = "table";
+  readonly lobbyRoom: LobbyRoomView;
 
   constructor(container: HTMLElement, private send: (intent: Intent) => void) {
     this.renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -215,9 +196,13 @@ export class SceneView {
       { scale: 1.3, lean: 0.3, badgeOffset: { x: 0, y: 0.03, z: 0.3 } }
     );
 
+    this.lobbyRoom = new LobbyRoomView(send);
+
     addEventListener("resize", () => {
       this.camera.aspect = innerWidth / innerHeight;
       this.camera.updateProjectionMatrix();
+      this.lobbyRoom.camera.aspect = innerWidth / innerHeight;
+      this.lobbyRoom.camera.updateProjectionMatrix();
       this.renderer.setSize(innerWidth, innerHeight);
     });
     this.bindPointer();
@@ -500,6 +485,11 @@ export class SceneView {
       }
     };
     dom.addEventListener("pointerdown", (e) => {
+      if (this.mode === "lobby") {
+        this.lobbyRoom.pointerDown(e);
+        capture(e);
+        return;
+      }
       const ndc = this.ndc(e);
       if (this.held.pointerDown(ndc)) {
         capture(e);
@@ -524,6 +514,10 @@ export class SceneView {
       capture(e);
     });
     dom.addEventListener("pointermove", (e) => {
+      if (this.mode === "lobby") {
+        this.lobbyRoom.pointerMove(e);
+        return;
+      }
       if (this.held.isGrabbing) {
         this.held.pointerMove(this.ndc(e));
         return;
@@ -548,6 +542,7 @@ export class SceneView {
       this.updateHover(this.ndc(e));
     });
     const up = () => {
+      this.lobbyRoom.pointerUp();
       if (this.held.isGrabbing) this.held.pointerUp();
       this.looking = false;
     };
@@ -588,9 +583,11 @@ export class SceneView {
     this.renderer.domElement.style.cursor = target ? "grab" : "";
   }
 
-  /* project a world point to CSS pixels — used by headless UI tests */
+  /* project a world point to CSS pixels — used by headless UI tests.
+     Projects through whichever camera is live (table or waiting room). */
   screenPos(x: number, y: number, z: number): { x: number; y: number } {
-    const v = new THREE.Vector3(x, y, z).project(this.camera);
+    const cam = this.mode === "lobby" ? this.lobbyRoom.camera : this.camera;
+    const v = new THREE.Vector3(x, y, z).project(cam);
     return { x: ((v.x + 1) / 2) * innerWidth, y: ((1 - v.y) / 2) * innerHeight };
   }
 
@@ -656,6 +653,17 @@ export class SceneView {
   apply(snap: Snapshot, myId: string): void {
     this.latest = snap;
     this.myId = myId;
+
+    // the lobby phase happens in the waiting room, a scene of its own; the
+    // table below still reconciles so the den is warm when the game starts
+    const wantLobby = snap.phase === "lobby";
+    if (wantLobby !== (this.mode === "lobby")) {
+      this.mode = wantLobby ? "lobby" : "table";
+      this.lobbyRoom.setActive(wantLobby);
+      this.renderer.domElement.style.cursor = "";
+    }
+    if (wantLobby) this.lobbyRoom.apply(snap, myId);
+
     const me = snap.players.find((p) => p.id === myId);
     if (me && me.seat !== this.mySeat) this.setCameraSeat(me.seat);
 
@@ -1016,6 +1024,13 @@ export class SceneView {
 
     updateTweens(now);
 
+    if (this.mode === "lobby") {
+      this.lobbyRoom.frame(dt, now);
+      this.renderer.render(this.lobbyRoom.scene, this.lobbyRoom.camera);
+      requestAnimationFrame(() => this.frame());
+      return;
+    }
+
     // heads ease toward their owner's actual camera ray — reproduced in
     // world space, so the avatar frame's lean can't skew the gaze
     const k = Math.min(1, dt * 10);
@@ -1118,91 +1133,6 @@ export class SceneView {
     this.renderer.render(this.scene, this.camera);
     requestAnimationFrame(() => this.frame());
   }
-}
-
-/* A regular at the table, still built from primitives: slumped torso, arms
-   resting toward the felt, hat, and just enough face to read a stare. The
-   group's +Z is the front (lookAt points it at the table). Everything above
-   the shoulders lives in `head`, pivoted at the neck, so a remote player's
-   look direction turns the whole face, eyes, and hat together. `seated`
-   adds thighs on the stool; the dealer stands, hidden behind the table. */
-function makeFigure(
-  shirt: number,
-  skin: number,
-  opts: { hat?: number; seated?: boolean } = {}
-): { group: THREE.Group; head: THREE.Group; armR: ArmRig; armL: ArmRig } {
-  const g = new THREE.Group();
-  const shirtMat = new THREE.MeshStandardMaterial({ color: shirt, roughness: 0.9 });
-  const skinMat = new THREE.MeshStandardMaterial({ color: skin, roughness: 0.75 });
-  const darkMat = new THREE.MeshStandardMaterial({ color: opts.hat ?? 0x17130d, roughness: 0.8 });
-
-  const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.17, 0.36, 4, 12), shirtMat);
-  body.position.y = 0.85;
-  body.rotation.x = 0.08; // a slump — nobody here sits up straight
-  body.castShadow = true;
-  g.add(body);
-
-  const head = new THREE.Group();
-  head.position.y = 1.26;
-  g.add(head);
-
-  const skull = new THREE.Mesh(new THREE.SphereGeometry(0.115, 16, 12), skinMat);
-  skull.castShadow = true;
-  head.add(skull);
-
-  // eyes: fixed on the table like everything else in their life
-  const eyeGeo = new THREE.SphereGeometry(0.014, 6, 6);
-  const eyeMat = new THREE.MeshStandardMaterial({ color: 0x14100a, roughness: 0.35 });
-  for (const s of [-1, 1]) {
-    const eye = new THREE.Mesh(eyeGeo, eyeMat);
-    eye.position.set(s * 0.042, 0.015, 0.1);
-    head.add(eye);
-  }
-
-  // hat: brim + tapered crown, tipped a touch — silhouette does the work
-  const brim = new THREE.Mesh(new THREE.CylinderGeometry(0.155, 0.155, 0.014, 18), darkMat);
-  brim.position.y = 0.075;
-  const crown = new THREE.Mesh(new THREE.CylinderGeometry(0.078, 0.098, 0.1, 14), darkMat);
-  crown.position.y = 0.13;
-  brim.castShadow = crown.castShadow = true;
-  const hat = new THREE.Group();
-  hat.add(brim, crown);
-  hat.position.y = 0.01;
-  hat.rotation.z = 0.09;
-  head.add(hat);
-
-  // arms as poseable rigs: shoulder-anchored capsules aimed at the hand
-  // spheres, so a raised bottle raises the arm with it
-  const armGeo = new THREE.CapsuleGeometry(0.048, 0.24, 3, 8);
-  const mkArm = (s: number): ArmRig => {
-    const arm = new THREE.Mesh(armGeo, shirtMat);
-    arm.castShadow = true;
-    const hand = new THREE.Mesh(new THREE.SphereGeometry(0.05, 8, 6), skinMat);
-    hand.castShadow = true;
-    g.add(arm, hand);
-    const rig: ArmRig = {
-      arm,
-      hand,
-      shoulder: new THREE.Vector3(s * 0.175, 1.04, 0.05),
-      rest: new THREE.Vector3(s * 0.14, 0.85, 0.33),
-    };
-    poseArm(rig, rig.rest);
-    return rig;
-  };
-  const armR = mkArm(1);
-  const armL = mkArm(-1);
-
-  if (opts.seated !== false) {
-    const legGeo = new THREE.CapsuleGeometry(0.065, 0.2, 3, 8);
-    for (const s of [-1, 1]) {
-      const leg = new THREE.Mesh(legGeo, darkMat);
-      leg.position.set(s * 0.085, 0.47, 0.14);
-      leg.rotation.x = 1.35;
-      leg.castShadow = true;
-      g.add(leg);
-    }
-  }
-  return { group: g, head, armR, armL };
 }
 
 /* a pocket lighter for third-person smokers: brass body, steel hood, and a

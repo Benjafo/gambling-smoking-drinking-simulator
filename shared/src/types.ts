@@ -45,6 +45,11 @@ export interface PlayerSnap {
   /* where this player's camera is pointed, relative to facing the table
      center — drives the avatar's head on everyone else's screen */
   look: { yaw: number; pitch: number };
+  /* lobby-room presence (meaningful while phase === "lobby"): where they
+     stand, which way they face, and whether they're mid-stride */
+  pos: V3;
+  moveYaw: number;
+  moving: boolean;
   alive: boolean;
   /* joined mid-run: spectates until the next game starts */
   waiting: boolean;
@@ -108,6 +113,9 @@ export type Intent =
   | { type: "heldMove"; pos: V3 | null }
   | { type: "pickup"; itemId: number }
   | { type: "look"; yaw: number; pitch: number }
+  /* lobby-room walking: a held input direction (world-space, unit or less)
+     plus facing; the sim integrates it every tick until it changes */
+  | { type: "move"; dirX: number; dirZ: number; yaw: number }
   | { type: "restart" };
 
 /* what the server tells browsers about each lobby — never the password */
