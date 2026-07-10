@@ -3,7 +3,6 @@
 import { MIN_BET } from "@shared/constants";
 import { handValue } from "@shared/blackjack";
 import type { Intent, PlayerSnap, Snapshot } from "@shared/types";
-import type { ConnStatus } from "../transport";
 
 const $ = (id: string): HTMLElement => document.getElementById(id)!;
 
@@ -79,21 +78,7 @@ export class Hud {
 
   /* ---------------- wiring ---------------- */
   private wire(): void {
-    const nameInput = $("nameInput") as HTMLInputElement;
-    nameInput.value =
-      new URLSearchParams(location.search).get("name") ??
-      localStorage.getItem("degen-name") ??
-      "";
-    $("startBtn").addEventListener("click", () => {
-      const name = nameInput.value.trim().slice(0, 24);
-      if (name) localStorage.setItem("degen-name", name);
-      this.send({ type: "join", name: name || "DEGENERATE" });
-      $("titleScreen").classList.remove("active");
-      $("hud").classList.add("active");
-    });
-    nameInput.addEventListener("keydown", (e) => {
-      if (e.key === "Enter") $("startBtn").click();
-    });
+    // joining lives on the main menu now (ui/menu.ts); this wires the table
     // leader-only intents: the sim ignores them from anyone else
     $("lobbyStartBtn").addEventListener("click", () => this.send({ type: "startGame" }));
     $("retryBtn").addEventListener("click", () => this.send({ type: "restart" }));
@@ -141,41 +126,32 @@ export class Hud {
     if (kind === "rebet") this.setPending(this.me?.lastBet ?? 0);
   }
 
-  /* ---------------- connection status ---------------- */
-  /* the join button only works with a live table behind it — a dead socket
-     rendering default state looks exactly like a real game otherwise */
-  connection(status: ConnStatus, url: string | null): void {
-    const el = $("connStatus");
-    const btn = $("startBtn") as HTMLButtonElement;
-    switch (status) {
-      case "connecting":
-        btn.disabled = true;
-        el.className = "conn";
-        el.textContent = url ? `CONNECTING TO ${url} …` : "WARMING UP THE TABLE…";
-        break;
-      case "open":
-        btn.disabled = false;
-        el.className = "conn ok";
-        el.textContent = url ? `TABLE FOUND — ${url}` : "PRIVATE TABLE — SINGLE PLAYER";
-        break;
-      case "unreachable":
-        btn.disabled = true;
-        el.className = "conn bad";
-        el.textContent =
-          `NO TABLE AT ${url}. Is the server running there? ` +
-          `Tip: ?server=auto dials ws://<this page's host>:8081.`;
-        break;
-      case "lost":
-        // the game state left with the socket — back to the door, honestly
-        btn.disabled = true;
-        el.className = "conn bad";
-        el.textContent = "CONNECTION TO THE TABLE LOST — refresh to rejoin.";
-        $("hud").classList.remove("active");
-        $("lobbyScreen").classList.remove("active");
-        $("overScreen").classList.remove("active");
-        $("titleScreen").classList.add("active");
-        break;
-    }
+  /* ---------------- session lifecycle ---------------- */
+  /* called when a Session begins: fresh per-table state, HUD on */
+  sessionStart(tableName: string): void {
+    this.snap = null;
+    this.me = undefined;
+    this.localPending = 0;
+    this.pendingDirty = false;
+    this.displayedMoney = 0;
+    this.chipSig = "";
+    this.lobbySig = "";
+    this.overSig = "";
+    $("lobbyTitle").textContent = tableName;
+    $("hud").classList.add("active");
+  }
+
+  /* called when the Session ends (left or lost): HUD and overlays off — the
+     menu takes the stage back */
+  sessionEnd(): void {
+    this.snap = null;
+    this.me = undefined;
+    $("hud").classList.remove("active");
+    $("lobbyScreen").classList.remove("active");
+    $("overScreen").classList.remove("active");
+    $("banner").className = "";
+    $("flingHint").classList.remove("show");
+    document.body.classList.remove("panic");
   }
 
   /* ---------------- snapshot → DOM ---------------- */
@@ -415,10 +391,15 @@ export class Hud {
       : "The lobby leader starts the game. Sit tight.";
   }
 
-  /* ranked leaderboard; re-renders only when scores/winner change (the
-     winner's last empties can still settle and score after the run ends) */
+  /* ranked leaderboard; re-renders only when standings/scores change (the
+     winner's last empties can still settle and score after the run ends).
+     Order comes from the sim's authoritative standings — winner always #1,
+     ties broken deterministically — with a score sort as the fallback for
+     anyone the standings don't know about. */
   private renderOver(snap: Snapshot, me: PlayerSnap): void {
-    const ranked = [...snap.players].sort((a, b) => b.score - a.score);
+    const order = new Map(snap.standings.map((id, i) => [id, i]));
+    const rank = (p: PlayerSnap) => order.get(p.id) ?? snap.standings.length;
+    const ranked = [...snap.players].sort((a, b) => rank(a) - rank(b) || b.score - a.score);
     const sig =
       snap.winnerId + "|" + snap.leaderId + "|" + ranked.map((p) => p.id + ":" + p.score).join();
     if (sig === this.overSig) return;

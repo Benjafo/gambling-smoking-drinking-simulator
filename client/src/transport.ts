@@ -1,125 +1,216 @@
-/* Transport abstraction: the renderer talks intents/snapshots and doesn't
-   care whether the sim lives in a web worker (single player) or across a
-   websocket (multiplayer). Swap with ?server=… —
-     ?server=auto            ws://<page host>:8081 (same URL works on LAN)
-     ?server=8090            ws://<page host>:8090
-     ?server=ws://host:port  exactly that */
+/* Transport layer: the renderer talks intents/snapshots through a Session
+   and doesn't care whether the sim lives in a web worker (solo) or in a
+   lobby across a websocket (multiplayer).
+
+   Multiplayer is one socket with two modes: browsing (the server pushes the
+   lobby list; createLobby/joinLobby request a seat) and seated (intents up,
+   snapshots down). Leaving a lobby drops the same socket back to browsing.
+
+   Which server the menu dials: ?server=… —
+     (none) / ?server=auto     ws://<page host>:8081 (same URL works on LAN)
+     ?server=8090              ws://<page host>:8090
+     ?server=ws://host:port    exactly that */
 import { WS_PORT_DEFAULT } from "@shared/constants";
-import type { Intent, ServerMsg, Snapshot } from "@shared/types";
+import type { ClientMsg, Intent, LobbyInfo, ServerMsg, Snapshot } from "@shared/types";
 
 export type ConnStatus = "connecting" | "open" | "unreachable" | "lost";
+export type EndReason = "left" | "lost";
 
-export interface Transport {
-  playerId: string;
-  ready: Promise<void>;
-  /* null = local worker (single player) */
-  serverUrl: string | null;
+/* an active seat at a table — solo worker and remote lobby look identical
+   from here up */
+export interface Session {
+  readonly playerId: string;
+  /* null = local worker (solo) */
+  readonly serverUrl: string | null;
+  readonly tableName: string;
   send(intent: Intent): void;
   onSnapshot(cb: (snap: Snapshot) => void): void;
-  onStatus(cb: (s: ConnStatus) => void): void;
+  onEnd(cb: (reason: EndReason) => void): void;
+  /* tear down the seat; fires onEnd("left") */
+  leave(): void;
 }
 
-export class LocalTransport implements Transport {
-  playerId = "local";
-  ready: Promise<void>;
-  serverUrl: string | null = null;
-  private worker: Worker;
-  private cb: ((snap: Snapshot) => void) | null = null;
-  private status: ConnStatus = "connecting";
-  private statusCb: ((s: ConnStatus) => void) | null = null;
+export function resolveServerUrl(): string {
+  const raw = new URLSearchParams(location.search).get("server") ?? "auto";
+  if (raw === "" || raw === "auto") return `ws://${location.hostname}:${WS_PORT_DEFAULT}`;
+  if (/^\d+$/.test(raw)) return `ws://${location.hostname}:${raw}`;
+  return raw;
+}
 
-  constructor() {
+/* ---------------- solo: sim in a web worker ---------------- */
+export class LocalSession implements Session {
+  readonly playerId = "local";
+  readonly serverUrl = null;
+  readonly tableName = "PRIVATE TABLE";
+  private worker: Worker;
+  private snapCb: ((snap: Snapshot) => void) | null = null;
+  private endCb: ((reason: EndReason) => void) | null = null;
+
+  constructor(name: string) {
     this.worker = new Worker(new URL("./simWorker.ts", import.meta.url), { type: "module" });
-    this.ready = new Promise((resolve) => {
-      this.worker.onmessage = (e: MessageEvent<ServerMsg>) => {
-        const msg = e.data;
-        if (msg.type === "welcome") {
-          this.setStatus("open");
-          resolve();
-        } else if (msg.type === "snapshot") this.cb?.(msg.snap);
-      };
-    });
+    this.worker.onmessage = (e: MessageEvent<ServerMsg>) => {
+      if (e.data.type === "snapshot") this.snapCb?.(e.data.snap);
+    };
     this.worker.postMessage({
       type: "init",
       seed: Date.now() & 0xffffffff,
       playerId: this.playerId,
     });
+    // the worker queues intents until the sim is up
+    this.send({ type: "join", name });
   }
   send(intent: Intent): void {
     this.worker.postMessage({ type: "intent", playerId: this.playerId, intent });
   }
   onSnapshot(cb: (snap: Snapshot) => void): void {
-    this.cb = cb;
+    this.snapCb = cb;
   }
-  onStatus(cb: (s: ConnStatus) => void): void {
-    this.statusCb = cb;
-    cb(this.status); // replay: the worker may have welcomed before wiring
+  onEnd(cb: (reason: EndReason) => void): void {
+    this.endCb = cb;
   }
-  private setStatus(s: ConnStatus): void {
-    this.status = s;
-    this.statusCb?.(s);
+  leave(): void {
+    this.worker.terminate();
+    this.endCb?.("left");
   }
 }
 
-export class WsTransport implements Transport {
-  playerId = "";
-  ready: Promise<void>;
-  serverUrl: string;
-  private ws: WebSocket;
-  private cb: ((snap: Snapshot) => void) | null = null;
-  private queue: Intent[] = [];
-  private status: ConnStatus = "connecting";
-  private statusCb: ((s: ConnStatus) => void) | null = null;
+/* ---------------- multiplayer: lobby browser + remote seat ---------------- */
+class RemoteSession implements Session {
+  readonly serverUrl: string;
+  private snapCb: ((snap: Snapshot) => void) | null = null;
+  private endCb: ((reason: EndReason) => void) | null = null;
+  private ended = false;
 
-  constructor(url: string) {
-    this.serverUrl = url;
-    this.ws = new WebSocket(url);
-    this.ready = new Promise((resolve) => {
-      this.ws.onmessage = (e) => {
-        const msg = JSON.parse(e.data as string) as ServerMsg;
-        if (msg.type === "welcome") {
-          this.playerId = msg.playerId;
-          this.setStatus("open");
-          for (const i of this.queue) this.send(i);
-          this.queue = [];
-          resolve();
-        } else if (msg.type === "snapshot") {
-          this.cb?.(msg.snap);
-        }
-      };
-    });
-    // dead sockets must be LOUD: a client rendering defaults with no room
-    // behind it looks exactly like a real game
-    this.ws.onclose = () => this.setStatus(this.status === "open" ? "lost" : "unreachable");
-    this.ws.onerror = () => {
-      if (this.status !== "open") this.setStatus("unreachable");
-    };
+  constructor(
+    private conn: ServerConnection,
+    readonly playerId: string,
+    readonly tableName: string
+  ) {
+    this.serverUrl = conn.url;
   }
   send(intent: Intent): void {
-    if (this.ws.readyState !== WebSocket.OPEN) {
-      this.queue.push(intent);
-      return;
-    }
-    this.ws.send(JSON.stringify({ type: "intent", intent }));
+    this.conn.post({ type: "intent", intent });
   }
   onSnapshot(cb: (snap: Snapshot) => void): void {
-    this.cb = cb;
+    this.snapCb = cb;
   }
-  onStatus(cb: (s: ConnStatus) => void): void {
-    this.statusCb = cb;
-    cb(this.status);
+  onEnd(cb: (reason: EndReason) => void): void {
+    this.endCb = cb;
   }
-  private setStatus(s: ConnStatus): void {
-    this.status = s;
-    this.statusCb?.(s);
+  leave(): void {
+    this.conn.release(this);
+    this.end("left");
+  }
+  /* internal: routed by the connection */
+  deliver(snap: Snapshot): void {
+    this.snapCb?.(snap);
+  }
+  end(reason: EndReason): void {
+    if (this.ended) return;
+    this.ended = true;
+    this.endCb?.(reason);
   }
 }
 
-export function createTransport(): Transport {
-  const raw = new URLSearchParams(location.search).get("server");
-  if (raw === null) return new LocalTransport();
-  let url = raw;
-  if (raw === "" || raw === "auto") url = `ws://${location.hostname}:${WS_PORT_DEFAULT}`;
-  else if (/^\d+$/.test(raw)) url = `ws://${location.hostname}:${raw}`;
-  return new WsTransport(url);
+export class ServerConnection {
+  readonly url: string;
+  status: ConnStatus = "connecting";
+  lobbies: LobbyInfo[] = [];
+  private ws: WebSocket | null = null;
+  private changeCb: (() => void) | null = null;
+  private session: RemoteSession | null = null;
+  private pendingJoin: { resolve: (s: Session) => void; reject: (e: Error) => void } | null = null;
+
+  constructor(url: string) {
+    this.url = url;
+    this.connect();
+  }
+
+  /* fires on any status or lobby-list change — the menu re-renders off it */
+  onChange(cb: () => void): void {
+    this.changeCb = cb;
+    cb();
+  }
+
+  /* (re)dial; safe to call while already connecting or open */
+  connect(): void {
+    if (this.ws) return;
+    this.status = "connecting";
+    this.emit();
+    const ws = new WebSocket(this.url);
+    this.ws = ws;
+    ws.onopen = () => {
+      this.status = "open";
+      this.emit();
+    };
+    ws.onmessage = (e) => this.handle(JSON.parse(e.data as string) as ServerMsg);
+    // dead sockets must be LOUD: a client rendering defaults with no room
+    // behind it looks exactly like a real game
+    ws.onclose = () => {
+      this.status = this.status === "open" ? "lost" : "unreachable";
+      this.ws = null;
+      this.pendingJoin?.reject(new Error("CONNECTION LOST."));
+      this.pendingJoin = null;
+      const s = this.session;
+      this.session = null;
+      s?.end("lost");
+      this.emit();
+    };
+  }
+
+  createLobby(name: string, password: string | null, playerName: string): Promise<Session> {
+    return this.requestSeat({ type: "createLobby", name, password, playerName });
+  }
+  joinLobby(lobbyId: string, password: string | null, playerName: string): Promise<Session> {
+    return this.requestSeat({ type: "joinLobby", lobbyId, password, playerName });
+  }
+
+  private requestSeat(msg: ClientMsg): Promise<Session> {
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN)
+      return Promise.reject(new Error("NO CONNECTION TO THE HOUSE."));
+    if (this.session || this.pendingJoin) return Promise.reject(new Error("ALREADY SEATED."));
+    return new Promise((resolve, reject) => {
+      this.pendingJoin = { resolve, reject };
+      this.post(msg);
+    });
+  }
+
+  private handle(msg: ServerMsg): void {
+    switch (msg.type) {
+      case "lobbies":
+        this.lobbies = msg.lobbies;
+        this.emit();
+        break;
+      case "joined": {
+        const s = new RemoteSession(this, msg.playerId, msg.lobbyName);
+        this.session = s;
+        this.pendingJoin?.resolve(s);
+        this.pendingJoin = null;
+        break;
+      }
+      case "joinError":
+        this.pendingJoin?.reject(new Error(msg.reason));
+        this.pendingJoin = null;
+        break;
+      case "snapshot":
+        this.session?.deliver(msg.snap);
+        break;
+      case "left":
+        break; // release() already tore the session down
+    }
+  }
+
+  /* internal, for RemoteSession */
+  post(msg: ClientMsg): void {
+    if (this.ws?.readyState === WebSocket.OPEN) this.ws.send(JSON.stringify(msg));
+  }
+  release(s: RemoteSession): void {
+    if (this.session !== s) return;
+    this.session = null;
+    this.post({ type: "leaveLobby" });
+  }
+
+  private emit(): void {
+    this.changeCb?.();
+  }
 }

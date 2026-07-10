@@ -18,6 +18,8 @@ export interface PlayerStats {
   cigarsSmoked: number;
   beersDrunk: number;
   peakMoney: number;
+  litters: number;
+  directHits: number;
 }
 
 export interface PlayerSnap {
@@ -83,6 +85,9 @@ export interface Snapshot {
   players: PlayerSnap[];
   debris: DebrisSnap[];
   events: SimEvent[];
+  /* authoritative final rankings, best first — winner pinned to the top,
+     the rest by the run-quality cascade. Empty until phase === "over". */
+  standings: string[];
 }
 
 export type Intent =
@@ -105,8 +110,28 @@ export type Intent =
   | { type: "look"; yaw: number; pitch: number }
   | { type: "restart" };
 
-/* transport-level messages (worker postMessage and websocket share these) */
-export type ClientMsg = { type: "intent"; intent: Intent };
+/* what the server tells browsers about each lobby — never the password */
+export interface LobbyInfo {
+  id: string;
+  name: string;
+  players: number;
+  maxPlayers: number;
+  locked: boolean;
+  phase: RoomPhase;
+}
+
+/* transport-level messages (worker postMessage and websocket share the
+   intent/welcome/snapshot core; the lobby-browse messages are ws-only —
+   the local worker is its own private table) */
+export type ClientMsg =
+  | { type: "intent"; intent: Intent }
+  | { type: "createLobby"; name: string; password: string | null; playerName: string }
+  | { type: "joinLobby"; lobbyId: string; password: string | null; playerName: string }
+  | { type: "leaveLobby" };
 export type ServerMsg =
   | { type: "welcome"; playerId: string }
-  | { type: "snapshot"; snap: Snapshot };
+  | { type: "snapshot"; snap: Snapshot }
+  | { type: "lobbies"; lobbies: LobbyInfo[] }
+  | { type: "joined"; lobbyId: string; lobbyName: string; playerId: string }
+  | { type: "joinError"; reason: string }
+  | { type: "left" };

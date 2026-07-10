@@ -107,23 +107,64 @@
   <div id="lighterGfx"><div class="flame"></div><div class="wheel"></div><div class="hood"></div><div class="body"></div></div>
 </div>
 
-<!-- ============ TITLE ============ -->
-<div id="titleScreen" class="screen active">
+<!-- ============ MAIN MENU ============ -->
+<div id="menuScreen" class="screen active">
   <div class="marquee">DEGENERATE<br>BLACKJACK<small class="vices-title">🚬 3D SIMULATOR 🍺</small></div>
   <p class="tagline">One thousand dollars. Infinite hands. Keep smoking. Keep drinking.
     Fling the empties wherever you like — the floor belongs to the house too.
     Last degenerate breathing takes the crown.</p>
   <input id="nameInput" maxlength="24" placeholder="YOUR NAME" autocomplete="off" spellcheck="false">
-  <button class="big-btn" id="startBtn" disabled>DEAL ME IN</button>
-  <p class="conn" id="connStatus"></p>
+  <p class="conn bad" id="menuNotice"></p>
+  <div id="menuPanels">
+    <div class="menu-panel">
+      <h3>TABLES ON THE WIRE</h3>
+      <p class="conn" id="serverStatus"></p>
+      <div id="serverList" class="server-list"></div>
+      <div id="joinBox" style="display:none">
+        <span class="conn" id="joinLabel"></span>
+        <div class="menu-row">
+          <input class="menu-input" id="joinPassInput" type="password" maxlength="32"
+                 placeholder="PASSWORD" autocomplete="off">
+          <button class="menu-btn" id="joinGoBtn">SIT DOWN</button>
+          <button class="menu-btn" id="joinCancelBtn">NEVER MIND</button>
+        </div>
+      </div>
+      <p class="conn bad" id="menuErr"></p>
+      <div class="menu-divider"></div>
+      <div class="menu-row">
+        <input class="menu-input" id="lobbyNameInput" maxlength="32"
+               placeholder="NAME YOUR TABLE" autocomplete="off" spellcheck="false">
+        <label class="chk"><input type="checkbox" id="privateChk"> PRIVATE</label>
+      </div>
+      <div class="menu-row">
+        <input class="menu-input" id="lobbyPassInput" type="password" maxlength="32"
+               placeholder="PASSWORD" autocomplete="off" style="display:none">
+        <button class="menu-btn" id="createBtn">OPEN A NEW TABLE</button>
+      </div>
+    </div>
+    <div class="menu-panel">
+      <h3>DRINK ALONE</h3>
+      <p class="menu-note">No witnesses. No competition.<br>Just you, the dealer, and the meters.</p>
+      <button class="big-btn" id="soloBtn">PLAY SOLO</button>
+    </div>
+  </div>
 </div>
 
 <!-- ============ LOBBY ============ -->
 <div id="lobbyScreen" class="screen">
-  <div class="marquee" style="font-size:clamp(28px,4vw,48px)">THE TABLE</div>
+  <div class="marquee" style="font-size:clamp(28px,4vw,48px)" id="lobbyTitle">THE TABLE</div>
   <div id="lobbyList" class="lobby-list"></div>
   <p class="tagline" id="lobbyHint"></p>
   <button class="big-btn" id="lobbyStartBtn">START THE GAME</button>
+</div>
+
+<!-- ============ SETTINGS ============ -->
+<button id="settingsBtn" aria-label="Settings" title="Settings">⚙</button>
+<div id="settingsScreen" class="screen">
+  <div class="marquee" style="font-size:clamp(28px,4vw,48px)">SETTINGS</div>
+  <button class="big-btn" id="resumeBtn">BACK TO THE TABLE</button>
+  <button class="big-btn leave" id="leaveBtn">LEAVE THE TABLE</button>
+  <p class="tagline">Leaving drops you back at the main menu.<br>Your seat, your chips, and your mess stay behind.</p>
 </div>
 
 <!-- ============ GAME OVER ============ -->

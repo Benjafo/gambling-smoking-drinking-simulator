@@ -7,7 +7,7 @@
     ".": "./src/index.ts"
   },
   "scripts": {
-    "test": "tsx test/simSmoke.ts && tsx test/moneyDrop.ts && tsx test/lobby.ts && tsx test/playerHit.ts",
+    "test": "tsx test/simSmoke.ts && tsx test/moneyDrop.ts && tsx test/lobby.ts && tsx test/playerHit.ts && tsx test/standings.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
