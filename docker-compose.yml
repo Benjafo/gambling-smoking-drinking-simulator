@@ -1,0 +1,60 @@
+services:
+  server:
+    profiles: ["prod"]
+    build:
+      context: .
+      dockerfile: server/Dockerfile
+    ports:
+      - "8081:8081"
+    environment:
+      - PORT=8081
+    restart: unless-stopped
+
+  client:
+    profiles: ["prod"]
+    build:
+      context: .
+      dockerfile: client/Dockerfile
+    ports:
+      - "8080:80"
+    depends_on:
+      - server
+    restart: unless-stopped
+
+  server-dev:
+    profiles: ["dev"]
+    build:
+      context: .
+      dockerfile: server/Dockerfile
+    command: npm --workspace server run dev
+    ports:
+      - "8081:8081"
+    environment:
+      - PORT=8081
+      - CHOKIDAR_USEPOLLING=1
+    volumes:
+      - .:/app
+      - /app/node_modules
+      - /app/client/node_modules
+      - /app/server/node_modules
+      - /app/shared/node_modules
+
+  client-dev:
+    profiles: ["dev"]
+    build:
+      context: .
+      dockerfile: client/Dockerfile
+      target: deps
+    command: npm --workspace client run dev -- --host
+    ports:
+      - "5173:5173"
+    # If file changes aren't picked up (older Docker Desktop / some VM mounts
+    # don't forward inotify events), uncomment to fall back to polling:
+    environment:
+      - CHOKIDAR_USEPOLLING=1
+    volumes:
+      - .:/app
+      - /app/node_modules
+      - /app/client/node_modules
+      - /app/server/node_modules
+      - /app/shared/node_modules

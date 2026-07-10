@@ -1,0 +1,1018 @@
+/* The authoritative simulation. Owns all game state, advances on a fixed
+   60 Hz tick, accepts validated intents, and emits snapshots. The renderer
+   (and eventually remote clients) never mutate state directly. */
+import type RAPIER_NS from "@dimforge/rapier3d-compat";
+import {
+  buildShoe,
+  handValue,
+  isBlackjack,
+  cardValue,
+  settle,
+  inflate,
+  type Card,
+} from "./blackjack";
+import {
+  TICK_RATE,
+  START_MONEY,
+  METER_MAX,
+  BASE_RATE,
+  RAMP,
+  RATE_CAP,
+  JITTER,
+  DECKS,
+  RESHUFFLE_AT,
+  MIN_BET,
+  CIGAR_PRICE_0,
+  BEER_PRICE_0,
+  INFLATE_EVERY_HANDS,
+  RITUAL_MS,
+  DEAL_STEP_MS,
+  DEALER_DRAW_MS,
+  RESULT_PAUSE_MS,
+  BETTING_WINDOW_MS,
+  ACT_TIMEOUT_MS,
+  MAX_DEBRIS,
+  MAX_FLING_SPEED,
+  LITTER_POINTS,
+  LITTER_IMPACT_DELAY_MS,
+  SCORE_PLAYER_HIT,
+  PLAYER_HIT_Y_MIN,
+  PLAYER_HIT_Y_MAX,
+  PLAYER_HIT_RADIUS,
+  LOOK_YAW_LIMIT,
+  LOOK_PITCH_MIN,
+  LOOK_PITCH_MAX,
+  SCORE_HAND_PLAYED,
+  SCORE_HAND_WON,
+  SCORE_VICE,
+  MONEY_DROP_CHANCE,
+  MONEY_DROP_MIN,
+  MONEY_DROP_MAX,
+  REACH_RADIUS,
+  SEAT_COUNT,
+  TABLE,
+  seatEye,
+  seatPosition,
+  type V3,
+} from "./constants";
+import { Rng } from "./rng";
+import { RAPIER, createWorld, spawnDebrisBody, initPhysics } from "./physics";
+import type {
+  Intent,
+  PlayerSnap,
+  DebrisSnap,
+  SimEvent,
+  Snapshot,
+  RoomPhase,
+  ViceKind,
+  Quat,
+} from "./types";
+
+const msTicks = (ms: number) => Math.round((ms / 1000) * TICK_RATE);
+
+interface Player {
+  id: string;
+  name: string;
+  seat: number;
+  money: number;
+  pendingBet: number;
+  lastBet: number;
+  committed: boolean;
+  bet: number;
+  doubled: boolean;
+  stood: boolean;
+  hand: Card[];
+  cigarMeter: number;
+  beerMeter: number;
+  cigarDrift: number;
+  beerDrift: number;
+  cigarInv: number;
+  beerInv: number;
+  /* gesture-driven: progress accrues only while the client reports the
+     ritual engaged (cigar held still in the zone / beer tipped up). The sim
+     owns the clock, so the time cost can't be skipped. */
+  ritual: { kind: ViceKind; progressTicks: number; engaged: boolean } | null;
+  /* earned: minted by finishing a ritual, not scavenged off the floor —
+     only earned empties are eligible for the settle-time money drop.
+     pos mirrors the owner's drag (wind-up), clamped to arm's reach. */
+  held: { id: number; kind: ViceKind; sinceTick: number; earned: boolean; pos: V3 | null } | null;
+  /* camera direction relative to facing the table center, client-reported */
+  lookYaw: number;
+  lookPitch: number;
+  alive: boolean;
+  /* joined mid-run: seated but spectating until the next game starts */
+  waiting: boolean;
+  causeOfDeath: string | null;
+  score: number;
+  stats: {
+    handsPlayed: number;
+    handsWon: number;
+    cigarsSmoked: number;
+    beersDrunk: number;
+    peakMoney: number;
+  };
+}
+
+interface Debris {
+  id: number;
+  kind: ViceKind;
+  phase: "flying" | "settled";
+  body: RAPIER_NS.RigidBody | null;
+  pos: V3;
+  rot: Quat;
+  bornTick: number;
+  stillTicks: number;
+  /* money-drop eligibility: who flung it, and whether it was earned (fresh
+     from a ritual). Consumed by the one roll at settle time. */
+  owner: string | null;
+  earned: boolean;
+  /* litter points arm on the FIRST contact with anything and pay out a beat
+     later (mid-clatter); `touched` makes the arming one-shot */
+  touched: boolean;
+  litterAt: number | null;
+  /* direct player hit is one-shot per flung empty, and only counts while
+     still flying, before touching anything */
+  hitPlayer: boolean;
+}
+
+interface ScheduledAction {
+  at: number;
+  run: () => void;
+}
+
+export class Simulation {
+  tick = 0;
+  rng: Rng;
+  world: RAPIER_NS.World;
+  eventQueue: RAPIER_NS.EventQueue;
+
+  phase: RoomPhase = "lobby";
+  /* first to sit down runs the table; passes down the join order on leave */
+  leaderId: string | null = null;
+  winnerId: string | null = null;
+  /* participants when the run started: 2+ means last-alive wins */
+  runPlayerCount = 0;
+  players = new Map<string, Player>();
+  seatTaken: (string | null)[] = new Array(SEAT_COUNT).fill(null);
+  shoe: Card[] = [];
+  dealerHand: Card[] = [];
+  holeHidden = true;
+  turnPlayerId: string | null = null;
+  turnDeadline = 0;
+  bettingDeadline = 0;
+  cigarPrice = CIGAR_PRICE_0;
+  beerPrice = BEER_PRICE_0;
+  handsPlayed = 0;
+  runStartTick = 0;
+
+  debris = new Map<number, Debris>();
+  private colliderDebris = new Map<number, number>(); // collider handle → debris id
+  nextDebrisId = 1;
+  private events: SimEvent[] = [];
+  private schedule: ScheduledAction[] = [];
+  private lastImpactTick = 0;
+
+  private constructor(seed: number) {
+    this.rng = new Rng(seed);
+    this.world = createWorld();
+    this.eventQueue = new RAPIER.EventQueue(true);
+    this.shoe = buildShoe(DECKS, this.rng);
+  }
+
+  static async create(seed: number): Promise<Simulation> {
+    await initPhysics();
+    return new Simulation(seed);
+  }
+
+  /* ---------------- intents ---------------- */
+  applyIntent(playerId: string, intent: Intent): void {
+    if (intent.type === "join") return this.join(playerId, intent.name);
+    const p = this.players.get(playerId);
+    if (!p) return;
+
+    // spectators watch; they get their hands back when the next game starts
+    // (looking around is watching — that stays live)
+    if (p.waiting && !["leave", "restart", "look"].includes(intent.type)) return;
+
+    switch (intent.type) {
+      case "leave":
+        this.removePlayer(p);
+        break;
+      case "startGame":
+        this.startGame(p);
+        break;
+      case "setBet":
+        if (this.phase === "betting" && p.alive && !p.committed)
+          p.pendingBet = Math.max(0, Math.min(Math.floor(intent.amount), p.money));
+        break;
+      case "commitBet":
+        this.commitBet(p);
+        break;
+      case "hit":
+        this.hit(p);
+        break;
+      case "stand":
+        this.stand(p);
+        break;
+      case "double":
+        this.double(p);
+        break;
+      case "buy":
+        this.buy(p, intent.item, Math.max(1, Math.floor(intent.qty)));
+        break;
+      case "consumeStart":
+        this.consumeStart(p, intent.kind);
+        break;
+      case "ritualEngage":
+        if (p.ritual) p.ritual.engaged = intent.on;
+        break;
+      case "ritualReset":
+        if (p.ritual) p.ritual.progressTicks = 0;
+        break;
+      case "consumeCancel":
+        p.ritual = null;
+        break;
+      case "fling":
+        this.fling(p, intent.itemId, intent.origin, intent.vel, intent.angVel);
+        break;
+      case "heldMove":
+        this.heldMove(p, intent.pos);
+        break;
+      case "pickup":
+        this.pickup(p, intent.itemId);
+        break;
+      case "look":
+        p.lookYaw = Math.max(-LOOK_YAW_LIMIT, Math.min(LOOK_YAW_LIMIT, intent.yaw));
+        p.lookPitch = Math.max(LOOK_PITCH_MIN, Math.min(LOOK_PITCH_MAX, intent.pitch));
+        break;
+      case "restart":
+        this.restart(p);
+        break;
+    }
+  }
+
+  private join(playerId: string, name: string): void {
+    if (this.players.has(playerId)) return;
+    // prefer the middle seat, then fan outward
+    const order = [2, 1, 3, 0, 4].filter((i) => i < SEAT_COUNT);
+    const seat = order.find((i) => this.seatTaken[i] === null);
+    if (seat === undefined) return;
+    this.seatTaken[seat] = playerId;
+    this.players.set(playerId, {
+      id: playerId,
+      name: name.slice(0, 24) || "DEGENERATE",
+      seat,
+      money: START_MONEY,
+      pendingBet: 0,
+      lastBet: 0,
+      committed: false,
+      bet: 0,
+      doubled: false,
+      stood: false,
+      hand: [],
+      cigarMeter: METER_MAX,
+      beerMeter: METER_MAX,
+      cigarDrift: 0,
+      beerDrift: 0,
+      cigarInv: 3,
+      beerInv: 3,
+      ritual: null,
+      held: null,
+      lookYaw: 0,
+      lookPitch: 0,
+      alive: true,
+      waiting: this.phase !== "lobby",
+      causeOfDeath: null,
+      score: 0,
+      stats: { handsPlayed: 0, handsWon: 0, cigarsSmoked: 0, beersDrunk: 0, peakMoney: START_MONEY },
+    });
+    if (this.leaderId === null) this.leaderId = playerId;
+  }
+
+  private startGame(p: Player): void {
+    if (this.phase !== "lobby" || p.id !== this.leaderId) return;
+    for (const q of this.players.values()) q.waiting = false;
+    this.runPlayerCount = this.players.size;
+    this.winnerId = null;
+    this.runStartTick = this.tick;
+    this.phase = "betting";
+  }
+
+  private removePlayer(p: Player): void {
+    if (p.held) this.autoDrop(p); // don't vanish a held bottle
+    this.seatTaken[p.seat] = null;
+    this.players.delete(p.id);
+    if (this.leaderId === p.id)
+      this.leaderId = this.players.keys().next().value ?? null;
+    if (this.turnPlayerId === p.id) this.advanceTurn();
+    if (this.players.size === 0) {
+      this.phase = "lobby";
+      this.schedule = [];
+      return;
+    }
+    // a rage-quit counts as an elimination for the last-alive check
+    this.checkWin();
+  }
+
+  /* ---------------- betting / dealing ---------------- */
+  private bettors(): Player[] {
+    return [...this.players.values()]
+      .filter((p) => p.alive && p.committed)
+      .sort((a, b) => a.seat - b.seat);
+  }
+
+  private commitBet(p: Player): void {
+    if (this.phase !== "betting" || !p.alive || p.committed || p.money <= 0) return;
+    const minBet = Math.min(MIN_BET, p.money);
+    p.bet = Math.max(minBet, Math.min(p.pendingBet, p.money));
+    p.lastBet = p.bet;
+    this.setMoney(p, p.money - p.bet);
+    p.committed = true;
+    p.doubled = false;
+    p.stood = false;
+    p.hand = [];
+
+    if (this.bettors().length === 1)
+      this.bettingDeadline = this.tick + msTicks(BETTING_WINDOW_MS);
+
+    const canStillJoin = [...this.players.values()].some(
+      (q) => q.alive && !q.committed && q.money > 0
+    );
+    if (!canStillJoin) this.startDealing();
+  }
+
+  private startDealing(): void {
+    if (this.phase !== "betting") return;
+    this.phase = "dealing";
+    this.bettingDeadline = 0;
+    this.dealerHand = [];
+    this.holeHidden = true;
+    if (this.shoe.length < RESHUFFLE_AT + this.bettors().length * 4)
+      this.shoe = buildShoe(DECKS, this.rng);
+
+    const order = this.bettors();
+    let step = 1;
+    const stepTicks = msTicks(DEAL_STEP_MS);
+    for (const round of [0, 1]) {
+      for (const pl of order) {
+        const id = pl.id;
+        this.later(stepTicks * step++, () => {
+          const p = this.players.get(id);
+          if (p) p.hand.push(this.draw());
+        });
+      }
+      this.later(stepTicks * step++, () => {
+        this.dealerHand.push(this.draw());
+      });
+      void round;
+    }
+    this.later(stepTicks * step + msTicks(400), () => this.afterDeal());
+  }
+
+  private draw(): Card {
+    if (this.shoe.length < 1) this.shoe = buildShoe(DECKS, this.rng);
+    return this.shoe.pop()!;
+  }
+
+  private afterDeal(): void {
+    const up = this.dealerHand[0];
+    const dBJ = isBlackjack(this.dealerHand);
+    const peeks = up.r === "A" || cardValue(up.r) === 10;
+    if (peeks && dBJ) {
+      this.holeHidden = false;
+      this.later(msTicks(700), () => this.settleRound());
+      this.phase = "dealer";
+      return;
+    }
+    this.phase = "acting";
+    this.turnPlayerId = null;
+    this.advanceTurn();
+  }
+
+  private advanceTurn(): void {
+    if (this.phase !== "acting") return;
+    const order = this.bettors();
+    const fromSeat =
+      this.turnPlayerId !== null ? this.players.get(this.turnPlayerId)?.seat ?? -1 : -1;
+    const next = order.find(
+      (p) =>
+        p.seat > fromSeat &&
+        p.alive &&
+        !p.stood &&
+        !isBlackjack(p.hand) &&
+        handValue(p.hand).total < 21
+    );
+    if (next) {
+      this.turnPlayerId = next.id;
+      this.turnDeadline = this.tick + msTicks(ACT_TIMEOUT_MS);
+      return;
+    }
+    this.turnPlayerId = null;
+    this.dealerPlay();
+  }
+
+  /* delayed advances are guarded: if anything else already moved the turn
+     (a second click, the AFK timeout, the player leaving), a stale scheduled
+     advance must not fire again and skip the next player's turn */
+  private advanceLater(delayTicks: number, from: Player): void {
+    this.later(delayTicks, () => {
+      if (this.turnPlayerId === from.id) this.advanceTurn();
+    });
+  }
+
+  private hit(p: Player): void {
+    if (this.phase !== "acting" || this.turnPlayerId !== p.id) return;
+    if (p.stood || handValue(p.hand).total >= 21) return;
+    p.hand.push(this.draw());
+    this.turnDeadline = this.tick + msTicks(ACT_TIMEOUT_MS);
+    if (handValue(p.hand).total >= 21) this.advanceLater(msTicks(750), p);
+  }
+
+  private stand(p: Player): void {
+    if (this.phase !== "acting" || this.turnPlayerId !== p.id || p.stood) return;
+    // stood=true makes the turn holder inert until advanceTurn scans past them
+    p.stood = true;
+    this.advanceLater(msTicks(300), p);
+  }
+
+  private double(p: Player): void {
+    if (
+      this.phase !== "acting" ||
+      this.turnPlayerId !== p.id ||
+      p.hand.length !== 2 ||
+      p.money < p.bet
+    )
+      return;
+    this.setMoney(p, p.money - p.bet);
+    p.bet *= 2;
+    p.doubled = true;
+    p.hand.push(this.draw());
+    p.stood = true;
+    this.advanceLater(msTicks(750), p);
+  }
+
+  private dealerPlay(): void {
+    this.phase = "dealer";
+    this.holeHidden = false;
+    const anyContest = this.bettors().some(
+      (p) => handValue(p.hand).total <= 21 && !isBlackjack(p.hand)
+    );
+    if (!anyContest) {
+      this.later(msTicks(700), () => this.settleRound());
+      return;
+    }
+    const step = () => {
+      if (this.phase !== "dealer") return;
+      if (handValue(this.dealerHand).total < 17) {
+        this.dealerHand.push(this.draw());
+        this.later(msTicks(DEALER_DRAW_MS), step);
+      } else {
+        this.settleRound();
+      }
+    };
+    this.later(msTicks(DEALER_DRAW_MS), step);
+  }
+
+  private settleRound(): void {
+    this.phase = "settle";
+    this.holeHidden = false;
+    const d = handValue(this.dealerHand).total;
+    const dBJ = isBlackjack(this.dealerHand);
+    for (const p of this.bettors()) {
+      const res = settle(handValue(p.hand).total, d, isBlackjack(p.hand), dBJ, p.bet);
+      this.setMoney(p, p.money + res.back);
+      p.stats.handsPlayed++;
+      p.score += SCORE_HAND_PLAYED;
+      if (res.kind === "win") {
+        p.stats.handsWon++;
+        p.score += SCORE_HAND_WON;
+      }
+      this.events.push({
+        t: "result",
+        playerId: p.id,
+        label: res.label,
+        kind: res.kind,
+        delta: res.back - p.bet,
+      });
+    }
+    this.handsPlayed++;
+    if (this.handsPlayed % INFLATE_EVERY_HANDS === 0) {
+      this.cigarPrice = inflate(this.cigarPrice);
+      this.beerPrice = inflate(this.beerPrice);
+    }
+    this.later(msTicks(RESULT_PAUSE_MS), () => this.endRound());
+  }
+
+  private endRound(): void {
+    for (const p of this.players.values()) {
+      p.committed = false;
+      p.bet = 0;
+      // provably unable to continue: broke with no vices left
+      if (p.alive && p.money <= 0 && p.cigarInv === 0 && p.beerInv === 0)
+        this.eliminate(p, "BANKRUPT. THE HOUSE ALWAYS WINS.");
+    }
+    if (this.phase === "over") return; // eliminations above may end the run
+    this.phase = "betting";
+    this.dealerHand = [];
+    this.holeHidden = true;
+  }
+
+  /* leader-only: back to the lobby, everyone reset (mid-run joiners get
+     seated for real), leader starts the next run from there */
+  private restart(p: Player): void {
+    if (this.phase !== "over" || p.id !== this.leaderId) return;
+    // debris persists across runs — the den stays filthy
+    for (const q of this.players.values()) {
+      q.money = START_MONEY;
+      q.pendingBet = 0;
+      q.lastBet = 0;
+      q.committed = false;
+      q.bet = 0;
+      q.hand = [];
+      q.stood = false;
+      q.doubled = false;
+      q.cigarMeter = METER_MAX;
+      q.beerMeter = METER_MAX;
+      q.cigarInv = 3;
+      q.beerInv = 3;
+      q.ritual = null;
+      q.alive = true;
+      q.waiting = false;
+      q.causeOfDeath = null;
+      q.score = 0;
+      q.stats = { handsPlayed: 0, handsWon: 0, cigarsSmoked: 0, beersDrunk: 0, peakMoney: START_MONEY };
+    }
+    this.cigarPrice = CIGAR_PRICE_0;
+    this.beerPrice = BEER_PRICE_0;
+    this.handsPlayed = 0;
+    this.dealerHand = [];
+    this.holeHidden = true;
+    this.shoe = buildShoe(DECKS, this.rng);
+    this.runStartTick = this.tick;
+    this.winnerId = null;
+    this.runPlayerCount = 0;
+    this.phase = "lobby";
+  }
+
+  /* ---------------- vices ---------------- */
+  private setMoney(p: Player, n: number): void {
+    p.money = n;
+    if (n > p.stats.peakMoney) p.stats.peakMoney = n;
+  }
+
+  private buy(p: Player, item: ViceKind, qty: number): void {
+    if (!p.alive || this.phase === "over") return;
+    const price = (item === "cigar" ? this.cigarPrice : this.beerPrice) * qty;
+    if (p.money < price) return;
+    this.setMoney(p, p.money - price);
+    if (item === "cigar") p.cigarInv += qty;
+    else p.beerInv += qty;
+  }
+
+  private consumeStart(p: Player, kind: ViceKind): void {
+    // hands full blocks the next vice: the empty never drops itself — you
+    // fling it or you stay thirsty. Litter is the player's problem.
+    if (!p.alive || p.ritual || p.held) return;
+    if (kind === "cigar" && p.cigarInv < 1) return;
+    if (kind === "beer" && p.beerInv < 1) return;
+    p.ritual = { kind, progressTicks: 0, engaged: false };
+  }
+
+  private completeRitual(p: Player): void {
+    const kind = p.ritual!.kind;
+    p.ritual = null;
+    if (kind === "cigar") {
+      if (p.cigarInv < 1) return;
+      p.cigarInv--;
+      p.stats.cigarsSmoked++;
+      p.cigarMeter = METER_MAX; // a good cigar fixes everything
+    } else {
+      if (p.beerInv < 1) return;
+      p.beerInv--;
+      p.stats.beersDrunk++;
+      p.beerMeter = METER_MAX; // drained to the last drop
+    }
+    p.score += SCORE_VICE;
+    // hands are guaranteed empty here: consumeStart refuses while holding
+    p.held = { id: this.nextDebrisId++, kind, sinceTick: this.tick, earned: true, pos: null };
+  }
+
+  /* ---------------- debris & fling ---------------- */
+  private fling(p: Player, itemId: number, origin: V3, vel: V3, angVel: V3): void {
+    if (!p.held || p.held.id !== itemId) return;
+    const eye = seatEye(p.seat);
+    // clamp origin to arm's length of the seat — no teleport-throws
+    const dx = origin.x - eye.x,
+      dy = origin.y - eye.y,
+      dz = origin.z - eye.z;
+    const dist = Math.hypot(dx, dy, dz);
+    const o =
+      dist > 1.0
+        ? { x: eye.x + (dx / dist) * 1.0, y: eye.y + (dy / dist) * 1.0, z: eye.z + (dz / dist) * 1.0 }
+        : origin;
+    const speed = Math.hypot(vel.x, vel.y, vel.z);
+    const s = speed > MAX_FLING_SPEED ? MAX_FLING_SPEED / speed : 1;
+    const v = { x: vel.x * s, y: vel.y * s, z: vel.z * s };
+    const maxSpin = 25;
+    const av = {
+      x: Math.max(-maxSpin, Math.min(maxSpin, angVel.x)),
+      y: Math.max(-maxSpin, Math.min(maxSpin, angVel.y)),
+      z: Math.max(-maxSpin, Math.min(maxSpin, angVel.z)),
+    };
+    this.spawnDebris(p.held.kind, o, v, av, p.id, p.held.earned);
+    this.events.push({ t: "fling", playerId: p.id, id: p.held.id, vel: { ...v } });
+    p.held = null;
+  }
+
+  private autoDrop(p: Player): void {
+    if (!p.held) return;
+    const eye = seatEye(p.seat);
+    // gentle lob toward the table
+    const toward = { x: -eye.x, y: 0, z: -eye.z };
+    const len = Math.hypot(toward.x, toward.z) || 1;
+    this.spawnDebris(
+      p.held.kind,
+      { x: eye.x + (toward.x / len) * 0.4, y: eye.y - 0.1, z: eye.z + (toward.z / len) * 0.4 },
+      {
+        x: (toward.x / len) * this.rng.range(0.8, 1.6),
+        y: this.rng.range(0.3, 0.8),
+        z: (toward.z / len) * this.rng.range(0.8, 1.6),
+      },
+      { x: this.rng.range(-6, 6), y: this.rng.range(-6, 6), z: this.rng.range(-6, 6) }
+    );
+    p.held = null;
+  }
+
+  private spawnDebris(
+    kind: ViceKind,
+    origin: V3,
+    vel: V3,
+    angVel: V3,
+    owner: string | null = null,
+    earned = false
+  ): void {
+    const id = this.nextDebrisId++;
+    const body = spawnDebrisBody(this.world, kind, origin, vel, angVel);
+    this.colliderDebris.set(body.collider(0).handle, id);
+    this.debris.set(id, {
+      id,
+      kind,
+      phase: "flying",
+      body,
+      pos: { ...origin },
+      rot: { x: 0, y: 0, z: 0, w: 1 },
+      bornTick: this.tick,
+      stillTicks: 0,
+      owner,
+      earned,
+      touched: false,
+      litterAt: null,
+      hitPlayer: false,
+    });
+    this.enforceDebrisCap();
+  }
+
+  private enforceDebrisCap(): void {
+    if (this.debris.size <= MAX_DEBRIS) return;
+    // prefer evicting settled scenery, but never exceed the cap: the renderer
+    // draws at most MAX_DEBRIS instances, so overflow would be invisible yet
+    // still collidable
+    let oldest: Debris | null = null;
+    for (const d of this.debris.values())
+      if (d.phase === "settled" && (!oldest || d.bornTick < oldest.bornTick)) oldest = d;
+    if (!oldest)
+      for (const d of this.debris.values())
+        if (!oldest || d.bornTick < oldest.bornTick) oldest = d;
+    if (oldest) this.removeDebris(oldest);
+  }
+
+  private removeDebris(d: Debris): void {
+    if (d.body) {
+      this.colliderDebris.delete(d.body.collider(0).handle);
+      this.world.removeRigidBody(d.body);
+    }
+    this.debris.delete(d.id);
+  }
+
+  /* settled or mid-flight — snatching a rolling bottle is allowed. Hands
+     full is a hard deny (the client flashes the held item red). */
+  private pickup(p: Player, itemId: number): void {
+    if (!p.alive || p.ritual || p.held) return;
+    const d = this.debris.get(itemId);
+    if (!d) return;
+    const eye = seatEye(p.seat);
+    if (Math.hypot(d.pos.x - eye.x, d.pos.y - eye.y, d.pos.z - eye.z) > REACH_RADIUS) return;
+    this.removeDebris(d);
+    // scavenged, not earned: re-flinging floor litter never pays
+    p.held = { id: this.nextDebrisId++, kind: d.kind, sinceTick: this.tick, earned: false, pos: null };
+  }
+
+  /* the owner is dragging the empty around (the wind-up before a fling) —
+     mirror the position for everyone else, pinned to arm's reach */
+  private heldMove(p: Player, pos: V3 | null): void {
+    if (!p.held) return;
+    if (pos === null) {
+      p.held.pos = null;
+      return;
+    }
+    const eye = seatEye(p.seat);
+    const dx = pos.x - eye.x,
+      dy = pos.y - eye.y,
+      dz = pos.z - eye.z;
+    const dist = Math.hypot(dx, dy, dz);
+    const s = dist > 1.2 ? 1.2 / dist : 1;
+    p.held.pos = { x: eye.x + dx * s, y: eye.y + dy * s, z: eye.z + dz * s };
+  }
+
+  /* ---------------- tick ---------------- */
+  step(): void {
+    this.tick++;
+    if (this.phase === "lobby") return;
+
+    // scheduled round actions
+    if (this.schedule.length) {
+      const due = this.schedule.filter((a) => a.at <= this.tick);
+      this.schedule = this.schedule.filter((a) => a.at > this.tick);
+      for (const a of due) a.run();
+    }
+
+    // betting window: once someone commits, stragglers eventually sit out
+    if (this.phase === "betting" && this.bettingDeadline && this.tick >= this.bettingDeadline)
+      this.startDealing();
+
+    // AFK turn timeout
+    if (this.phase === "acting" && this.turnPlayerId && this.tick >= this.turnDeadline) {
+      const p = this.players.get(this.turnPlayerId);
+      if (p) {
+        p.stood = true;
+        this.advanceTurn();
+      }
+    }
+
+    if (this.phase !== "over") this.tickMetersAndRituals();
+    this.stepPhysics();
+  }
+
+  private tickMetersAndRituals(): void {
+    const elapsedMin = Math.floor((this.tick - this.runStartTick) / TICK_RATE / 60);
+    const base = Math.min(RATE_CAP, BASE_RATE + RAMP * elapsedMin);
+    const dt = 1 / TICK_RATE;
+
+    for (const p of this.players.values()) {
+      if (!p.alive || p.waiting) continue;
+      p.cigarDrift = Math.max(
+        -JITTER,
+        Math.min(JITTER, p.cigarDrift + (this.rng.next() - 0.5) * 0.12)
+      );
+      p.beerDrift = Math.max(
+        -JITTER,
+        Math.min(JITTER, p.beerDrift + (this.rng.next() - 0.5) * 0.12)
+      );
+      p.cigarMeter -= (base + p.cigarDrift) * dt;
+      p.beerMeter -= (base + p.beerDrift) * dt;
+
+      if (p.ritual?.engaged) {
+        p.ritual.progressTicks++;
+        if (p.ritual.progressTicks >= msTicks(RITUAL_MS[p.ritual.kind])) this.completeRitual(p);
+      }
+
+      if (p.cigarMeter <= 0) this.eliminate(p, "DIED OF SOBRIETY (CIGAR WITHDRAWAL)");
+      else if (p.beerMeter <= 0) this.eliminate(p, "DIED OF SOBRIETY (DEHYDRATION BY SOBRIETY)");
+    }
+  }
+
+  private eliminate(p: Player, cause: string): void {
+    if (!p.alive) return;
+    p.alive = false;
+    p.causeOfDeath = cause;
+    p.ritual = null;
+    if (p.held) this.autoDrop(p);
+    this.events.push({ t: "eliminated", playerId: p.id, cause });
+    if (this.turnPlayerId === p.id) this.advanceTurn();
+    this.checkWin();
+  }
+
+  /* solo runs end when the lone degenerate dies; with 2+ participants the
+     last one still breathing takes the crown */
+  private checkWin(): void {
+    if (this.phase === "lobby" || this.phase === "over") return;
+    const alive = [...this.players.values()].filter((p) => !p.waiting && p.alive);
+    const done = this.runPlayerCount >= 2 ? alive.length <= 1 : alive.length === 0;
+    if (!done) return;
+    this.winnerId = alive[0]?.id ?? null;
+    this.phase = "over";
+    this.schedule = [];
+  }
+
+  private stepPhysics(): void {
+    this.world.step(this.eventQueue);
+
+    this.eventQueue.drainCollisionEvents((h1, h2, started) => {
+      if (!started) return;
+      // first contact with ANYTHING (felt, floor, rim, other debris) arms
+      // the litter payout — one-shot per flung empty
+      for (const h of [h1, h2]) {
+        const id = this.colliderDebris.get(h);
+        const d = id === undefined ? undefined : this.debris.get(id);
+        if (d && !d.touched) {
+          d.touched = true;
+          if (d.earned && d.owner)
+            d.litterAt = this.tick + msTicks(LITTER_IMPACT_DELAY_MS);
+        }
+      }
+      // impact events for sound, throttled
+      if (this.tick - this.lastImpactTick < 4) return;
+      const c1 = this.world.getCollider(h1);
+      const c2 = this.world.getCollider(h2);
+      const body = c1?.parent() ?? c2?.parent();
+      if (!body) return;
+      const v = body.linvel();
+      const speed = Math.hypot(v.x, v.y, v.z);
+      if (speed < 0.6) return;
+      const t = body.translation();
+      this.lastImpactTick = this.tick;
+      this.events.push({ t: "impact", speed, pos: { x: t.x, y: t.y, z: t.z } });
+    });
+
+    for (const d of [...this.debris.values()]) {
+      if (d.litterAt !== null && this.tick >= d.litterAt) {
+        d.litterAt = null;
+        this.scoreLitter(d);
+      }
+      if (d.phase !== "flying" || !d.body) continue;
+      let t = d.body.translation();
+      const r = d.body.rotation();
+      // safety net: a body detected inside the solid tabletop slab has
+      // tunneled (rare residual even with cuboid planks + CCD) — pop it
+      // back onto the felt instead of letting it visibly sink through
+      if (
+        Math.hypot(t.x, t.z) < TABLE.radius - 0.05 &&
+        t.y > 0.15 &&
+        t.y < TABLE.height - 0.05
+      ) {
+        const lv = d.body.linvel();
+        d.body.setTranslation({ x: t.x, y: TABLE.height + 0.03, z: t.z }, true);
+        d.body.setLinvel({ x: lv.x, y: Math.max(0, lv.y), z: lv.z }, true);
+        t = d.body.translation();
+      }
+      d.pos = { x: t.x, y: t.y, z: t.z };
+      d.rot = { x: r.x, y: r.y, z: r.z, w: r.w };
+      if (t.y < -5) {
+        this.removeDebris(d);
+        continue;
+      }
+      if (!d.touched && !d.hitPlayer && d.owner) this.checkPlayerHit(d);
+      // settle by policy, not just isSleeping(): tiny capsules never cross
+      // Rapier's sleep threshold (contact-solver jitter keeps ~1 rad/s of
+      // imperceptible spin alive forever)
+      const lv = d.body.linvel();
+      const av = d.body.angvel();
+      const slow =
+        Math.hypot(lv.x, lv.y, lv.z) < 0.08 && Math.hypot(av.x, av.y, av.z) < 2.5;
+      d.stillTicks = slow ? d.stillTicks + 1 : 0;
+      if (d.body.isSleeping() || d.stillTicks > 45) {
+        // freeze into scenery: fixed body keeps the collider, costs nothing
+        d.body.setBodyType(RAPIER.RigidBodyType.Fixed, false);
+        d.phase = "settled";
+        this.rollMoneyDrop(d);
+      }
+    }
+  }
+
+  /* a flung empty that beans another player before touching anything pays
+     the flinger a bonus. Manual point-vs-capsule math — players have no
+     Rapier colliders, and plain arithmetic keeps the sim deterministic. */
+  private checkPlayerHit(d: Debris): void {
+    const flinger = this.players.get(d.owner!);
+    if (!flinger || !flinger.alive) return;
+    const r2 = PLAYER_HIT_RADIUS * PLAYER_HIT_RADIUS;
+    const victims = [...this.players.values()]
+      .filter((q) => q.id !== d.owner)
+      .sort((a, b) => a.seat - b.seat); // deterministic pick order
+    for (const q of victims) {
+      const base = seatPosition(q.seat);
+      const cy = Math.max(PLAYER_HIT_Y_MIN, Math.min(PLAYER_HIT_Y_MAX, d.pos.y));
+      const dx = d.pos.x - base.x;
+      const dy = d.pos.y - cy;
+      const dz = d.pos.z - base.z;
+      if (dx * dx + dy * dy + dz * dz > r2) continue;
+      d.hitPlayer = true;
+      flinger.score += SCORE_PLAYER_HIT;
+      this.events.push({
+        t: "playerHit",
+        flingerId: flinger.id,
+        victimId: q.id,
+        pos: { ...d.pos },
+        points: SCORE_PLAYER_HIT,
+      });
+      // players have no collider, so the empty would sail through the
+      // victim's chest — knock it back off them instead
+      if (d.body) {
+        const lv = d.body.linvel();
+        d.body.setLinvel(
+          { x: -lv.x * 0.25, y: Math.min(lv.y, 0) * 0.25, z: -lv.z * 0.25 },
+          true
+        );
+        const av = d.body.angvel();
+        d.body.setAngvel({ x: av.x * 0.4, y: av.y * 0.4, z: av.z * 0.4 }, true);
+      }
+      return;
+    }
+  }
+
+  /* litter points land a beat after the empty's first impact (armed in the
+     collision handler above) — earned empties only, exactly once, so the
+     pickup→refling loop still can't be farmed */
+  private scoreLitter(d: Debris): void {
+    const p = d.owner ? this.players.get(d.owner) : null;
+    if (!p || !p.alive) return;
+    this.events.push({ t: "litter", playerId: p.id, pos: { ...d.pos }, points: LITTER_POINTS });
+    p.score += LITTER_POINTS;
+  }
+
+  /* the money drop stays a rare variable-ratio bonus rolled once at settle —
+     sometimes the filth pays, but only after it has come to rest */
+  private rollMoneyDrop(d: Debris): void {
+    if (!d.earned) return;
+    d.earned = false;
+    const p = d.owner ? this.players.get(d.owner) : null;
+    if (!p || !p.alive) return;
+    if (this.rng.next() >= MONEY_DROP_CHANCE) return;
+    const amount = Math.round(this.rng.range(MONEY_DROP_MIN, MONEY_DROP_MAX));
+    this.setMoney(p, p.money + amount);
+    this.events.push({ t: "moneyDrop", playerId: p.id, pos: { ...d.pos }, amount });
+  }
+
+  private later(delayTicks: number, run: () => void): void {
+    this.schedule.push({ at: this.tick + Math.max(1, delayTicks), run });
+  }
+
+  /* ---------------- snapshot ---------------- */
+  snapshot(): Snapshot {
+    const players: PlayerSnap[] = [...this.players.values()].map((p) => ({
+      id: p.id,
+      name: p.name,
+      seat: p.seat,
+      money: Math.round(p.money),
+      pendingBet: p.pendingBet,
+      lastBet: p.lastBet,
+      committed: p.committed,
+      bet: p.bet,
+      doubled: p.doubled,
+      stood: p.stood,
+      hand: p.hand,
+      cigarMeter: p.cigarMeter,
+      beerMeter: p.beerMeter,
+      cigarInv: p.cigarInv,
+      beerInv: p.beerInv,
+      ritual: p.ritual
+        ? {
+            kind: p.ritual.kind,
+            progress: Math.min(1, p.ritual.progressTicks / msTicks(RITUAL_MS[p.ritual.kind])),
+          }
+        : null,
+      held: p.held
+        ? { id: p.held.id, kind: p.held.kind, pos: p.held.pos ? { ...p.held.pos } : null }
+        : null,
+      look: {
+        yaw: Math.round(p.lookYaw * 100) / 100,
+        pitch: Math.round(p.lookPitch * 100) / 100,
+      },
+      alive: p.alive,
+      waiting: p.waiting,
+      causeOfDeath: p.causeOfDeath,
+      score: Math.round(p.score),
+      stats: { ...p.stats },
+    }));
+
+    const debris: DebrisSnap[] = [...this.debris.values()].map((d) => ({
+      id: d.id,
+      kind: d.kind,
+      phase: d.phase,
+      pos: d.pos,
+      rot: d.rot,
+    }));
+
+    const events = this.events;
+    this.events = [];
+
+    return {
+      tick: this.tick,
+      phase: this.phase,
+      leaderId: this.leaderId,
+      winnerId: this.winnerId,
+      dealerHand: this.holeHidden
+        ? this.dealerHand.map((c, i) => (i === 1 ? { r: "?", s: "?" } : c))
+        : this.dealerHand,
+      holeHidden: this.holeHidden,
+      turnPlayerId: this.turnPlayerId,
+      cigarPrice: this.cigarPrice,
+      beerPrice: this.beerPrice,
+      handsPlayed: this.handsPlayed,
+      elapsed: (this.tick - this.runStartTick) / TICK_RATE,
+      players,
+      debris,
+      events,
+    };
+  }
+}

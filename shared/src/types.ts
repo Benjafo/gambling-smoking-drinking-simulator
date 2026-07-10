@@ -1,0 +1,112 @@
+import type { Card, ResultKind } from "./blackjack";
+import type { V3 } from "./constants";
+
+export type ViceKind = "cigar" | "beer";
+export type RoomPhase = "lobby" | "betting" | "dealing" | "acting" | "dealer" | "settle" | "over";
+export type DebrisPhase = "flying" | "settled";
+
+export interface Quat {
+  x: number;
+  y: number;
+  z: number;
+  w: number;
+}
+
+export interface PlayerStats {
+  handsPlayed: number;
+  handsWon: number;
+  cigarsSmoked: number;
+  beersDrunk: number;
+  peakMoney: number;
+}
+
+export interface PlayerSnap {
+  id: string;
+  name: string;
+  seat: number;
+  money: number;
+  pendingBet: number;
+  lastBet: number;
+  committed: boolean;
+  bet: number;
+  doubled: boolean;
+  stood: boolean;
+  hand: Card[];
+  cigarMeter: number;
+  beerMeter: number;
+  cigarInv: number;
+  beerInv: number;
+  ritual: { kind: ViceKind; progress: number } | null;
+  /* pos is set while the owner is dragging the empty (wind-up before a
+     fling) — remote clients mirror it so the throw telegraphs */
+  held: { id: number; kind: ViceKind; pos: V3 | null } | null;
+  /* where this player's camera is pointed, relative to facing the table
+     center — drives the avatar's head on everyone else's screen */
+  look: { yaw: number; pitch: number };
+  alive: boolean;
+  /* joined mid-run: spectates until the next game starts */
+  waiting: boolean;
+  causeOfDeath: string | null;
+  score: number;
+  stats: PlayerStats;
+}
+
+export interface DebrisSnap {
+  id: number;
+  kind: ViceKind;
+  phase: DebrisPhase;
+  pos: V3;
+  rot: Quat;
+}
+
+export type SimEvent =
+  | { t: "result"; playerId: string; label: string; kind: ResultKind; delta: number }
+  | { t: "impact"; speed: number; pos: V3 }
+  | { t: "fling"; playerId: string; id: number; vel: V3 }
+  | { t: "moneyDrop"; playerId: string; pos: V3; amount: number }
+  | { t: "litter"; playerId: string; pos: V3; points: number }
+  | { t: "playerHit"; flingerId: string; victimId: string; pos: V3; points: number }
+  | { t: "eliminated"; playerId: string; cause: string };
+
+export interface Snapshot {
+  tick: number;
+  phase: RoomPhase;
+  leaderId: string | null;
+  winnerId: string | null;
+  dealerHand: Card[];
+  holeHidden: boolean;
+  turnPlayerId: string | null;
+  cigarPrice: number;
+  beerPrice: number;
+  handsPlayed: number;
+  elapsed: number; // seconds since run start
+  players: PlayerSnap[];
+  debris: DebrisSnap[];
+  events: SimEvent[];
+}
+
+export type Intent =
+  | { type: "join"; name: string }
+  | { type: "leave" }
+  | { type: "startGame" }
+  | { type: "setBet"; amount: number }
+  | { type: "commitBet" }
+  | { type: "hit" }
+  | { type: "stand" }
+  | { type: "double" }
+  | { type: "buy"; item: ViceKind; qty: number }
+  | { type: "consumeStart"; kind: ViceKind }
+  | { type: "ritualEngage"; on: boolean }
+  | { type: "ritualReset" }
+  | { type: "consumeCancel" }
+  | { type: "fling"; itemId: number; origin: V3; vel: V3; angVel: V3 }
+  | { type: "heldMove"; pos: V3 | null }
+  | { type: "pickup"; itemId: number }
+  | { type: "look"; yaw: number; pitch: number }
+  | { type: "restart" };
+
+/* transport-level messages (worker postMessage and websocket share these) */
+export type ClientMsg = { type: "intent"; intent: Intent };
+export type ServerMsg =
+  | { type: "welcome"; playerId: string }
+  | { type: "snapshot"; snap: Snapshot };
