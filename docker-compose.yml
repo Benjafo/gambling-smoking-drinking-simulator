@@ -16,7 +16,7 @@ services:
       context: .
       dockerfile: client/Dockerfile
     ports:
-      - "8080:80"
+      - "8082:80" #8080 is allocated on VPS
     depends_on:
       - server
     restart: unless-stopped
