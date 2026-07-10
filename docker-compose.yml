@@ -25,7 +25,7 @@ services:
       - internal
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.blackjack.rule=Host(`blackjack.mysite.com`)"
+      - "traefik.http.routers.blackjack.rule=Host(`blackjack.benjafo.com`)"
       - "traefik.http.routers.blackjack.entrypoints=websecure"
       - "traefik.http.routers.blackjack.tls.certresolver=letsencrypt"
       - "traefik.http.services.blackjack.loadbalancer.server.port=80"
