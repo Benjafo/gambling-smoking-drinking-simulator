@@ -222,7 +222,7 @@ export class CardZone {
     ctx.lineWidth = 3;
     ctx.stroke();
     ctx.fillStyle = "#f2e8d5";
-    ctx.font = "700 52px 'Courier New', monospace";
+    ctx.font = "58px 'VT323',monospace";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     ctx.fillText(text, 160, 52);

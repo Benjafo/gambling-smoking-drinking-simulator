@@ -53,12 +53,12 @@ function canvasTexture(
 
 function nameSprite(name: string): THREE.Sprite {
   const tex = canvasTexture(256, 64, (ctx) => {
-    ctx.font = "bold 34px 'Courier New',monospace";
+    ctx.font = "700 32px 'Pixelify Sans',sans-serif";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     ctx.shadowColor = "rgba(0,0,0,0.9)";
     ctx.shadowBlur = 8;
-    ctx.fillStyle = "#e9a63a";
+    ctx.fillStyle = "#ffc832";
     ctx.fillText(name.toUpperCase().slice(0, 14), 128, 34);
   });
   const sprite = new THREE.Sprite(
@@ -252,7 +252,7 @@ export class LobbyRoomView {
         map: canvasTexture(512, 112, (ctx) => {
           ctx.fillStyle = "#0d1a10";
           ctx.fillRect(0, 0, 512, 112);
-          ctx.font = "bold 58px Georgia,serif";
+          ctx.font = "700 52px 'Pixelify Sans',sans-serif";
           ctx.textAlign = "center";
           ctx.textBaseline = "middle";
           ctx.shadowColor = "#5fbf6e";
@@ -273,7 +273,7 @@ export class LobbyRoomView {
       map: canvasTexture(512, 160, (ctx) => {
         ctx.fillStyle = "#120d08";
         ctx.fillRect(0, 0, 512, 160);
-        ctx.font = "bold 64px Georgia,serif";
+        ctx.font = "700 60px 'Pixelify Sans',sans-serif";
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
         ctx.shadowColor = "#e0522b";
@@ -283,7 +283,7 @@ export class LobbyRoomView {
         ctx.strokeText("THE  DEN", 256, 62);
         ctx.fillStyle = "#ffb08a";
         ctx.fillText("THE  DEN", 256, 62);
-        ctx.font = "26px 'Courier New',monospace";
+        ctx.font = "30px 'VT323',monospace";
         ctx.shadowBlur = 12;
         ctx.fillStyle = "#c9836a";
         ctx.fillText("NO SYMPATHY AFTER 9", 256, 122);
@@ -315,10 +315,10 @@ export class LobbyRoomView {
             ctx.strokeRect(8, 8, 240, 328);
             ctx.textAlign = "center";
             ctx.fillStyle = "#3a2c18";
-            ctx.font = "bold 40px Georgia,serif";
+            ctx.font = "700 36px 'Pixelify Sans',sans-serif";
             const words = lines[0].split(" ");
             words.forEach((w, i) => ctx.fillText(w, 128, 96 + i * 48));
-            ctx.font = "italic 20px Georgia,serif";
+            ctx.font = "22px 'VT323',monospace";
             ctx.fillStyle = "#6b5836";
             ctx.fillText(lines[1], 128, 300);
           }),
@@ -544,13 +544,13 @@ export class LobbyRoomView {
         map: canvasTexture(256, 212, (ctx) => {
           ctx.fillStyle = "#1b1009";
           ctx.fillRect(0, 0, 256, 212);
-          ctx.font = "bold 52px Georgia,serif";
+          ctx.font = "700 46px 'Pixelify Sans',sans-serif";
           ctx.textAlign = "center";
           ctx.shadowColor = "#e9a63a";
           ctx.shadowBlur = 14;
           ctx.fillStyle = "#f2cf8b";
           ctx.fillText("SMOKES", 128, 62);
-          ctx.font = "22px 'Courier New',monospace";
+          ctx.font = "26px 'VT323',monospace";
           ctx.shadowBlur = 0;
           ctx.fillStyle = "#a39a8b";
           ctx.fillText("CORRECT CHANGE", 128, 116);
@@ -584,13 +584,13 @@ export class LobbyRoomView {
         map: canvasTexture(212, 256, (ctx) => {
           ctx.fillStyle = "#101b14";
           ctx.fillRect(0, 0, 212, 256);
-          ctx.font = "bold 62px Georgia,serif";
+          ctx.font = "700 54px 'Pixelify Sans',sans-serif";
           ctx.textAlign = "center";
           ctx.shadowColor = "#5fbf6e";
           ctx.shadowBlur = 16;
           ctx.fillStyle = "#9fe8ab";
           ctx.fillText("BEER", 106, 92);
-          ctx.font = "22px 'Courier New',monospace";
+          ctx.font = "26px 'VT323',monospace";
           ctx.shadowBlur = 0;
           ctx.fillStyle = "#a39a8b";
           ctx.fillText("COLD-ISH.", 106, 158);

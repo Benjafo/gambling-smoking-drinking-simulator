@@ -7,6 +7,19 @@ import { RitualControl } from "./ui/ritual";
 
 const $ = (id: string): HTMLElement => document.getElementById(id)!;
 
+/* the 3D room bakes its signs into canvas textures at construction, so the
+   pixel fonts must be resolvable first; the race keeps a busted font file
+   from ever blocking boot */
+await Promise.race([
+  Promise.all([
+    document.fonts.load('700 64px "Pixelify Sans"'),
+    document.fonts.load('32px "VT323"'),
+    document.fonts.load('9px "Silkscreen"'),
+    document.fonts.load('700 9px "Silkscreen"'),
+  ]),
+  new Promise((resolve) => setTimeout(resolve, 2500)),
+]).catch(() => undefined);
+
 /* one scene/hud/ritual for the app's lifetime; sessions come and go and the
    send indirection routes intents to whichever one is live */
 let session: Session | null = null;

@@ -235,7 +235,7 @@ function billTexture(): THREE.CanvasTexture {
   c.lineWidth = 4;
   c.strokeRect(2, 2, 60, 28);
   c.fillStyle = "#bfe8c2";
-  c.font = "bold 20px monospace";
+  c.font = "22px 'VT323',monospace";
   c.textAlign = "center";
   c.textBaseline = "middle";
   c.fillText("$", 32, 17);
@@ -248,7 +248,7 @@ function amountTexture(amount: number): THREE.CanvasTexture {
   cv.width = 256;
   cv.height = 96;
   const c = cv.getContext("2d")!;
-  c.font = "bold 56px monospace";
+  c.font = "64px 'VT323',monospace";
   c.textAlign = "center";
   c.textBaseline = "middle";
   c.shadowColor = "rgba(120,255,140,0.9)";
@@ -369,7 +369,7 @@ function pointsTexture(points: number): THREE.CanvasTexture {
   cv.width = 256;
   cv.height = 96;
   const c = cv.getContext("2d")!;
-  c.font = "bold 48px monospace";
+  c.font = "56px 'VT323',monospace";
   c.textAlign = "center";
   c.textBaseline = "middle";
   c.shadowColor = "rgba(255,214,110,0.9)";
@@ -477,7 +477,7 @@ function ouchTexture(text: string): THREE.CanvasTexture {
   c.roundRect(18, 12, 220, 72, 20);
   c.fill();
   c.stroke();
-  c.font = "bold 44px monospace";
+  c.font = "50px 'VT323',monospace";
   c.textAlign = "center";
   c.textBaseline = "middle";
   c.shadowColor = "rgba(255,80,60,0.9)";
