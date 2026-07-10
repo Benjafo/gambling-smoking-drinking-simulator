@@ -49,6 +49,37 @@ export function denySound(): void {
   osc.stop(ac.currentTime + 0.15);
 }
 
+export function hurtSound(): void {
+  const ac = audio();
+  if (!ac) return;
+  // blunt thud...
+  const dur = 0.08;
+  const buf = ac.createBuffer(1, ac.sampleRate * dur, ac.sampleRate);
+  const data = buf.getChannelData(0);
+  for (let i = 0; i < data.length; i++)
+    data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / data.length, 2.5);
+  const src = ac.createBufferSource();
+  src.buffer = buf;
+  const filter = ac.createBiquadFilter();
+  filter.type = "lowpass";
+  filter.frequency.value = 500;
+  const thud = ac.createGain();
+  thud.gain.value = 0.3;
+  src.connect(filter).connect(thud).connect(ac.destination);
+  src.start();
+  // ...plus a short descending groan
+  const osc = ac.createOscillator();
+  osc.type = "square";
+  osc.frequency.setValueAtTime(200, ac.currentTime);
+  osc.frequency.linearRampToValueAtTime(110, ac.currentTime + 0.15);
+  const gain = ac.createGain();
+  gain.gain.setValueAtTime(0.12, ac.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.001, ac.currentTime + 0.18);
+  osc.connect(gain).connect(ac.destination);
+  osc.start();
+  osc.stop(ac.currentTime + 0.2);
+}
+
 export function pickupSound(): void {
   const ac = audio();
   if (!ac) return;
@@ -421,6 +452,83 @@ export class PointsBurst {
       if (!s.rise) {
         s.vel.y -= 1.6 * dt; // sparks pop up, hang, drift back down
         mat.rotation += 2.5 * dt;
+      }
+      s.sprite.position.addScaledVector(s.vel, dt);
+      const t = s.age / s.life;
+      mat.opacity = t < 0.6 ? 1 : 1 - (t - 0.6) / 0.4;
+    }
+  }
+}
+
+const OUCH_WORDS = ["OUCH!", "YOW!", "AGH!", "OOF!", "HEY!"];
+let ouchIdx = 0;
+
+function ouchTexture(text: string): THREE.CanvasTexture {
+  const cv = document.createElement("canvas");
+  cv.width = 256;
+  cv.height = 96;
+  const c = cv.getContext("2d")!;
+  // the rounded backdrop is what makes it read as a yelp bubble, not
+  // another points label
+  c.fillStyle = "rgba(25,10,8,0.7)";
+  c.strokeStyle = "#ff6a55";
+  c.lineWidth = 4;
+  c.beginPath();
+  c.roundRect(18, 12, 220, 72, 20);
+  c.fill();
+  c.stroke();
+  c.font = "bold 44px monospace";
+  c.textAlign = "center";
+  c.textBaseline = "middle";
+  c.shadowColor = "rgba(255,80,60,0.9)";
+  c.shadowBlur = 14;
+  c.fillStyle = "#ffb4a4";
+  c.fillText(text, 128, 50);
+  return new THREE.CanvasTexture(cv);
+}
+
+/* a yelp bubble popping off whoever just took a bottle to the head —
+   world-anchored so everyone at the table sees the victim complain */
+export class OuchBubbles {
+  private items: { sprite: THREE.Sprite; vel: THREE.Vector3; life: number; age: number }[] =
+    [];
+  constructor(private scene: THREE.Scene) {}
+
+  emit(at: THREE.Vector3): void {
+    const word = OUCH_WORDS[ouchIdx++ % OUCH_WORDS.length];
+    const mat = new THREE.SpriteMaterial({
+      map: ouchTexture(word),
+      transparent: true,
+      depthWrite: false,
+      depthTest: false, // readable even at point-blank camera range
+    });
+    const sprite = new THREE.Sprite(mat);
+    sprite.position.copy(at).add(new THREE.Vector3(0, 0.06, 0));
+    sprite.scale.set(0.2, 0.075, 1);
+    this.scene.add(sprite);
+    this.items.push({
+      sprite,
+      vel: new THREE.Vector3(
+        (Math.random() - 0.5) * 0.06,
+        0.22,
+        (Math.random() - 0.5) * 0.06
+      ),
+      life: 1.3,
+      age: 0,
+    });
+  }
+
+  frame(dt: number): void {
+    for (let i = this.items.length - 1; i >= 0; i--) {
+      const s = this.items[i];
+      s.age += dt;
+      const mat = s.sprite.material as THREE.SpriteMaterial;
+      if (s.age >= s.life) {
+        this.scene.remove(s.sprite);
+        mat.map?.dispose(); // per-emit word texture
+        mat.dispose();
+        this.items.splice(i, 1);
+        continue;
       }
       s.sprite.position.addScaledVector(s.vel, dt);
       const t = s.age / s.life;

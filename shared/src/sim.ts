@@ -35,6 +35,10 @@ import {
   MAX_FLING_SPEED,
   LITTER_POINTS,
   LITTER_IMPACT_DELAY_MS,
+  SCORE_PLAYER_HIT,
+  PLAYER_HIT_Y_MIN,
+  PLAYER_HIT_Y_MAX,
+  PLAYER_HIT_RADIUS,
   LOOK_YAW_LIMIT,
   LOOK_PITCH_MIN,
   LOOK_PITCH_MAX,
@@ -48,6 +52,7 @@ import {
   SEAT_COUNT,
   TABLE,
   seatEye,
+  seatPosition,
   type V3,
 } from "./constants";
 import { Rng } from "./rng";
@@ -125,6 +130,9 @@ interface Debris {
      later (mid-clatter); `touched` makes the arming one-shot */
   touched: boolean;
   litterAt: number | null;
+  /* direct player hit is one-shot per flung empty, and only counts while
+     still flying, before touching anything */
+  hitPlayer: boolean;
 }
 
 interface ScheduledAction {
@@ -659,6 +667,7 @@ export class Simulation {
       earned,
       touched: false,
       litterAt: null,
+      hitPlayer: false,
     });
     this.enforceDebrisCap();
   }
@@ -852,6 +861,7 @@ export class Simulation {
         this.removeDebris(d);
         continue;
       }
+      if (!d.touched && !d.hitPlayer && d.owner) this.checkPlayerHit(d);
       // settle by policy, not just isSleeping(): tiny capsules never cross
       // Rapier's sleep threshold (contact-solver jitter keeps ~1 rad/s of
       // imperceptible spin alive forever)
@@ -866,6 +876,47 @@ export class Simulation {
         d.phase = "settled";
         this.rollMoneyDrop(d);
       }
+    }
+  }
+
+  /* a flung empty that beans another player before touching anything pays
+     the flinger a bonus. Manual point-vs-capsule math — players have no
+     Rapier colliders, and plain arithmetic keeps the sim deterministic. */
+  private checkPlayerHit(d: Debris): void {
+    const flinger = this.players.get(d.owner!);
+    if (!flinger || !flinger.alive) return;
+    const r2 = PLAYER_HIT_RADIUS * PLAYER_HIT_RADIUS;
+    const victims = [...this.players.values()]
+      .filter((q) => q.id !== d.owner)
+      .sort((a, b) => a.seat - b.seat); // deterministic pick order
+    for (const q of victims) {
+      const base = seatPosition(q.seat);
+      const cy = Math.max(PLAYER_HIT_Y_MIN, Math.min(PLAYER_HIT_Y_MAX, d.pos.y));
+      const dx = d.pos.x - base.x;
+      const dy = d.pos.y - cy;
+      const dz = d.pos.z - base.z;
+      if (dx * dx + dy * dy + dz * dz > r2) continue;
+      d.hitPlayer = true;
+      flinger.score += SCORE_PLAYER_HIT;
+      this.events.push({
+        t: "playerHit",
+        flingerId: flinger.id,
+        victimId: q.id,
+        pos: { ...d.pos },
+        points: SCORE_PLAYER_HIT,
+      });
+      // players have no collider, so the empty would sail through the
+      // victim's chest — knock it back off them instead
+      if (d.body) {
+        const lv = d.body.linvel();
+        d.body.setLinvel(
+          { x: -lv.x * 0.25, y: Math.min(lv.y, 0) * 0.25, z: -lv.z * 0.25 },
+          true
+        );
+        const av = d.body.angvel();
+        d.body.setAngvel({ x: av.x * 0.4, y: av.y * 0.4, z: av.z * 0.4 }, true);
+      }
+      return;
     }
   }
 

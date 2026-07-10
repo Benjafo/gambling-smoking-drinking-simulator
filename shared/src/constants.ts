@@ -39,6 +39,14 @@ export const MONEY_DROP_CHANCE = 0.06;
    mid-clatter, not when it finally stops rolling */
 export const LITTER_POINTS = 25;
 export const LITTER_IMPACT_DELAY_MS = 250;
+/* beaning another player mid-flight — before the empty touches anything —
+   pays more than mere littering */
+export const SCORE_PLAYER_HIT = 40;
+/* seated player approximated as a vertical capsule for the direct-hit test:
+   torso spans ~0.78-1.48, head center 1.54 (see client makeFigure/snapGaze) */
+export const PLAYER_HIT_Y_MIN = 0.78;
+export const PLAYER_HIT_Y_MAX = 1.6;
+export const PLAYER_HIT_RADIUS = 0.35; // includes debris-size slop
 
 /* head-tracking limits: the camera clamps here and the sim re-clamps
    whatever clients report */

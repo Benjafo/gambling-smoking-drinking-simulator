@@ -251,6 +251,13 @@ export class Hud {
         );
       } else if (ev.t === "moneyDrop" && ev.playerId === this.myId)
         this.banner("FOUND " + fmtMoney(ev.amount) + " IN THE FILTH", "win");
+      else if (ev.t === "playerHit") {
+        // victim gets a brief sting only — the flash (plus scene-side shake,
+        // sound, and bubble); the banner belongs to the sniper
+        if (ev.victimId === this.myId) this.redFlash();
+        else if (ev.flingerId === this.myId)
+          this.banner("DIRECT HIT  +" + ev.points + " PTS", "win");
+      }
       else if (ev.t === "eliminated" && ev.playerId !== this.myId) {
         const who = snap.players.find((p) => p.id === ev.playerId);
         if (who) this.banner(who.name + " IS OUT", "lose"); // textContent: no escaping
@@ -344,23 +351,35 @@ export class Hud {
   }
 
   private flashEl: HTMLElement | null = null;
-  private goldFlash(): void {
+  private flash(bg: string): void {
     if (!this.flashEl) {
       const el = document.createElement("div");
       el.style.cssText =
         "position:fixed;inset:0;pointer-events:none;z-index:60;opacity:0;" +
-        "background:radial-gradient(circle at 50% 45%,rgba(255,214,110,.55),rgba(255,180,60,.12) 55%,transparent 75%);" +
         "transition:opacity .1s ease-out";
       document.body.appendChild(el);
       this.flashEl = el;
     }
     const el = this.flashEl;
+    el.style.background = bg;
     el.style.transition = "opacity .1s ease-out";
     el.style.opacity = "1";
     setTimeout(() => {
       el.style.transition = "opacity .5s ease-in";
       el.style.opacity = "0";
     }, 140);
+  }
+
+  private goldFlash(): void {
+    this.flash(
+      "radial-gradient(circle at 50% 45%,rgba(255,214,110,.55),rgba(255,180,60,.12) 55%,transparent 75%)"
+    );
+  }
+
+  private redFlash(): void {
+    this.flash(
+      "radial-gradient(circle at 50% 45%,rgba(255,70,50,.5),rgba(200,30,20,.18) 60%,transparent 80%)"
+    );
   }
 
   private banner(text: string, kind: string): void {

@@ -26,6 +26,7 @@ import {
   SmokeSystem,
   CashBurst,
   PointsBurst,
+  OuchBubbles,
   impactSound,
   dealSound,
   denySound,
@@ -33,6 +34,7 @@ import {
   pointsSound,
   whooshSound,
   chipRiffleSound,
+  hurtSound,
 } from "./effects";
 import { updateTweens, tween, easeInOut } from "./tween";
 
@@ -91,6 +93,14 @@ const _m = new THREE.Matrix4();
 const _e = new THREE.Euler();
 const _grip = new THREE.Vector3();
 const _seg = new THREE.Vector3();
+const _from = new THREE.Vector3();
+const _cand = new THREE.Vector3();
+const _best = new THREE.Vector3();
+
+/* eye-contact magnetism: a reported gaze ray passing within this cone of
+   someone's head locks onto it exactly (aiming through a HUD-cluttered,
+   wide-FOV viewport is ~10-15° imprecise — social reads shouldn't be) */
+const GAZE_SNAP = 0.3;
 
 /* natural capsule length of an arm (0.24 shaft + two 0.048 caps) */
 const ARM_LEN = 0.336;
@@ -133,6 +143,7 @@ export class SceneView {
   private smoke: SmokeSystem;
   private cash: CashBurst;
   private points: PointsBurst;
+  private ouch: OuchBubbles;
   /* last known seat per player id — needed to clear a departed player's
      avatar/chips after they vanish from snapshots */
   private lastSeat = new Map<string, number>();
@@ -181,6 +192,7 @@ export class SceneView {
     this.smoke = new SmokeSystem(this.scene);
     this.cash = new CashBurst(this.scene);
     this.points = new PointsBurst(this.scene);
+    this.ouch = new OuchBubbles(this.scene);
     this.debrisView = new DebrisView(this.scene);
     this.held = new HeldItemControl(this.scene, this.camera, send);
     this.dealerZone = new CardZone(
@@ -381,7 +393,10 @@ export class SceneView {
   private buildDealer(): void {
     const { group } = makeFigure(0xd9d2c0, 0x17130d, { seated: false, hat: 0x1e3a28 });
     group.position.set(DEALER_POS.x, 0, DEALER_POS.z);
-    group.lookAt(0, 1.0, 0);
+    // yaw-only: figures stand upright. A 3D lookAt would tip the body back
+    // and slide the rendered head off the seat axis — where the player's
+    // camera actually is — breaking "aim at the body = look at them"
+    group.lookAt(0, 0, 0);
     this.scene.add(group);
   }
 
@@ -390,7 +405,7 @@ export class SceneView {
     const { group, head, armR, armL } = makeFigure(colors[seat % colors.length], 0x8a7560);
     const p = seatPosition(seat);
     group.position.set(p.x, 0.28, p.z);
-    group.lookAt(0, 1.0, 0);
+    group.lookAt(0, 0.28, 0); // yaw-only: upright on the seat axis (see buildDealer)
     this.scene.add(group);
     return {
       seat,
@@ -718,6 +733,27 @@ export class SceneView {
           this.points.emit(new THREE.Vector3(ev.pos.x, ev.pos.y + 0.03, ev.pos.z), ev.points);
           pointsSound();
         }
+      } else if (ev.t === "playerHit") {
+        const at = new THREE.Vector3(ev.pos.x, ev.pos.y, ev.pos.z);
+        if (ev.victimId === myId) {
+          // the impact point is at your own head — behind your view. Pull
+          // the yelp into frame, biased toward the side the bottle came from
+          const fwd = this.camera.getWorldDirection(new THREE.Vector3());
+          const side = at.clone().sub(this.camera.position);
+          side.addScaledVector(fwd, -side.dot(fwd));
+          if (side.lengthSq() > 1e-6) side.setLength(0.18);
+          at.copy(this.camera.position).addScaledVector(fwd, 0.55).add(side);
+        }
+        this.ouch.emit(at); // world-anchored: everyone sees the victim yelp
+        if (ev.flingerId === myId) {
+          // the sniper's payoff: points pop right where the bottle connected
+          this.points.emit(at.clone().add(new THREE.Vector3(0, 0.18, 0)), ev.points);
+          pointsSound();
+        }
+        if (ev.victimId === myId) {
+          this.addShake(0.025, 0.3);
+          hurtSound();
+        }
       } else if (ev.t === "fling") {
         whooshSound();
         // the real item is airborne as debris now — a hand prop easing
@@ -923,6 +959,43 @@ export class SceneView {
     }
   }
 
+  /* If this avatar's gaze ray passes near a PLAYER — their head or their
+     torso, since "look at someone" means centering the body as often as the
+     face — lock the gaze onto their eyes exactly. When the target is MINE,
+     the aim point is my actual camera: someone looking at you stares
+     straight down your lens, not an aiming-error to the side of it. Beyond
+     the cone the raw ray stands, so deliberately gazing past still works. */
+  private snapGaze(av: AvatarView, dir: THREE.Vector3): void {
+    const eye = seatEye(av.seat);
+    _from.set(eye.x, eye.y, eye.z);
+    let bestAng = GAZE_SNAP;
+    let found = false;
+    // test the column at (x,z) from chest to head; on a hit, aim at eye level
+    const consider = (x: number, z: number, yHead: number, yChest: number, yAim: number) => {
+      for (const y of [yHead, yChest]) {
+        _cand.set(x, y, z).sub(_from);
+        const a = dir.angleTo(_cand);
+        if (a < bestAng) {
+          bestAng = a;
+          _best.set(x, yAim, z).sub(_from);
+          found = true;
+        }
+      }
+    };
+    if (this.latest)
+      for (const q of this.latest.players) {
+        if (q.seat === av.seat) continue;
+        if (q.id === this.myId)
+          consider(this.eyePos.x, this.eyePos.z, this.eyePos.y, this.eyePos.y - 0.42, this.eyePos.y);
+        else {
+          const p = seatPosition(q.seat);
+          consider(p.x, p.z, 1.54, 1.1, 1.5);
+        }
+      }
+    consider(DEALER_POS.x, DEALER_POS.z, 1.26, 0.9, 1.26); // staring down the dealer
+    if (found) dir.copy(_best).normalize();
+  }
+
   /* ---------------- frame loop ---------------- */
   private frame(): void {
     const now = performance.now();
@@ -937,6 +1010,7 @@ export class SceneView {
     const kp = Math.min(1, dt * 5); // props raise/lower in ~half a second
     for (const av of this.avatars.values()) {
       lookDir(av.seat, av.targetYaw, av.targetPitch, _dir);
+      this.snapGaze(av, _dir);
       _m.lookAt(_dir, ORIGIN, UP); // basis with +Z along the gaze ray
       _q.setFromRotationMatrix(_m);
       av.group.getWorldQuaternion(_qParent).invert();
@@ -1028,6 +1102,7 @@ export class SceneView {
     this.smoke.frame(dt);
     this.cash.frame(dt);
     this.points.frame(dt);
+    this.ouch.frame(dt);
     this.renderer.render(this.scene, this.camera);
     requestAnimationFrame(() => this.frame());
   }
