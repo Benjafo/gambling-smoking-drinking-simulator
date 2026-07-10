@@ -3,6 +3,7 @@
    Run with: npm run test:sim */
 import { Simulation } from "../src/sim";
 import { handValue } from "../src/blackjack";
+import { seatEye, MAX_FLING_SPEED } from "../src/constants";
 
 function assert(cond: unknown, msg: string): void {
   if (!cond) {
@@ -78,6 +79,18 @@ assert(snap.players[0].cigarMeter > meterBefore, "cigar meter refilled");
 assert(snap.players[0].cigarInv === 2, "cigar inventory decremented");
 assert(snap.players[0].held?.kind === "cigar", "spent cigar is held for flinging");
 
+// drag wind-up is networked: the sim mirrors the held position for other
+// players, clamped to arm's reach of the seat
+sim.applyIntent(ME, { type: "heldMove", pos: { x: 9, y: 9, z: 9 } });
+const dragPos = sim.snapshot().players[0].held!.pos!;
+const eye = seatEye(2); // first joiner takes the middle seat
+assert(
+  Math.hypot(dragPos.x - eye.x, dragPos.y - eye.y, dragPos.z - eye.z) <= 1.21,
+  "dragged empty clamped to arm's reach"
+);
+sim.applyIntent(ME, { type: "heldMove", pos: null });
+assert(sim.snapshot().players[0].held!.pos === null, "drag release resets the held pos");
+
 // fling it across the room
 const held = snap.players[0].held!;
 sim.applyIntent(ME, {
@@ -89,6 +102,13 @@ sim.applyIntent(ME, {
 });
 snap = sim.snapshot();
 assert(snap.players[0].held === null, "hand empty after fling");
+const flingEv = snap.events.find((e) => e.t === "fling");
+assert(
+  flingEv?.t === "fling" &&
+    Math.hypot(flingEv.vel.x, flingEv.vel.y, flingEv.vel.z) > 0.5 &&
+    Math.hypot(flingEv.vel.x, flingEv.vel.y, flingEv.vel.z) <= MAX_FLING_SPEED + 1e-6,
+  "fling event carries the clamped throw velocity"
+);
 assert(snap.debris.length === 1 && snap.debris[0].phase === "flying", "debris body flying");
 
 // let physics run until it settles; the litter payout must land mid-clatter

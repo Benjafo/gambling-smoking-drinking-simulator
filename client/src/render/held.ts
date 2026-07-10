@@ -90,6 +90,11 @@ export class HeldItemControl {
   get hasHeld(): boolean {
     return this.heldId !== null;
   }
+  /* world position of a confirmed held item mid-drag — streamed to the sim
+     so other players watch the wind-up */
+  grabWorldPos(): THREE.Vector3 | null {
+    return this.grabbing && this.heldId !== null && this.mesh ? this.mesh.position : null;
+  }
 
   apply(me: PlayerSnap | undefined): void {
     const held = me?.held ?? null;

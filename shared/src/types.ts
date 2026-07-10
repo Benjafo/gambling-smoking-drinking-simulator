@@ -37,7 +37,9 @@ export interface PlayerSnap {
   cigarInv: number;
   beerInv: number;
   ritual: { kind: ViceKind; progress: number } | null;
-  held: { id: number; kind: ViceKind } | null;
+  /* pos is set while the owner is dragging the empty (wind-up before a
+     fling) — remote clients mirror it so the throw telegraphs */
+  held: { id: number; kind: ViceKind; pos: V3 | null } | null;
   /* where this player's camera is pointed, relative to facing the table
      center — drives the avatar's head on everyone else's screen */
   look: { yaw: number; pitch: number };
@@ -60,7 +62,7 @@ export interface DebrisSnap {
 export type SimEvent =
   | { t: "result"; playerId: string; label: string; kind: ResultKind; delta: number }
   | { t: "impact"; speed: number; pos: V3 }
-  | { t: "fling"; playerId: string; id: number }
+  | { t: "fling"; playerId: string; id: number; vel: V3 }
   | { t: "moneyDrop"; playerId: string; pos: V3; amount: number }
   | { t: "litter"; playerId: string; pos: V3; points: number }
   | { t: "eliminated"; playerId: string; cause: string };
@@ -97,6 +99,7 @@ export type Intent =
   | { type: "ritualReset" }
   | { type: "consumeCancel" }
   | { type: "fling"; itemId: number; origin: V3; vel: V3; angVel: V3 }
+  | { type: "heldMove"; pos: V3 | null }
   | { type: "pickup"; itemId: number }
   | { type: "look"; yaw: number; pitch: number }
   | { type: "restart" };

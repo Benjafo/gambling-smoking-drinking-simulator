@@ -88,8 +88,9 @@ interface Player {
      owns the clock, so the time cost can't be skipped. */
   ritual: { kind: ViceKind; progressTicks: number; engaged: boolean } | null;
   /* earned: minted by finishing a ritual, not scavenged off the floor —
-     only earned empties are eligible for the settle-time money drop */
-  held: { id: number; kind: ViceKind; sinceTick: number; earned: boolean } | null;
+     only earned empties are eligible for the settle-time money drop.
+     pos mirrors the owner's drag (wind-up), clamped to arm's reach. */
+  held: { id: number; kind: ViceKind; sinceTick: number; earned: boolean; pos: V3 | null } | null;
   /* camera direction relative to facing the table center, client-reported */
   lookYaw: number;
   lookPitch: number;
@@ -225,6 +226,9 @@ export class Simulation {
         break;
       case "fling":
         this.fling(p, intent.itemId, intent.origin, intent.vel, intent.angVel);
+        break;
+      case "heldMove":
+        this.heldMove(p, intent.pos);
         break;
       case "pickup":
         this.pickup(p, intent.itemId);
@@ -582,7 +586,7 @@ export class Simulation {
     }
     p.score += SCORE_VICE;
     // hands are guaranteed empty here: consumeStart refuses while holding
-    p.held = { id: this.nextDebrisId++, kind, sinceTick: this.tick, earned: true };
+    p.held = { id: this.nextDebrisId++, kind, sinceTick: this.tick, earned: true, pos: null };
   }
 
   /* ---------------- debris & fling ---------------- */
@@ -608,7 +612,7 @@ export class Simulation {
       z: Math.max(-maxSpin, Math.min(maxSpin, angVel.z)),
     };
     this.spawnDebris(p.held.kind, o, v, av, p.id, p.held.earned);
-    this.events.push({ t: "fling", playerId: p.id, id: p.held.id });
+    this.events.push({ t: "fling", playerId: p.id, id: p.held.id, vel: { ...v } });
     p.held = null;
   }
 
@@ -691,7 +695,24 @@ export class Simulation {
     if (Math.hypot(d.pos.x - eye.x, d.pos.y - eye.y, d.pos.z - eye.z) > REACH_RADIUS) return;
     this.removeDebris(d);
     // scavenged, not earned: re-flinging floor litter never pays
-    p.held = { id: this.nextDebrisId++, kind: d.kind, sinceTick: this.tick, earned: false };
+    p.held = { id: this.nextDebrisId++, kind: d.kind, sinceTick: this.tick, earned: false, pos: null };
+  }
+
+  /* the owner is dragging the empty around (the wind-up before a fling) —
+     mirror the position for everyone else, pinned to arm's reach */
+  private heldMove(p: Player, pos: V3 | null): void {
+    if (!p.held) return;
+    if (pos === null) {
+      p.held.pos = null;
+      return;
+    }
+    const eye = seatEye(p.seat);
+    const dx = pos.x - eye.x,
+      dy = pos.y - eye.y,
+      dz = pos.z - eye.z;
+    const dist = Math.hypot(dx, dy, dz);
+    const s = dist > 1.2 ? 1.2 / dist : 1;
+    p.held.pos = { x: eye.x + dx * s, y: eye.y + dy * s, z: eye.z + dz * s };
   }
 
   /* ---------------- tick ---------------- */
@@ -899,7 +920,9 @@ export class Simulation {
             progress: Math.min(1, p.ritual.progressTicks / msTicks(RITUAL_MS[p.ritual.kind])),
           }
         : null,
-      held: p.held ? { id: p.held.id, kind: p.held.kind } : null,
+      held: p.held
+        ? { id: p.held.id, kind: p.held.kind, pos: p.held.pos ? { ...p.held.pos } : null }
+        : null,
       look: {
         yaw: Math.round(p.lookYaw * 100) / 100,
         pitch: Math.round(p.lookPitch * 100) / 100,

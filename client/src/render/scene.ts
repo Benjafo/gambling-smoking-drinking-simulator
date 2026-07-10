@@ -41,16 +41,45 @@ const SHOE_POS = new THREE.Vector3(0.72, TABLE.height + 0.09, -0.78);
 
 /* another player's presence at the table: their figure, the head that
    tracks where they're looking, and whatever vice is in their hand */
+/* one arm: shoulder-anchored capsule aimed at the hand sphere; poseArm()
+   glues the hand to a target and stretches the arm to it */
+interface ArmRig {
+  arm: THREE.Mesh;
+  hand: THREE.Mesh;
+  shoulder: THREE.Vector3;
+  rest: THREE.Vector3;
+}
+
 interface AvatarView {
   seat: number;
   group: THREE.Group;
   head: THREE.Group;
+  armR: ArmRig;
+  armL: ArmRig;
+  /* the vice in their hand; pose eases toward propPosT/propQuatT each frame
+     so raises, tips, and lowers read as motion instead of teleports */
   prop: THREE.Group | null;
   propKey: string | null; // "ritual:beer" | "held:cigar" | …
+  propDying: boolean; // easing back to the hand, retired on arrival
+  propPosT: THREE.Vector3;
+  propQuatT: THREE.Quaternion;
+  /* the other hand's lighter, out only during a cigar ritual */
+  lighter: THREE.Group | null;
+  flame: THREE.Mesh | null;
+  lighterDying: boolean;
+  lighterPosT: THREE.Vector3;
   lastProgress: number;
   targetYaw: number;
   targetPitch: number;
+  /* follow-through after a fling: the arm whips toward this point (avatar-
+     local) until throwUntil, then drifts home */
+  throwUntil: number;
+  throwTarget: THREE.Vector3;
 }
+
+/* where props rest / rise from: the figure's hand spheres */
+const HAND_R = new THREE.Vector3(0.15, 0.86, 0.33);
+const HAND_L = new THREE.Vector3(-0.15, 0.86, 0.33);
 
 const UP = new THREE.Vector3(0, 1, 0);
 const ORIGIN = new THREE.Vector3(0, 0, 0);
@@ -59,6 +88,24 @@ const _right = new THREE.Vector3();
 const _q = new THREE.Quaternion();
 const _qParent = new THREE.Quaternion();
 const _m = new THREE.Matrix4();
+const _e = new THREE.Euler();
+const _grip = new THREE.Vector3();
+const _seg = new THREE.Vector3();
+
+/* natural capsule length of an arm (0.24 shaft + two 0.048 caps) */
+const ARM_LEN = 0.336;
+
+/* Single-segment stretchy IK, true to the clay-figure look: the hand sits
+   exactly on `target`, and the arm capsule spans shoulder→hand, aimed and
+   length-scaled to fit. All positions are avatar-group-local. */
+function poseArm(rig: ArmRig, target: THREE.Vector3): void {
+  rig.hand.position.copy(target);
+  _seg.subVectors(target, rig.shoulder);
+  const len = Math.max(0.1, _seg.length());
+  rig.arm.position.copy(rig.shoulder).addScaledVector(_seg, 0.5);
+  rig.arm.quaternion.setFromUnitVectors(UP, _seg.normalize());
+  rig.arm.scale.set(1, len / ARM_LEN, 1);
+}
 
 /* The exact ray a player's camera looks along, given their seat and look
    offsets: from the seat's eye toward the table center, yawed about
@@ -104,6 +151,8 @@ export class SceneView {
   private looking = false;
   private lookDirty = false;
   private lastLookSent = 0;
+  private lastHeldSent = 0;
+  private wasGrabbing = false;
   private lastPointer = { x: 0, y: 0 };
   private lastFrame = performance.now();
   private latest: Snapshot | null = null;
@@ -338,7 +387,7 @@ export class SceneView {
 
   private makeAvatar(seat: number): AvatarView {
     const colors = [0x4a3b2a, 0x2c3c60, 0x6a1f1f, 0x24512f, 0x3a3226];
-    const { group, head } = makeFigure(colors[seat % colors.length], 0x8a7560);
+    const { group, head, armR, armL } = makeFigure(colors[seat % colors.length], 0x8a7560);
     const p = seatPosition(seat);
     group.position.set(p.x, 0.28, p.z);
     group.lookAt(0, 1.0, 0);
@@ -347,11 +396,22 @@ export class SceneView {
       seat,
       group,
       head,
+      armR,
+      armL,
       prop: null,
       propKey: null,
+      propDying: false,
+      propPosT: new THREE.Vector3(),
+      propQuatT: new THREE.Quaternion(),
+      lighter: null,
+      flame: null,
+      lighterDying: false,
+      lighterPosT: new THREE.Vector3(),
       lastProgress: 0,
       targetYaw: 0,
       targetPitch: 0,
+      throwUntil: 0,
+      throwTarget: new THREE.Vector3(),
     };
   }
 
@@ -660,6 +720,25 @@ export class SceneView {
         }
       } else if (ev.t === "fling") {
         whooshSound();
+        // the real item is airborne as debris now — a hand prop easing
+        // down would be a ghost duplicate, so it dies on the spot
+        const who = snap.players.find((q) => q.id === ev.playerId);
+        const av = who ? this.avatars.get(who.seat) : undefined;
+        if (av) {
+          if (av.prop && av.propDying) {
+            av.group.remove(av.prop);
+            av.prop = null;
+            av.propDying = false;
+          }
+          // follow-through: the arm whips out along the throw
+          _dir.set(ev.vel.x, ev.vel.y, ev.vel.z);
+          if (_dir.lengthSq() > 1e-6) {
+            av.group.getWorldQuaternion(_q).invert();
+            _dir.normalize().applyQuaternion(_q);
+            av.throwTarget.copy(av.armR.shoulder).addScaledVector(_dir, 0.46);
+            av.throwUntil = performance.now() + 240;
+          }
+        }
       } else if (ev.t === "result" && ev.delta > 0) {
         const winner = snap.players.find((q) => q.id === ev.playerId);
         if (winner) this.payoutChips(winner.seat, ev.delta);
@@ -775,40 +854,72 @@ export class SceneView {
     this.reconcileViceProp(av, p);
   }
 
-  /* what's in their hand, for everyone to see: mid-ritual the cigar sits at
-     the mouth (puffing smoke as progress accrues) and the bottle tips back
-     with the pour; a finished empty rests in the hand until they fling it */
+  /* what's in their hand, for everyone to see. Props ease between poses
+     (frame() does the motion): a new ritual raises the item from the hand
+     to the mouth, the bottle tips back with the pour, a cigar brings the
+     lighter up in the other hand, and a finished empty lowers back to the
+     hand until they fling it. A cancelled ritual gets put away the same
+     way — eased down, then retired. */
   private reconcileViceProp(av: AvatarView, p: PlayerSnap): void {
     const key = p.ritual ? "ritual:" + p.ritual.kind : p.held ? "held:" + p.held.kind : null;
     if (key !== av.propKey) {
-      if (av.prop) av.group.remove(av.prop);
-      av.prop = null;
-      av.propKey = key;
-      av.lastProgress = 0;
-      if (key) {
+      if (key === null) {
+        // nothing replaces it: lower to the hand, frame() retires it there
+        av.propKey = null;
+        if (av.prop) {
+          av.propDying = true;
+          av.propPosT.copy(HAND_R);
+          av.propQuatT.setFromEuler(_e.set(0.9, 0, -0.5));
+        }
+      } else {
+        // swap meshes in place: complete→held keeps the pose and lowers
+        const from = av.prop ? av.prop.position.clone() : HAND_R.clone();
+        if (av.prop) av.group.remove(av.prop);
         av.prop = key.endsWith("beer") ? makeBottleMesh() : makeCigarMesh(key.startsWith("held"));
+        av.prop.position.copy(from);
         av.group.add(av.prop);
+        av.propKey = key;
+        av.propDying = false;
+        av.lastProgress = 0;
+      }
+      // the lighter comes out with a cigar ritual, and only then
+      if (key === "ritual:cigar" && !av.lighter) {
+        const { group, flame } = makeLighterMesh();
+        group.position.copy(HAND_L);
+        av.lighter = group;
+        av.flame = flame;
+        av.lighterDying = false;
+        av.group.add(group);
+      } else if (key !== "ritual:cigar" && av.lighter && !av.lighterDying) {
+        av.lighterDying = true;
+        av.lighterPosT.copy(HAND_L);
+        if (av.flame) av.flame.visible = false;
       }
     }
-    if (!av.prop) return;
+    if (!av.prop || av.propDying) return;
     if (p.ritual) {
       const t = p.ritual.progress;
       if (p.ritual.kind === "beer") {
-        av.prop.position.set(0.13, 1.04 + t * 0.14, 0.21);
-        av.prop.rotation.set(-(0.15 + t * 1.1), 0, 0.15);
+        av.propPosT.set(0.13, 1.04 + t * 0.14, 0.21);
+        av.propQuatT.setFromEuler(_e.set(-(0.15 + t * 1.1), 0, 0.15));
       } else {
-        av.prop.position.set(0.1, 1.17, 0.18);
-        av.prop.rotation.set(-1.1, 0, 0.35);
+        av.propPosT.set(0.1, 1.17, 0.18);
+        av.propQuatT.setFromEuler(_e.set(-1.1, 0, 0.35));
+        av.lighterPosT.set(0.0, 1.09, 0.27); // flame up by the cigar's tip
         if (t > av.lastProgress && Math.random() < 0.35) {
           av.group.updateMatrixWorld(true);
           this.smoke.emit(av.prop.localToWorld(new THREE.Vector3(0, 0.062, 0)));
         }
       }
       av.lastProgress = t;
+    } else if (p.held?.pos) {
+      // the owner is dragging it — mirror the wind-up, hand tracking along
+      av.propPosT.copy(av.group.worldToLocal(_grip.set(p.held.pos.x, p.held.pos.y, p.held.pos.z)));
+      av.propQuatT.setFromEuler(_e.set(0.25, 0, 0.15));
     } else {
       // the spent empty dangles from the hand
-      av.prop.position.set(0.16, 0.88, 0.33);
-      av.prop.rotation.set(0.9, 0, -0.5);
+      av.propPosT.copy(HAND_R);
+      av.propQuatT.setFromEuler(_e.set(0.9, 0, -0.5));
     }
   }
 
@@ -823,12 +934,57 @@ export class SceneView {
     // heads ease toward their owner's actual camera ray — reproduced in
     // world space, so the avatar frame's lean can't skew the gaze
     const k = Math.min(1, dt * 10);
+    const kp = Math.min(1, dt * 5); // props raise/lower in ~half a second
     for (const av of this.avatars.values()) {
       lookDir(av.seat, av.targetYaw, av.targetPitch, _dir);
       _m.lookAt(_dir, ORIGIN, UP); // basis with +Z along the gaze ray
       _q.setFromRotationMatrix(_m);
       av.group.getWorldQuaternion(_qParent).invert();
       av.head.quaternion.slerp(_qParent.multiply(_q), k);
+
+      if (av.prop) {
+        av.prop.position.lerp(av.propPosT, kp);
+        av.prop.quaternion.slerp(av.propQuatT, kp);
+        if (av.propDying && av.prop.position.distanceTo(av.propPosT) < 0.03) {
+          av.group.remove(av.prop);
+          av.prop = null;
+          av.propDying = false;
+        }
+      }
+      if (av.lighter) {
+        av.lighter.position.lerp(av.lighterPosT, kp);
+        if (av.flame?.visible) {
+          const s = 0.85 + 0.25 * Math.sin(now * 0.021) + 0.12 * Math.sin(now * 0.0077);
+          av.flame.scale.set(s, s * (1.1 + 0.25 * Math.sin(now * 0.013)), s);
+        }
+        if (av.lighterDying && av.lighter.position.distanceTo(av.lighterPosT) < 0.03) {
+          av.group.remove(av.lighter);
+          av.lighter = null;
+          av.flame = null;
+          av.lighterDying = false;
+        }
+      }
+
+      // hands follow whatever they're holding; empty hands drift home.
+      // Props are already eased, so gripping tracks without extra lag.
+      if (now < av.throwUntil) {
+        // fling follow-through: fast whip toward full extension
+        poseArm(
+          av.armR,
+          _grip.copy(av.armR.hand.position).lerp(av.throwTarget, Math.min(1, dt * 22))
+        );
+      } else if (av.prop) {
+        _grip.set(0, -0.045, 0).applyQuaternion(av.prop.quaternion).add(av.prop.position);
+        poseArm(av.armR, _grip);
+      } else {
+        poseArm(av.armR, _grip.copy(av.armR.hand.position).lerp(av.armR.rest, kp));
+      }
+      if (av.lighter) {
+        _grip.set(0, -0.03, 0).add(av.lighter.position);
+        poseArm(av.armL, _grip);
+      } else {
+        poseArm(av.armL, _grip.copy(av.armL.hand.position).lerp(av.armL.rest, kp));
+      }
     }
     // share my own look at ~10 Hz, only when it changed
     if (this.lookDirty && now - this.lastLookSent > 100) {
@@ -839,6 +995,19 @@ export class SceneView {
         yaw: Math.round(this.yawOff * 100) / 100,
         pitch: Math.round(this.pitchOff * 100) / 100,
       });
+    }
+    // stream the drag of a held empty (~10 Hz) — my wind-up, their show
+    const gp = this.held.grabWorldPos();
+    if (gp) {
+      this.wasGrabbing = true;
+      if (now - this.lastHeldSent > 100) {
+        this.lastHeldSent = now;
+        this.send({ type: "heldMove", pos: { x: gp.x, y: gp.y, z: gp.z } });
+      }
+    } else if (this.wasGrabbing) {
+      this.wasGrabbing = false;
+      // released without a fling: the empty tucked back into the hand
+      if (this.held.hasHeld) this.send({ type: "heldMove", pos: null });
     }
 
     if (this.shakeLeft > 0) {
@@ -874,7 +1043,7 @@ function makeFigure(
   shirt: number,
   skin: number,
   opts: { hat?: number; seated?: boolean } = {}
-): { group: THREE.Group; head: THREE.Group } {
+): { group: THREE.Group; head: THREE.Group; armR: ArmRig; armL: ArmRig } {
   const g = new THREE.Group();
   const shirtMat = new THREE.MeshStandardMaterial({ color: shirt, roughness: 0.9 });
   const skinMat = new THREE.MeshStandardMaterial({ color: skin, roughness: 0.75 });
@@ -915,19 +1084,26 @@ function makeFigure(
   hat.rotation.z = 0.09;
   head.add(hat);
 
-  // arms slanting from the shoulders down toward the felt, hands at the ends
+  // arms as poseable rigs: shoulder-anchored capsules aimed at the hand
+  // spheres, so a raised bottle raises the arm with it
   const armGeo = new THREE.CapsuleGeometry(0.048, 0.24, 3, 8);
-  for (const s of [-1, 1]) {
+  const mkArm = (s: number): ArmRig => {
     const arm = new THREE.Mesh(armGeo, shirtMat);
-    arm.position.set(s * 0.175, 0.945, 0.165);
-    arm.rotation.x = 2.0;
-    arm.rotation.z = s * -0.22;
     arm.castShadow = true;
     const hand = new THREE.Mesh(new THREE.SphereGeometry(0.05, 8, 6), skinMat);
-    hand.position.set(s * 0.14, 0.85, 0.33);
     hand.castShadow = true;
     g.add(arm, hand);
-  }
+    const rig: ArmRig = {
+      arm,
+      hand,
+      shoulder: new THREE.Vector3(s * 0.175, 1.04, 0.05),
+      rest: new THREE.Vector3(s * 0.14, 0.85, 0.33),
+    };
+    poseArm(rig, rig.rest);
+    return rig;
+  };
+  const armR = mkArm(1);
+  const armL = mkArm(-1);
 
   if (opts.seated !== false) {
     const legGeo = new THREE.CapsuleGeometry(0.065, 0.2, 3, 8);
@@ -939,7 +1115,29 @@ function makeFigure(
       g.add(leg);
     }
   }
-  return { group: g, head };
+  return { group: g, head, armR, armL };
+}
+
+/* a pocket lighter for third-person smokers: brass body, steel hood, and a
+   teardrop flame that frame() keeps flickering */
+function makeLighterMesh(): { group: THREE.Group; flame: THREE.Mesh } {
+  const group = new THREE.Group();
+  const body = new THREE.Mesh(
+    new THREE.BoxGeometry(0.022, 0.042, 0.014),
+    new THREE.MeshStandardMaterial({ color: 0xb08d3e, metalness: 0.85, roughness: 0.3 })
+  );
+  const hood = new THREE.Mesh(
+    new THREE.BoxGeometry(0.023, 0.012, 0.015),
+    new THREE.MeshStandardMaterial({ color: 0x8a8f98, metalness: 0.9, roughness: 0.25 })
+  );
+  hood.position.y = 0.027;
+  const flame = new THREE.Mesh(
+    new THREE.ConeGeometry(0.007, 0.03, 8),
+    new THREE.MeshBasicMaterial({ color: 0xffc25e })
+  );
+  flame.position.y = 0.05;
+  group.add(body, hood, flame);
+  return { group, flame };
 }
 
 function clamp(v: number, lo: number, hi: number): number {
