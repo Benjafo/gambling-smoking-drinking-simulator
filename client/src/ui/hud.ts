@@ -81,6 +81,7 @@ export class Hud {
     // joining lives on the main menu now (ui/menu.ts); this wires the table
     // leader-only intents: the sim ignores them from anyone else
     $("lobbyStartBtn").addEventListener("click", () => this.send({ type: "startGame" }));
+    $("lobbyClearBtn").addEventListener("click", () => this.send({ type: "clearLitter" }));
     $("retryBtn").addEventListener("click", () => this.send({ type: "restart" }));
 
     $("dealBtn").addEventListener("click", () => {
@@ -371,7 +372,10 @@ export class Hud {
 
   private renderLobby(snap: Snapshot): void {
     const amLeader = snap.leaderId === this.myId;
-    const sig = snap.players.map((p) => p.id + ":" + p.name).join() + "|" + snap.leaderId;
+    const hasLitter = snap.debris.length > 0;
+    const sig =
+      snap.players.map((p) => p.id + ":" + p.name).join() +
+      "|" + snap.leaderId + "|" + hasLitter;
     if (sig === this.lobbySig) return;
     this.lobbySig = sig;
 
@@ -387,6 +391,11 @@ export class Hud {
       )
       .join("");
     ($("lobbyStartBtn") as HTMLButtonElement).style.display = amLeader ? "" : "none";
+    // the janitor option: leader-only, and only worth pressing when there's
+    // actually filth on the floor (either room — the count covers both)
+    const clearBtn = $("lobbyClearBtn") as HTMLButtonElement;
+    clearBtn.style.display = amLeader ? "" : "none";
+    clearBtn.disabled = !hasLitter;
     $("lobbyHint").textContent = amLeader
       ? snap.players.length === 1
         ? "Drinking alone is still drinking. Start whenever — or wait for company."

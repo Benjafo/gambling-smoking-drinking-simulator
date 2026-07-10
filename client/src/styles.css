@@ -130,6 +130,8 @@ button:focus-visible{outline:2px solid var(--amber);outline-offset:2px}
 #lobbyScreen .tagline{font-size:14px;max-width:330px;margin:0;
   text-shadow:0 1px 3px rgba(0,0,0,.9)}
 #lobbyStartBtn{font-size:17px;padding:11px 26px}
+#lobbyClearBtn{font-size:13px;padding:8px 20px}
+#lobbyClearBtn:disabled{opacity:.4;cursor:not-allowed;transform:none}
 .lobby-controls{
   font-family:var(--mono);font-size:12px;letter-spacing:.2em;color:var(--ash);
   background:rgba(10,8,5,.72);border:1px solid #2c2317;border-radius:6px;padding:7px 12px;
@@ -425,6 +427,15 @@ body.lobby-room #sidebar,body.lobby-room #actionDock{display:none}
 }
 #flingHint.show{display:block;animation:hintPulse 1.4s ease-in-out infinite}
 @keyframes hintPulse{50%{opacity:.45}}
+
+/* waiting-room dispenser prompt (PRESS E …) */
+#dispenseHint{
+  position:absolute;left:50%;bottom:160px;transform:translateX(-50%);display:none;
+  font-family:var(--mono);font-size:13px;letter-spacing:.22em;color:var(--amber);
+  background:rgba(10,8,5,.72);border:1px solid #6e4c12;border-radius:6px;padding:8px 16px;
+  text-shadow:0 0 8px rgba(233,166,58,.6);pointer-events:none;text-align:center;white-space:nowrap;
+}
+#dispenseHint.show{display:block;animation:hintPulse 1.4s ease-in-out infinite}
 
 #flavorBar{
   position:absolute;left:0;right:0;bottom:0;padding:8px 22px;

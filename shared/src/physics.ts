@@ -3,7 +3,14 @@
    client prediction match server results later. */
 import RAPIER from "@dimforge/rapier3d-compat";
 import { TABLE, type V3 } from "./constants";
+import { LOBBY_OBSTACLES, LOBBY_ROOM } from "./lobbyRoom";
 import type { Quat, ViceKind } from "./types";
+
+/* The waiting room's physics lives in the SAME world as the table, parked
+   100m away so nothing ever collides across rooms. The sim adds/strips this
+   offset at the room boundary; everything outside physics.ts speaks
+   room-local coordinates. */
+export const LOBBY_WORLD_OFFSET: V3 = { x: 100, y: 0, z: 0 };
 
 let rapierReady: Promise<void> | null = null;
 export function initPhysics(): Promise<void> {
@@ -66,7 +73,59 @@ export function createWorld(): RAPIER.World {
     );
   }
 
+  addLobbyRoomColliders(world);
   return world;
+}
+
+/* the waiting room, rebuilt as static colliders at LOBBY_WORLD_OFFSET so
+   pre-game litter has something to clatter against: carpet, four walls, a
+   ceiling, and the furniture circles as cuboids (cuboid-vs-capsule contacts
+   are the stable kind — see the tabletop plank comment above) */
+function addLobbyRoomColliders(world: RAPIER.World): void {
+  const { x: OX, z: OZ } = LOBBY_WORLD_OFFSET;
+  const { halfW, halfD, height } = LOBBY_ROOM;
+
+  // carpet: top surface at y=0, softer bounce than the den's floor
+  world.createCollider(
+    RAPIER.ColliderDesc.cuboid(halfW + 0.3, 0.1, halfD + 0.3)
+      .setTranslation(OX, -0.1, OZ)
+      .setFriction(0.9)
+      .setRestitution(0.2)
+  );
+  // ceiling — hard skyward flings come back down where they belong
+  world.createCollider(
+    RAPIER.ColliderDesc.cuboid(halfW + 0.3, 0.1, halfD + 0.3)
+      .setTranslation(OX, height + 0.1, OZ)
+      .setFriction(0.6)
+      .setRestitution(0.2)
+  );
+  // walls sit just outside the walkable half-extents, like the drywall does
+  const wallSpecs: [number, number, number, number][] = [
+    // [hx, hz, x, z] half-extents and center, in room-local terms
+    [halfW + 0.3, 0.15, 0, -halfD - 0.15],
+    [halfW + 0.3, 0.15, 0, halfD + 0.15],
+    [0.15, halfD + 0.3, -halfW - 0.15, 0],
+    [0.15, halfD + 0.3, halfW + 0.15, 0],
+  ];
+  for (const [hx, hz, x, z] of wallSpecs) {
+    world.createCollider(
+      RAPIER.ColliderDesc.cuboid(hx, height / 2 + 0.2, hz)
+        .setTranslation(OX + x, height / 2, OZ + z)
+        .setFriction(0.5)
+        .setRestitution(0.3)
+    );
+  }
+  // furniture: each collision circle becomes a box of its height. The
+  // square-in-circle mismatch is invisible under the clutter.
+  for (const o of LOBBY_OBSTACLES) {
+    const half = o.r * 0.8;
+    world.createCollider(
+      RAPIER.ColliderDesc.cuboid(half, o.h / 2, half)
+        .setTranslation(OX + o.x, o.h / 2, OZ + o.z)
+        .setFriction(0.7)
+        .setRestitution(0.25)
+    );
+  }
 }
 
 export function spawnDebrisBody(

@@ -7,14 +7,19 @@
    so the camera never fights the authority it's predicting. */
 import * as THREE from "three";
 import {
+  DISPENSE_RADIUS,
+  LOBBY_DISPENSERS,
   LOBBY_EYE_HEIGHT,
   LOBBY_OBSTACLES,
+  LOBBY_REACH,
   LOBBY_ROOM,
   stepLobbyMove,
 } from "@shared/lobbyRoom";
-import type { Intent, PlayerSnap, Snapshot } from "@shared/types";
+import type { Intent, PlayerSnap, Snapshot, ViceKind } from "@shared/types";
 import { carpetTexture, leatherTexture, woodTexture } from "./textures";
-import { makeBottleMesh, makeCigarMesh } from "./held";
+import { DebrisView } from "./debris";
+import { HeldItemControl, makeBottleMesh, makeCigarMesh } from "./held";
+import { denySound, pickupSound } from "./effects";
 import { makeFigure, poseArm } from "./figure";
 
 const PITCH_MIN = -0.55;
@@ -97,6 +102,17 @@ export class LobbyRoomView {
 
   private avatars = new Map<string, LobbyAvatar>();
 
+  /* pre-game littering: the lobby's own debris + held-empty machinery,
+     the same gestures the table uses (drag the empty, release to fling) */
+  private debris: DebrisView;
+  readonly held: HeldItemControl;
+  private raycaster = new THREE.Raycaster();
+  /* the canvas, for hover cursors — set by SceneView after construction */
+  domElement: HTMLElement | null = null;
+  private wasGrabbing = false;
+  private lastHeldSent = 0;
+  private dispenseHint = document.getElementById("dispenseHint");
+
   /* ambient life */
   private bulbLight!: THREE.PointLight;
   private bulbMesh!: THREE.Mesh;
@@ -113,9 +129,15 @@ export class LobbyRoomView {
     this.buildRoom();
     this.buildFurniture();
     this.buildTrash();
+    this.debris = new DebrisView(this.scene);
+    this.held = new HeldItemControl(this.scene, this.camera, send);
 
     addEventListener("keydown", (e) => {
       if (!this.active || (e.target as HTMLElement)?.tagName === "INPUT") return;
+      if (e.code === "KeyE") {
+        this.tryDispense();
+        return;
+      }
       if (KEY_DIRS[e.code]) {
         this.keys.add(e.code);
         e.preventDefault();
@@ -548,6 +570,48 @@ export class LobbyRoomView {
     cig.rotation.y = -0.35;
     this.scene.add(cig);
 
+    /* beer fridge (obstacles[9]) against the -X wall — the other dispenser */
+    const fridge = new THREE.Group();
+    const fridgeBody = new THREE.Mesh(
+      new THREE.BoxGeometry(0.66, 1.4, 0.62),
+      new THREE.MeshStandardMaterial({ color: 0x27362c, roughness: 0.45, metalness: 0.35 })
+    );
+    fridgeBody.position.y = 0.7;
+    fridgeBody.castShadow = true;
+    const fridgeFace = new THREE.Mesh(
+      new THREE.PlaneGeometry(0.5, 0.62),
+      new THREE.MeshBasicMaterial({
+        map: canvasTexture(212, 256, (ctx) => {
+          ctx.fillStyle = "#101b14";
+          ctx.fillRect(0, 0, 212, 256);
+          ctx.font = "bold 62px Georgia,serif";
+          ctx.textAlign = "center";
+          ctx.shadowColor = "#5fbf6e";
+          ctx.shadowBlur = 16;
+          ctx.fillStyle = "#9fe8ab";
+          ctx.fillText("BEER", 106, 92);
+          ctx.font = "22px 'Courier New',monospace";
+          ctx.shadowBlur = 0;
+          ctx.fillStyle = "#a39a8b";
+          ctx.fillText("COLD-ISH.", 106, 158);
+          ctx.fillText("HELP YOURSELF.", 106, 190);
+        }),
+      })
+    );
+    fridgeFace.rotation.y = Math.PI / 2;
+    fridgeFace.position.set(0.34, 0.95, 0);
+    const fridgeHandle = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.014, 0.014, 0.5, 8),
+      brass
+    );
+    fridgeHandle.position.set(0.36, 0.62, -0.22);
+    fridge.add(fridgeBody, fridgeFace, fridgeHandle);
+    fridge.position.set(-3.75, 0, 0);
+    this.scene.add(fridge);
+    const fridgeGlow = new THREE.PointLight(0x5fbf6e, 1.2, 2.6, 2);
+    fridgeGlow.position.set(-3.2, 1.1, 0);
+    this.scene.add(fridgeGlow);
+
     /* dead plant (obstacles[7]) and the standing ashtray (obstacles[8]) */
     const pot = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.12, 0.26, 12), darkMat);
     pot.position.set(-3.75, 0.13, -2.7);
@@ -635,12 +699,18 @@ export class LobbyRoomView {
     if (this.active === on) return;
     this.active = on;
     this.keys.clear();
-    if (!on) this.looking = false;
+    if (!on) {
+      this.looking = false;
+      this.dispenseHint?.classList.remove("show");
+      if (this.domElement) this.domElement.style.cursor = "";
+    }
   }
 
   apply(snap: Snapshot, myId: string): void {
     this.latest = snap;
     this.myId = myId;
+    this.debris.apply(snap.debris.filter((d) => d.room === "lobby"));
+    this.held.apply(snap.players.find((p) => p.id === myId));
 
     for (const p of snap.players) {
       if (p.id === myId) {
@@ -675,13 +745,35 @@ export class LobbyRoomView {
       }
   }
 
-  /* ---------------- input (routed from SceneView while active) ---------------- */
+  /* ---------------- input (routed from SceneView while active) ----------------
+     same priority the table uses: grab the held empty > pick up litter >
+     drag to look */
   pointerDown(e: PointerEvent): void {
+    const ndc = this.ndc(e);
+    if (this.held.pointerDown(ndc)) return;
+    const target = this.findDebrisAt(ndc);
+    if (target) {
+      if (this.held.hasHeld) {
+        this.held.flashDeny();
+        denySound();
+        return;
+      }
+      this.send({ type: "pickup", itemId: target.id });
+      this.held.beginFloorGrab(target.kind, target.pos);
+      return;
+    }
     this.looking = true;
     this.lastPointer = { x: e.clientX, y: e.clientY };
   }
   pointerMove(e: PointerEvent): void {
-    if (!this.looking) return;
+    if (this.held.isGrabbing) {
+      this.held.pointerMove(this.ndc(e));
+      return;
+    }
+    if (!this.looking) {
+      this.updateHover(this.ndc(e));
+      return;
+    }
     this.yaw = wrapAngle(this.yaw - (e.clientX - this.lastPointer.x) * 0.003);
     this.pitch = Math.max(
       PITCH_MIN,
@@ -690,7 +782,83 @@ export class LobbyRoomView {
     this.lastPointer = { x: e.clientX, y: e.clientY };
   }
   pointerUp(): void {
+    if (this.held.isGrabbing) this.held.pointerUp();
     this.looking = false;
+  }
+
+  private ndc(e: PointerEvent): THREE.Vector2 {
+    return new THREE.Vector2((e.clientX / innerWidth) * 2 - 1, -(e.clientY / innerHeight) * 2 + 1);
+  }
+
+  /* what grabbable litter is under the pointer — instance hit first, then
+     the fat-pick fallback, both bounded by walking-reach from the eye */
+  private findDebrisAt(
+    ndc: THREE.Vector2
+  ): { id: number; kind: ViceKind; pos: THREE.Vector3 } | null {
+    this.raycaster.setFromCamera(ndc, this.camera);
+    const hits = this.raycaster.intersectObjects(this.debris.pickables, false);
+    for (const h of hits) {
+      if (h.instanceId === undefined) continue;
+      const id = this.debris.debrisIdFor(h.object, h.instanceId);
+      if (id === null) continue;
+      const info = this.debris.info(id);
+      if (!info) continue;
+      if (info.pos.distanceTo(this.camera.position) > LOBBY_REACH) continue;
+      return { id, kind: info.kind, pos: info.pos };
+    }
+    const near = this.debris.nearestToRay(this.raycaster.ray, 0.25);
+    if (near && near.pos.distanceTo(this.camera.position) <= LOBBY_REACH) return near;
+    return null;
+  }
+
+  private updateHover(ndc: THREE.Vector2): void {
+    if (!this.domElement) return;
+    const target = this.findDebrisAt(ndc);
+    if (target && this.held.hasHeld) {
+      this.debris.setHighlight(null);
+      this.domElement.style.cursor = "not-allowed";
+      return;
+    }
+    this.debris.setHighlight(target?.id ?? null);
+    this.domElement.style.cursor = target ? "grab" : "";
+  }
+
+  /* ---------------- dispensers ---------------- */
+  private nearDispenser(): { kind: ViceKind; x: number; z: number } | null {
+    if (!this.posInit) return null;
+    return (
+      LOBBY_DISPENSERS.find(
+        (d) => Math.hypot(this.myPos.x - d.x, this.myPos.z - d.z) <= DISPENSE_RADIUS
+      ) ?? null
+    );
+  }
+
+  private tryDispense(): void {
+    const d = this.nearDispenser();
+    if (!d) return;
+    if (this.held.hasHeld) {
+      this.held.flashDeny();
+      denySound();
+      return;
+    }
+    this.send({ type: "dispense", kind: d.kind });
+    pickupSound();
+  }
+
+  private updateDispenseHint(): void {
+    const el = this.dispenseHint;
+    if (!el) return;
+    const d = this.nearDispenser();
+    if (!d) {
+      el.classList.remove("show");
+      return;
+    }
+    el.textContent = this.held.hasHeld
+      ? "HANDS FULL — FLING IT FIRST"
+      : d.kind === "beer"
+        ? "PRESS E — GRAB A BEER"
+        : "PRESS E — GRAB A SMOKE";
+    el.classList.add("show");
   }
 
   /* ---------------- frame ---------------- */
@@ -771,6 +939,23 @@ export class LobbyRoomView {
       av.group.position.y =
         av.baseY + (av.moving ? Math.abs(Math.sin(av.walkPhase * Math.PI)) * 0.03 : 0);
     }
+
+    // litter in motion, and the empty in my hand
+    this.debris.frame(dt);
+    this.held.frame(dt);
+    // stream the wind-up drag (~10 Hz) — same contract the table uses
+    const gp = this.held.grabWorldPos();
+    if (gp) {
+      this.wasGrabbing = true;
+      if (now - this.lastHeldSent > 100) {
+        this.lastHeldSent = now;
+        this.send({ type: "heldMove", pos: { x: gp.x, y: gp.y, z: gp.z } });
+      }
+    } else if (this.wasGrabbing) {
+      this.wasGrabbing = false;
+      if (this.held.hasHeld) this.send({ type: "heldMove", pos: null });
+    }
+    if (this.active) this.updateDispenseHint();
 
     // ambient life: the bulb has moods, the neon buzzes, the jukebox breathes
     if (now > this.bulbDropUntil && Math.random() < 0.004) this.bulbDropUntil = now + 90;

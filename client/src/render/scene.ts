@@ -197,6 +197,7 @@ export class SceneView {
     );
 
     this.lobbyRoom = new LobbyRoomView(send);
+    this.lobbyRoom.domElement = this.renderer.domElement; // for hover cursors
 
     addEventListener("resize", () => {
       this.camera.aspect = innerWidth / innerHeight;
@@ -737,8 +738,11 @@ export class SceneView {
         }
       }
 
-    this.debrisView.apply(snap.debris);
-    this.held.apply(me);
+    // lobby litter belongs to the waiting-room scene; the den only ever
+    // renders its own. The held empty follows whichever room is live —
+    // handing the other view `undefined` retires its mesh.
+    this.debrisView.apply(snap.debris.filter((d) => d.room !== "lobby"));
+    this.held.apply(wantLobby ? undefined : me);
 
     for (const ev of snap.events) {
       if (ev.t === "impact") {

@@ -1,13 +1,16 @@
 services:
+  # prod: traefik terminates TLS and routes the subdomain to the client's
+  # nginx, which serves the static build and proxies /ws to the lobby
+  # server over the internal network — nothing publishes a host port.
   server:
     profiles: ["prod"]
     build:
       context: .
       dockerfile: server/Dockerfile
-    ports:
-      - "8081:8081"
     environment:
       - PORT=8081
+    networks:
+      - internal
     restart: unless-stopped
 
   client:
@@ -15,10 +18,18 @@ services:
     build:
       context: .
       dockerfile: client/Dockerfile
-    ports:
-      - "8082:80" #8080 is allocated on VPS
     depends_on:
       - server
+    networks:
+      - web
+      - internal
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.blackjack.rule=Host(`blackjack.mysite.com`)"
+      - "traefik.http.routers.blackjack.entrypoints=websecure"
+      - "traefik.http.routers.blackjack.tls.certresolver=letsencrypt"
+      - "traefik.http.services.blackjack.loadbalancer.server.port=80"
+      - "traefik.docker.network=web"
     restart: unless-stopped
 
   server-dev:
@@ -38,6 +49,8 @@ services:
       - /app/client/node_modules
       - /app/server/node_modules
       - /app/shared/node_modules
+    networks:
+      - internal
 
   client-dev:
     profiles: ["dev"]
@@ -58,3 +71,11 @@ services:
       - /app/client/node_modules
       - /app/server/node_modules
       - /app/shared/node_modules
+    networks:
+      - internal
+
+networks:
+  # traefik's network, created by the traefik stack: docker network create web
+  web:
+    external: true
+  internal:
