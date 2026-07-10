@@ -4,6 +4,10 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Degenerate Blackjack 3D</title>
+<link rel="preload" href="/fonts/pixelify-sans-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/fonts/vt323-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/fonts/silkscreen-400-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/fonts/silkscreen-700-latin.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="/src/styles.css">
 </head>
 <body>
@@ -24,7 +28,7 @@
   <div id="sidebar">
     <div class="panel">
       <h3>VICES</h3>
-      <div class="vice-head"><span>🚬 CIGARS</span><span class="inv" id="cigarInv">×3</span></div>
+      <div class="vice-head"><span>CIGARS</span><span class="inv" id="cigarInv">×3</span></div>
       <div class="meter cigar"><div class="fill ok" id="cigarFill"></div></div>
       <div class="vice-item" id="cigarItem" role="button" tabindex="0"
            aria-label="Smoke a cigar: drag to the table target and hold still, or press Enter">
@@ -35,7 +39,7 @@
         <span>DRAG TO SMOKE</span>
       </div>
       <div style="height:12px"></div>
-      <div class="vice-head"><span>🍺 BEER</span><span class="inv" id="beerInv">×3</span></div>
+      <div class="vice-head"><span>BEER</span><span class="inv" id="beerInv">×3</span></div>
       <div class="meter beer"><div class="fill ok" id="beerFill"></div></div>
       <div class="vice-item" id="beerItem" role="button" tabindex="0"
            aria-label="Drink a beer: drag to the table target, then swipe up and hold, or press Enter">
@@ -49,14 +53,14 @@
     <div class="panel">
       <h3>SHOP — ALWAYS OPEN</h3>
       <div class="shop-row">
-        <span>🚬 <span class="price" id="cigarPrice">$15</span></span>
+        <span>SMOKES <span class="price" id="cigarPrice">$15</span></span>
         <span>
           <button class="buy-btn" id="buyCigar1">Buy 1</button>
           <button class="buy-btn" id="buyCigar5">Buy 5</button>
         </span>
       </div>
       <div class="shop-row">
-        <span>🍺 <span class="price" id="beerPrice">$10</span></span>
+        <span>LAGER <span class="price" id="beerPrice">$10</span></span>
         <span>
           <button class="buy-btn" id="buyBeer1">Buy 1</button>
           <button class="buy-btn" id="buyBeer5">Buy 5</button>
@@ -110,7 +114,7 @@
 
 <!-- ============ MAIN MENU ============ -->
 <div id="menuScreen" class="screen active">
-  <div class="marquee">DEGENERATE<br>BLACKJACK<small class="vices-title">🚬 3D SIMULATOR 🍺</small></div>
+  <div class="marquee">DEGENERATE<br>BLACKJACK<small class="vices-title">SMOKE · DRINK · GO BROKE</small></div>
   <p class="tagline">One thousand dollars. Infinite hands. Keep smoking. Keep drinking.
     Fling the empties wherever you like — the floor belongs to the house too.
     Last degenerate breathing takes the crown.</p>
@@ -157,12 +161,12 @@
   <div id="lobbyList" class="lobby-list"></div>
   <p class="tagline" id="lobbyHint"></p>
   <button class="big-btn" id="lobbyStartBtn">START THE GAME</button>
-  <button class="big-btn" id="lobbyClearBtn" style="display:none">🧹 CLEAR THE LITTER</button>
+  <button class="big-btn secondary" id="lobbyClearBtn" style="display:none">CLEAR THE LITTER</button>
   <p class="lobby-controls">WASD — WANDER &nbsp;·&nbsp; DRAG — LOOK &nbsp;·&nbsp; E AT A MACHINE — FREE LITTER</p>
 </div>
 
 <!-- ============ SETTINGS ============ -->
-<button id="settingsBtn" aria-label="Settings" title="Settings">⚙</button>
+<button id="settingsBtn" aria-label="Settings" title="Settings (Esc)">ESC</button>
 <div id="settingsScreen" class="screen">
   <div class="marquee" style="font-size:clamp(28px,4vw,48px)">SETTINGS</div>
   <button class="big-btn" id="resumeBtn">BACK TO THE TABLE</button>

@@ -173,8 +173,8 @@ export class MenuControl {
       .map(
         (l) =>
           `<div class="server-row">
-             <span class="srv-name">${l.locked ? "🔒 " : ""}${esc(l.name)}</span>
-             <span class="srv-meta">${l.players}/${l.maxPlayers} · ${phaseLabel(l)}</span>
+             <span class="srv-name">${esc(l.name)}</span>
+             <span class="srv-meta">${l.players}/${l.maxPlayers} · ${l.locked ? "PRIVATE · " : ""}${phaseLabel(l)}</span>
              <button class="menu-btn join-btn" data-id="${l.id}"
                      ${canAct && l.players < l.maxPlayers ? "" : "disabled"}>
                ${l.players < l.maxPlayers ? "JOIN" : "FULL"}
