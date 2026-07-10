@@ -415,10 +415,15 @@ export class Hud {
       : "The lobby leader starts the game. Sit tight.";
   }
 
-  /* ranked leaderboard; re-renders only when scores/winner change (the
-     winner's last empties can still settle and score after the run ends) */
+  /* ranked leaderboard; re-renders only when standings/scores change (the
+     winner's last empties can still settle and score after the run ends).
+     Order comes from the sim's authoritative standings — winner always #1,
+     ties broken deterministically — with a score sort as the fallback for
+     anyone the standings don't know about. */
   private renderOver(snap: Snapshot, me: PlayerSnap): void {
-    const ranked = [...snap.players].sort((a, b) => b.score - a.score);
+    const order = new Map(snap.standings.map((id, i) => [id, i]));
+    const rank = (p: PlayerSnap) => order.get(p.id) ?? snap.standings.length;
+    const ranked = [...snap.players].sort((a, b) => rank(a) - rank(b) || b.score - a.score);
     const sig =
       snap.winnerId + "|" + snap.leaderId + "|" + ranked.map((p) => p.id + ":" + p.score).join();
     if (sig === this.overSig) return;

@@ -60,6 +60,7 @@ import { RAPIER, createWorld, spawnDebrisBody, initPhysics } from "./physics";
 import type {
   Intent,
   PlayerSnap,
+  PlayerStats,
   DebrisSnap,
   SimEvent,
   Snapshot,
@@ -69,6 +70,16 @@ import type {
 } from "./types";
 
 const msTicks = (ms: number) => Math.round((ms / 1000) * TICK_RATE);
+
+const freshStats = (): PlayerStats => ({
+  handsPlayed: 0,
+  handsWon: 0,
+  cigarsSmoked: 0,
+  beersDrunk: 0,
+  peakMoney: START_MONEY,
+  litters: 0,
+  directHits: 0,
+});
 
 interface Player {
   id: string;
@@ -103,14 +114,11 @@ interface Player {
   /* joined mid-run: seated but spectating until the next game starts */
   waiting: boolean;
   causeOfDeath: string | null;
+  /* when they died this run — feeds the standings cascade and identifies
+     dead-heat ties (everyone who fell on the same tick) */
+  diedTick: number | null;
   score: number;
-  stats: {
-    handsPlayed: number;
-    handsWon: number;
-    cigarsSmoked: number;
-    beersDrunk: number;
-    peakMoney: number;
-  };
+  stats: PlayerStats;
 }
 
 interface Debris {
@@ -283,8 +291,9 @@ export class Simulation {
       alive: true,
       waiting: this.phase !== "lobby",
       causeOfDeath: null,
+      diedTick: null,
       score: 0,
-      stats: { handsPlayed: 0, handsWon: 0, cigarsSmoked: 0, beersDrunk: 0, peakMoney: START_MONEY },
+      stats: freshStats(),
     });
     if (this.leaderId === null) this.leaderId = playerId;
   }
@@ -539,8 +548,9 @@ export class Simulation {
       q.alive = true;
       q.waiting = false;
       q.causeOfDeath = null;
+      q.diedTick = null;
       q.score = 0;
-      q.stats = { handsPlayed: 0, handsWon: 0, cigarsSmoked: 0, beersDrunk: 0, peakMoney: START_MONEY };
+      q.stats = freshStats();
     }
     this.cigarPrice = CIGAR_PRICE_0;
     this.beerPrice = BEER_PRICE_0;
@@ -779,29 +789,74 @@ export class Simulation {
       if (p.cigarMeter <= 0) this.eliminate(p, "DIED OF SOBRIETY (CIGAR WITHDRAWAL)");
       else if (p.beerMeter <= 0) this.eliminate(p, "DIED OF SOBRIETY (DEHYDRATION BY SOBRIETY)");
     }
+    // win check AFTER the whole death sweep, not inside eliminate(): when the
+    // last two fall on the same tick, crowning mid-loop would hand the win to
+    // whichever corpse the map iterated last
+    this.checkWin();
   }
 
   private eliminate(p: Player, cause: string): void {
     if (!p.alive) return;
     p.alive = false;
     p.causeOfDeath = cause;
+    p.diedTick = this.tick;
     p.ritual = null;
     if (p.held) this.autoDrop(p);
     this.events.push({ t: "eliminated", playerId: p.id, cause });
     if (this.turnPlayerId === p.id) this.advanceTurn();
-    this.checkWin();
   }
 
   /* solo runs end when the lone degenerate dies; with 2+ participants the
-     last one still breathing takes the crown */
+     last one still breathing takes the crown. A dead heat (the final players
+     falling on the same tick) goes to whoever had the better run — decided
+     by the cascade, never by iteration order or chance. */
   private checkWin(): void {
     if (this.phase === "lobby" || this.phase === "over") return;
     const alive = [...this.players.values()].filter((p) => !p.waiting && p.alive);
     const done = this.runPlayerCount >= 2 ? alive.length <= 1 : alive.length === 0;
     if (!done) return;
-    this.winnerId = alive[0]?.id ?? null;
+    this.winnerId = alive[0]?.id ?? this.pickTieWinner();
     this.phase = "over";
     this.schedule = [];
+  }
+
+  private pickTieWinner(): string | null {
+    const fell = [...this.players.values()].filter(
+      (p) => !p.waiting && p.diedTick === this.tick
+    );
+    fell.sort((a, b) => this.compareRun(a, b));
+    return fell[0]?.id ?? null;
+  }
+
+  /* run-quality cascade: score is the leaderboard currency, then the
+     tiebreakers tell apart equal scores — rounds won, deepest pockets,
+     marksmanship, filth output, table time, vices, who lasted longer.
+     Seat index last keeps the order total and deterministic. */
+  private compareRun(a: Player, b: Player): number {
+    const big = Number.MAX_SAFE_INTEGER; // still alive = outlasted everyone
+    return (
+      b.score - a.score ||
+      b.stats.handsWon - a.stats.handsWon ||
+      b.stats.peakMoney - a.stats.peakMoney ||
+      b.stats.directHits - a.stats.directHits ||
+      b.stats.litters - a.stats.litters ||
+      b.stats.handsPlayed - a.stats.handsPlayed ||
+      b.stats.cigarsSmoked + b.stats.beersDrunk - (a.stats.cigarsSmoked + a.stats.beersDrunk) ||
+      (b.diedTick ?? big) - (a.diedTick ?? big) ||
+      a.seat - b.seat
+    );
+  }
+
+  /* final rankings: the winner is #1 no matter what the scoreboard says —
+     survival is the game — and everyone else follows the cascade */
+  private computeStandings(): string[] {
+    const rest = [...this.players.values()]
+      .filter((p) => p.id !== this.winnerId)
+      .sort((a, b) => this.compareRun(a, b))
+      .map((p) => p.id);
+    return this.winnerId && this.players.has(this.winnerId)
+      ? [this.winnerId, ...rest]
+      : rest;
   }
 
   private stepPhysics(): void {
@@ -898,6 +953,7 @@ export class Simulation {
       if (dx * dx + dy * dy + dz * dz > r2) continue;
       d.hitPlayer = true;
       flinger.score += SCORE_PLAYER_HIT;
+      flinger.stats.directHits++;
       this.events.push({
         t: "playerHit",
         flingerId: flinger.id,
@@ -928,6 +984,7 @@ export class Simulation {
     if (!p || !p.alive) return;
     this.events.push({ t: "litter", playerId: p.id, pos: { ...d.pos }, points: LITTER_POINTS });
     p.score += LITTER_POINTS;
+    p.stats.litters++;
   }
 
   /* the money drop stays a rare variable-ratio bonus rolled once at settle —
@@ -1013,6 +1070,9 @@ export class Simulation {
       players,
       debris,
       events,
+      // recomputed per snapshot: the winner's last empties can still settle
+      // and score after the run ends, reshuffling the non-winner order
+      standings: this.phase === "over" ? this.computeStandings() : [],
     };
   }
 }

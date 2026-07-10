@@ -18,6 +18,8 @@ export interface PlayerStats {
   cigarsSmoked: number;
   beersDrunk: number;
   peakMoney: number;
+  litters: number;
+  directHits: number;
 }
 
 export interface PlayerSnap {
@@ -83,6 +85,9 @@ export interface Snapshot {
   players: PlayerSnap[];
   debris: DebrisSnap[];
   events: SimEvent[];
+  /* authoritative final rankings, best first — winner pinned to the top,
+     the rest by the run-quality cascade. Empty until phase === "over". */
+  standings: string[];
 }
 
 export type Intent =
