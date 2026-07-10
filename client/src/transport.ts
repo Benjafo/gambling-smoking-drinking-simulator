@@ -7,7 +7,9 @@
    snapshots down). Leaving a lobby drops the same socket back to browsing.
 
    Which server the menu dials: ?server=… —
-     (none) / ?server=auto     ws://<page host>:8081 (same URL works on LAN)
+     (none) / ?server=auto     ws://<page host>:8081 (same URL works on LAN),
+                               or wss://<page host>/ws when the page is https
+                               (nginx proxies /ws to the lobby server in prod)
      ?server=8090              ws://<page host>:8090
      ?server=ws://host:port    exactly that */
 import { WS_PORT_DEFAULT } from "@shared/constants";
@@ -32,7 +34,10 @@ export interface Session {
 
 export function resolveServerUrl(): string {
   const raw = new URLSearchParams(location.search).get("server") ?? "auto";
-  if (raw === "" || raw === "auto") return `ws://${location.hostname}:${WS_PORT_DEFAULT}`;
+  if (raw === "" || raw === "auto") {
+    if (location.protocol === "https:") return `wss://${location.host}/ws`;
+    return `ws://${location.hostname}:${WS_PORT_DEFAULT}`;
+  }
   if (/^\d+$/.test(raw)) return `ws://${location.hostname}:${raw}`;
   return raw;
 }

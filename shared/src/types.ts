@@ -4,6 +4,9 @@ import type { V3 } from "./constants";
 export type ViceKind = "cigar" | "beer";
 export type RoomPhase = "lobby" | "betting" | "dealing" | "acting" | "dealer" | "settle" | "over";
 export type DebrisPhase = "flying" | "settled";
+/* which space a piece of litter lives in: the table den, or the waiting
+   room (each renders as its own scene with its own local coordinates) */
+export type DebrisRoom = "den" | "lobby";
 
 export interface Quat {
   x: number;
@@ -62,6 +65,8 @@ export interface DebrisSnap {
   id: number;
   kind: ViceKind;
   phase: DebrisPhase;
+  room: DebrisRoom;
+  /* room-local coordinates (lobby debris is NOT in table space) */
   pos: V3;
   rot: Quat;
 }
@@ -105,6 +110,12 @@ export type Intent =
   | { type: "stand" }
   | { type: "double" }
   | { type: "buy"; item: ViceKind; qty: number }
+  /* lobby-room toy: pull a free bottle/cigar from a wall dispenser (hands
+     empty, standing at it) — it exists only to be flung around pre-game */
+  | { type: "dispense"; kind: ViceKind }
+  /* leader-only, lobby-only: the janitor option — every empty in the den
+     and the waiting room vanishes */
+  | { type: "clearLitter" }
   | { type: "consumeStart"; kind: ViceKind }
   | { type: "ritualEngage"; on: boolean }
   | { type: "ritualReset" }

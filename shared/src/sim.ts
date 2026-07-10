@@ -57,12 +57,20 @@ import {
   type V3,
 } from "./constants";
 import { Rng } from "./rng";
-import { LOBBY_SPAWNS, stepLobbyMove } from "./lobbyRoom";
-import { RAPIER, createWorld, spawnDebrisBody, initPhysics } from "./physics";
+import {
+  DISPENSE_RADIUS,
+  LOBBY_DISPENSERS,
+  LOBBY_EYE_HEIGHT,
+  LOBBY_REACH,
+  LOBBY_SPAWNS,
+  stepLobbyMove,
+} from "./lobbyRoom";
+import { RAPIER, createWorld, spawnDebrisBody, initPhysics, LOBBY_WORLD_OFFSET } from "./physics";
 import type {
   Intent,
   PlayerSnap,
   PlayerStats,
+  DebrisRoom,
   DebrisSnap,
   SimEvent,
   Snapshot,
@@ -132,6 +140,9 @@ interface Debris {
   id: number;
   kind: ViceKind;
   phase: "flying" | "settled";
+  /* which space it lives in — pos is room-local; the body's world transform
+     carries LOBBY_WORLD_OFFSET for lobby debris */
+  room: DebrisRoom;
   body: RAPIER_NS.RigidBody | null;
   pos: V3;
   rot: Quat;
@@ -234,6 +245,12 @@ export class Simulation {
         break;
       case "buy":
         this.buy(p, intent.item, Math.max(1, Math.floor(intent.qty)));
+        break;
+      case "dispense":
+        this.dispense(p, intent.kind);
+        break;
+      case "clearLitter":
+        this.clearLitter(p);
         break;
       case "consumeStart":
         this.consumeStart(p, intent.kind);
@@ -603,6 +620,25 @@ export class Simulation {
     else p.beerInv += qty;
   }
 
+  /* lobby-room toy: pull a free bottle/cigar from the wall dispenser you're
+     standing at. No money, no inventory, and never `earned` — pre-game
+     littering pays no points and drops no cash, so the waiting room can't
+     farm the run's scoring. Hands-empty doubles as the spam limiter: you
+     must fling one before you can pull the next. */
+  private dispense(p: Player, kind: ViceKind): void {
+    if (this.phase !== "lobby" || !p.alive || p.ritual || p.held) return;
+    const d = LOBBY_DISPENSERS.find((s) => s.kind === kind);
+    if (!d || Math.hypot(p.pos.x - d.x, p.pos.z - d.z) > DISPENSE_RADIUS) return;
+    p.held = { id: this.nextDebrisId++, kind, sinceTick: this.tick, earned: false, pos: null };
+  }
+
+  /* leader-only janitor option, from the lobby: every empty vanishes — the
+     waiting room AND the den. Items still in hands stay in hands. */
+  private clearLitter(p: Player): void {
+    if (this.phase !== "lobby" || p.id !== this.leaderId) return;
+    for (const d of [...this.debris.values()]) this.removeDebris(d);
+  }
+
   private consumeStart(p: Player, kind: ViceKind): void {
     // hands full blocks the next vice: the empty never drops itself — you
     // fling it or you stay thirsty. Litter is the player's problem.
@@ -632,9 +668,22 @@ export class Simulation {
   }
 
   /* ---------------- debris & fling ---------------- */
+  /* where this player's hands and eyes are: their seat at the table, or
+     wherever they've wandered in the waiting room */
+  private eyeOf(p: Player): V3 {
+    return this.phase === "lobby"
+      ? { x: p.pos.x, y: LOBBY_EYE_HEIGHT, z: p.pos.z }
+      : seatEye(p.seat);
+  }
+
+  /* the room the current phase happens in — new debris lands there */
+  private currentRoom(): DebrisRoom {
+    return this.phase === "lobby" ? "lobby" : "den";
+  }
+
   private fling(p: Player, itemId: number, origin: V3, vel: V3, angVel: V3): void {
     if (!p.held || p.held.id !== itemId) return;
-    const eye = seatEye(p.seat);
+    const eye = this.eyeOf(p);
     // clamp origin to arm's length of the seat — no teleport-throws
     const dx = origin.x - eye.x,
       dy = origin.y - eye.y,
@@ -660,8 +709,8 @@ export class Simulation {
 
   private autoDrop(p: Player): void {
     if (!p.held) return;
-    const eye = seatEye(p.seat);
-    // gentle lob toward the table
+    const eye = this.eyeOf(p);
+    // gentle lob toward the room's center (the table, or the lobby's middle)
     const toward = { x: -eye.x, y: 0, z: -eye.z };
     const len = Math.hypot(toward.x, toward.z) || 1;
     this.spawnDebris(
@@ -686,12 +735,23 @@ export class Simulation {
     earned = false
   ): void {
     const id = this.nextDebrisId++;
-    const body = spawnDebrisBody(this.world, kind, origin, vel, angVel);
+    const room = this.currentRoom();
+    // origin arrives room-local; the body lives at the room's world offset
+    const bodyOrigin =
+      room === "lobby"
+        ? {
+            x: origin.x + LOBBY_WORLD_OFFSET.x,
+            y: origin.y + LOBBY_WORLD_OFFSET.y,
+            z: origin.z + LOBBY_WORLD_OFFSET.z,
+          }
+        : origin;
+    const body = spawnDebrisBody(this.world, kind, bodyOrigin, vel, angVel);
     this.colliderDebris.set(body.collider(0).handle, id);
     this.debris.set(id, {
       id,
       kind,
       phase: "flying",
+      room,
       body,
       pos: { ...origin },
       rot: { x: 0, y: 0, z: 0, w: 1 },
@@ -733,9 +793,10 @@ export class Simulation {
   private pickup(p: Player, itemId: number): void {
     if (!p.alive || p.ritual || p.held) return;
     const d = this.debris.get(itemId);
-    if (!d) return;
-    const eye = seatEye(p.seat);
-    if (Math.hypot(d.pos.x - eye.x, d.pos.y - eye.y, d.pos.z - eye.z) > REACH_RADIUS) return;
+    if (!d || d.room !== this.currentRoom()) return;
+    const eye = this.eyeOf(p);
+    const reach = this.phase === "lobby" ? LOBBY_REACH : REACH_RADIUS;
+    if (Math.hypot(d.pos.x - eye.x, d.pos.y - eye.y, d.pos.z - eye.z) > reach) return;
     this.removeDebris(d);
     // scavenged, not earned: re-flinging floor litter never pays
     p.held = { id: this.nextDebrisId++, kind: d.kind, sinceTick: this.tick, earned: false, pos: null };
@@ -749,7 +810,7 @@ export class Simulation {
       p.held.pos = null;
       return;
     }
-    const eye = seatEye(p.seat);
+    const eye = this.eyeOf(p);
     const dx = pos.x - eye.x,
       dy = pos.y - eye.y,
       dz = pos.z - eye.z;
@@ -762,10 +823,12 @@ export class Simulation {
   step(): void {
     this.tick++;
     if (this.phase === "lobby") {
-      // the waiting room: integrate everyone's held walk input
+      // the waiting room: integrate everyone's held walk input, and keep
+      // the physics running — pre-game litter flies for real
       for (const p of this.players.values())
         if (p.moveDir.x !== 0 || p.moveDir.z !== 0)
           stepLobbyMove(p.pos, p.moveDir.x, p.moveDir.z, TICK_DT);
+      this.stepPhysics();
       return;
     }
 
@@ -901,7 +964,9 @@ export class Simulation {
         const d = id === undefined ? undefined : this.debris.get(id);
         if (d && !d.touched) {
           d.touched = true;
-          if (d.earned && d.owner)
+          // den only: an earned empty carried into the waiting room still
+          // scores nothing there
+          if (d.earned && d.owner && d.room === "den")
             d.litterAt = this.tick + msTicks(LITTER_IMPACT_DELAY_MS);
         }
       }
@@ -931,6 +996,7 @@ export class Simulation {
       // tunneled (rare residual even with cuboid planks + CCD) — pop it
       // back onto the felt instead of letting it visibly sink through
       if (
+        d.room === "den" &&
         Math.hypot(t.x, t.z) < TABLE.radius - 0.05 &&
         t.y > 0.15 &&
         t.y < TABLE.height - 0.05
@@ -940,13 +1006,22 @@ export class Simulation {
         d.body.setLinvel({ x: lv.x, y: Math.max(0, lv.y), z: lv.z }, true);
         t = d.body.translation();
       }
-      d.pos = { x: t.x, y: t.y, z: t.z };
+      // pos is room-local: strip the lobby's world offset back off
+      d.pos =
+        d.room === "lobby"
+          ? {
+              x: t.x - LOBBY_WORLD_OFFSET.x,
+              y: t.y - LOBBY_WORLD_OFFSET.y,
+              z: t.z - LOBBY_WORLD_OFFSET.z,
+            }
+          : { x: t.x, y: t.y, z: t.z };
       d.rot = { x: r.x, y: r.y, z: r.z, w: r.w };
       if (t.y < -5) {
         this.removeDebris(d);
         continue;
       }
-      if (!d.touched && !d.hitPlayer && d.owner) this.checkPlayerHit(d);
+      // players only have hit capsules at their seats — lobby throws whiff
+      if (!d.touched && !d.hitPlayer && d.owner && d.room === "den") this.checkPlayerHit(d);
       // settle by policy, not just isSleeping(): tiny capsules never cross
       // Rapier's sleep threshold (contact-solver jitter keeps ~1 rad/s of
       // imperceptible spin alive forever)
@@ -1020,7 +1095,7 @@ export class Simulation {
   /* the money drop stays a rare variable-ratio bonus rolled once at settle —
      sometimes the filth pays, but only after it has come to rest */
   private rollMoneyDrop(d: Debris): void {
-    if (!d.earned) return;
+    if (!d.earned || d.room !== "den") return;
     d.earned = false;
     const p = d.owner ? this.players.get(d.owner) : null;
     if (!p || !p.alive) return;
@@ -1083,6 +1158,7 @@ export class Simulation {
       id: d.id,
       kind: d.kind,
       phase: d.phase,
+      room: d.room,
       pos: d.pos,
       rot: d.rot,
     }));
