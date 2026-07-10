@@ -152,6 +152,7 @@ export class Hud {
     $("banner").className = "";
     $("flingHint").classList.remove("show");
     document.body.classList.remove("panic");
+    document.body.classList.remove("lobby-room");
   }
 
   /* ---------------- snapshot → DOM ---------------- */
@@ -170,8 +171,10 @@ export class Hud {
     $("timeDisplay").textContent = fmtTime(snap.elapsed);
     $("phaseDisplay").textContent = this.phaseLabel(snap, me);
 
-    // lobby / game-over overlays follow the authoritative phase
+    // lobby / game-over overlays follow the authoritative phase; the body
+    // class holsters the table-only chrome while everyone's in the room
     $("lobbyScreen").classList.toggle("active", snap.phase === "lobby");
+    document.body.classList.toggle("lobby-room", snap.phase === "lobby");
     $("overScreen").classList.toggle("active", snap.phase === "over");
     if (snap.phase === "lobby") this.renderLobby(snap);
     else this.lobbySig = "";

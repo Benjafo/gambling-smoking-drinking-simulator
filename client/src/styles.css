@@ -115,8 +115,27 @@ button:focus-visible{outline:2px solid var(--amber);outline-offset:2px}
 }
 .big-btn.leave:active{box-shadow:0 2px 0 #4c1a10}
 
-/* ---------- lobby ---------- */
-#lobbyScreen{background:radial-gradient(ellipse at 50% 35%, #24301f 0%, var(--void) 72%)}
+/* ---------- lobby: a slim panel over the 3D waiting room ---------- */
+#lobbyScreen{
+  background:none;pointer-events:none;
+  align-items:flex-start;justify-content:flex-start;text-align:left;
+  padding:64px 0 0 22px;gap:14px;
+}
+#lobbyScreen > *{pointer-events:auto}
+#lobbyTitle{font-size:clamp(24px,3vw,38px)}
+#lobbyScreen .lobby-list{
+  min-width:280px;max-width:340px;font-size:14px;
+  background:rgba(10,8,5,.72);backdrop-filter:blur(2px);
+}
+#lobbyScreen .tagline{font-size:14px;max-width:330px;margin:0;
+  text-shadow:0 1px 3px rgba(0,0,0,.9)}
+#lobbyStartBtn{font-size:17px;padding:11px 26px}
+.lobby-controls{
+  font-family:var(--mono);font-size:12px;letter-spacing:.2em;color:var(--ash);
+  background:rgba(10,8,5,.72);border:1px solid #2c2317;border-radius:6px;padding:7px 12px;
+}
+/* the table's tools stay holstered in the waiting room */
+body.lobby-room #sidebar,body.lobby-room #actionDock{display:none}
 #nameInput{
   background:rgba(0,0,0,.4);border:1px solid #6e4c12;border-radius:6px;
   color:var(--cream);font-family:var(--mono);font-size:18px;letter-spacing:.12em;
