@@ -15,10 +15,12 @@ import {
   DISPENSE_RADIUS,
   LOBBY_DISPENSERS,
   LOBBY_EYE_HEIGHT,
+  LOBBY_JUMP_SPEED,
   LOBBY_OBSTACLES,
   LOBBY_REACH,
   LOBBY_ROOM,
   stepLobbyMove,
+  type LobbyMotion,
 } from "@shared/lobbyRoom";
 import type { Intent, PlayerSnap, Snapshot, ViceKind } from "@shared/types";
 import { carpetTexture, leatherTexture, woodTexture } from "./textures";
@@ -96,8 +98,11 @@ export class LobbyRoomView {
   private myId = "";
   private latest: Snapshot | null = null;
 
-  /* first-person state: locally predicted position + free look */
+  /* first-person state: locally predicted position + free look. motion
+     wraps myPos (same object) so prediction runs the sim's exact step,
+     jumps included. */
   private myPos = new THREE.Vector3();
+  private motion: LobbyMotion = { pos: this.myPos, vy: 0, grounded: true };
   private posInit = false;
   private correction = new THREE.Vector3();
   private yaw = 0;
@@ -147,10 +152,18 @@ export class LobbyRoomView {
     addEventListener("keydown", (e) => {
       if (!this.active || (e.target as HTMLElement)?.tagName === "INPUT") return;
       if (e.code === "KeyE") {
+        this.captureLook(); // any gameplay key re-arms mouse-look (Esc can't)
         this.tryDispense();
         return;
       }
+      if (e.code === "Space") {
+        this.captureLook();
+        this.tryJump();
+        e.preventDefault();
+        return;
+      }
       if (KEY_DIRS[e.code]) {
+        this.captureLook();
         this.keys.add(e.code);
         e.preventDefault();
       }
@@ -722,17 +735,17 @@ export class LobbyRoomView {
     poseArm(armR, new THREE.Vector3(0.21, 0.58, 0.06));
     poseArm(armL, new THREE.Vector3(-0.21, 0.58, 0.06));
     group.add(nameSprite(p.name));
-    group.position.set(p.pos.x, 0, p.pos.z);
+    group.position.set(p.pos.x, p.pos.y, p.pos.z);
     group.rotation.y = p.moveYaw;
     this.scene.add(group);
     return {
       group,
       legs: legs!,
-      targetPos: new THREE.Vector3(p.pos.x, 0, p.pos.z),
+      targetPos: new THREE.Vector3(p.pos.x, p.pos.y, p.pos.z),
       targetYaw: p.moveYaw,
       moving: p.moving,
       walkPhase: 0,
-      baseY: 0,
+      baseY: p.pos.y,
     };
   }
 
@@ -763,15 +776,24 @@ export class LobbyRoomView {
     for (const p of snap.players) {
       if (p.id === myId) {
         if (!this.posInit) {
-          this.myPos.set(p.pos.x, 0, p.pos.z);
+          this.myPos.set(p.pos.x, p.pos.y, p.pos.z);
+          this.motion.vy = 0;
+          this.motion.grounded = true;
           this.yaw = p.moveYaw;
           this.posInit = true;
           this.correction.set(0, 0, 0);
         } else {
-          // authoritative minus predicted: fold in gently, snap if wild
-          this.correction.set(p.pos.x - this.myPos.x, 0, p.pos.z - this.myPos.z);
+          // authoritative minus predicted: fold in gently, snap if wild.
+          // Height only reconciles on the ground — mid-jump the server's
+          // arc lags ours by the wire, and tugging y would soften every hop
+          this.correction.set(
+            p.pos.x - this.myPos.x,
+            this.motion.grounded ? p.pos.y - this.myPos.y : 0,
+            p.pos.z - this.myPos.z
+          );
           if (this.correction.length() > 1.2) {
-            this.myPos.set(p.pos.x, 0, p.pos.z);
+            this.myPos.set(p.pos.x, p.pos.y, p.pos.z);
+            this.motion.vy = 0;
             this.correction.set(0, 0, 0);
           }
         }
@@ -782,7 +804,7 @@ export class LobbyRoomView {
         av = this.makeLobbyAvatar(p);
         this.avatars.set(p.id, av);
       }
-      av.targetPos.set(p.pos.x, 0, p.pos.z);
+      av.targetPos.set(p.pos.x, p.pos.y, p.pos.z);
       av.targetYaw = p.moveYaw;
       av.moving = p.moving;
     }
@@ -931,6 +953,16 @@ export class LobbyRoomView {
     );
   }
 
+  /* predict the hop immediately; the sim keeps its own grounded record, so
+     the intent is a request, not a command */
+  private tryJump(): void {
+    if (this.motion.grounded) {
+      this.motion.vy = LOBBY_JUMP_SPEED;
+      this.motion.grounded = false;
+    }
+    this.send({ type: "jump" });
+  }
+
   private tryDispense(): void {
     const d = this.nearDispenser();
     if (!d) return;
@@ -988,19 +1020,21 @@ export class LobbyRoomView {
     }
 
     if (this.posInit) {
-      // prediction: exactly the sim's step, at render rate
-      if (dirX !== 0 || dirZ !== 0) stepLobbyMove(this.myPos, dirX, dirZ, dt);
+      // prediction: exactly the sim's step, at render rate — every frame,
+      // gravity and landings don't wait for key input
+      stepLobbyMove(this.motion, dirX, dirZ, dt);
       // fold in the server's opinion of where I am
       if (this.correction.lengthSq() > 1e-8) {
         const k = Math.min(1, dt * 4);
         this.myPos.addScaledVector(this.correction, k);
         this.correction.multiplyScalar(1 - k);
       }
-      this.camera.position.set(this.myPos.x, LOBBY_EYE_HEIGHT, this.myPos.z);
+      const eyeY = this.myPos.y + LOBBY_EYE_HEIGHT;
+      this.camera.position.set(this.myPos.x, eyeY, this.myPos.z);
       const cp = Math.cos(this.pitch);
       this.camera.lookAt(
         this.myPos.x + sy * cp,
-        LOBBY_EYE_HEIGHT + Math.sin(this.pitch),
+        eyeY + Math.sin(this.pitch),
         this.myPos.z + cy * cp
       );
 
@@ -1027,6 +1061,8 @@ export class LobbyRoomView {
     for (const av of this.avatars.values()) {
       av.group.position.x += (av.targetPos.x - av.group.position.x) * k;
       av.group.position.z += (av.targetPos.z - av.group.position.z) * k;
+      // jumps read as jumps: track height faster than the x/z stroll-ease
+      av.baseY += (av.targetPos.y - av.baseY) * Math.min(1, dt * 20);
       av.group.rotation.y += wrapAngle(av.targetYaw - av.group.rotation.y) * k;
       const strideTarget = av.moving ? 1 : 0;
       if (av.moving) av.walkPhase += dt * WALK_ANIM_HZ;
