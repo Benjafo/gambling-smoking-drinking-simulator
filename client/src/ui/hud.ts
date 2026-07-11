@@ -1,10 +1,13 @@
 /* DOM overlay HUD — the original game's UI language, now rendering snapshots
    and emitting intents instead of mutating state. */
-import { MIN_BET } from "@shared/constants";
+import { MIN_BET, TOLERANCE_MAX, TOLERANCE_PER_USE } from "@shared/constants";
 import { handValue } from "@shared/blackjack";
 import type { Intent, PlayerSnap, Snapshot } from "@shared/types";
 
 const $ = (id: string): HTMLElement => document.getElementById(id)!;
+
+/* one pip per vice finished; the top half runs red */
+const TOL_PIPS = Math.round(TOLERANCE_MAX / TOLERANCE_PER_USE);
 
 const CHIP_LADDER = [
   10, 25, 50, 100, 250, 500, 1000, 2500, 5000, 10000, 25000, 50000, 100000, 250000, 500000,
@@ -67,6 +70,11 @@ export class Hud {
   private overSig = "";
 
   constructor(private send: (i: Intent) => void) {
+    for (const id of ["cigarTol", "beerTol"])
+      $(id).innerHTML = Array.from(
+        { length: TOL_PIPS },
+        (_, i) => `<i${i >= TOL_PIPS / 2 ? ' class="hot"' : ""}></i>`
+      ).join("");
     this.wire();
     const loop = () => {
       this.moneyFrame();
@@ -185,6 +193,8 @@ export class Hud {
     // meters
     this.meter($("cigarFill"), me.cigarMeter);
     this.meter($("beerFill"), me.beerMeter);
+    this.tolerance($("cigarTol"), me.cigarTol);
+    this.tolerance($("beerTol"), me.beerTol);
     $("cigarInv").textContent = "×" + me.cigarInv;
     $("beerInv").textContent = "×" + me.beerInv;
     document.body.classList.toggle(
@@ -328,6 +338,14 @@ export class Hud {
   private meter(fill: HTMLElement, v: number): void {
     fill.style.width = Math.max(0, v) + "%";
     fill.className = "fill " + (v > 50 ? "ok" : v >= 20 ? "warn" : "bad");
+  }
+
+  /* tolerance pips: the habit's ratchet. A newly lit pip pops once (the
+     animation replays when the class lands on a fresh element). */
+  private tolerance(el: HTMLElement, tol: number): void {
+    const lit = Math.min(TOL_PIPS, Math.floor(tol / TOLERANCE_PER_USE));
+    const pips = el.children;
+    for (let i = 0; i < pips.length; i++) pips[i].classList.toggle("lit", i < lit);
   }
 
   private flashEl: HTMLElement | null = null;

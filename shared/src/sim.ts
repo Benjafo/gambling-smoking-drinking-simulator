@@ -20,6 +20,10 @@ import {
   RAMP,
   RATE_CAP,
   JITTER,
+  TOLERANCE_MAX,
+  TOLERANCE_PER_USE,
+  TOLERANCE_FILL_FLOOR,
+  TOLERANCE_DRAIN_BONUS,
   DECKS,
   RESHUFFLE_AT,
   MIN_BET,
@@ -61,6 +65,7 @@ import {
   DISPENSE_RADIUS,
   LOBBY_DISPENSERS,
   LOBBY_EYE_HEIGHT,
+  LOBBY_JUMP_SPEED,
   LOBBY_REACH,
   LOBBY_SPAWNS,
   stepLobbyMove,
@@ -107,6 +112,10 @@ interface Player {
   beerMeter: number;
   cigarDrift: number;
   beerDrift: number;
+  /* tolerance 0..TOLERANCE_MAX per vice: shrinks refills, speeds that
+     meter's drain. Only ever reset wholesale (new run) — see constants.ts */
+  cigarTol: number;
+  beerTol: number;
   cigarInv: number;
   beerInv: number;
   /* gesture-driven: progress accrues only while the client reports the
@@ -121,8 +130,11 @@ interface Player {
   lookYaw: number;
   lookPitch: number;
   /* lobby-room presence: kinematic position, the held input direction the
-     step loop integrates while phase === "lobby", and facing */
+     step loop integrates while phase === "lobby", facing, and the vertical
+     state (Player satisfies LobbyMotion — stepLobbyMove takes it whole) */
   pos: V3;
+  vy: number;
+  grounded: boolean;
   moveDir: { x: number; z: number };
   moveYaw: number;
   alive: boolean;
@@ -284,6 +296,14 @@ export class Simulation {
         p.moveDir.z = Number.isFinite(intent.dirZ) ? Math.max(-1, Math.min(1, intent.dirZ)) : 0;
         if (Number.isFinite(intent.yaw)) p.moveYaw = Math.max(-Math.PI, Math.min(Math.PI, intent.yaw));
         break;
+      case "jump":
+        // an impulse, not a held input — grounded is the sim's own record,
+        // so a spammed intent can't double-jump
+        if (this.phase === "lobby" && p.grounded) {
+          p.vy = LOBBY_JUMP_SPEED;
+          p.grounded = false;
+        }
+        break;
       case "restart":
         this.restart(p);
         break;
@@ -313,6 +333,8 @@ export class Simulation {
       beerMeter: METER_MAX,
       cigarDrift: 0,
       beerDrift: 0,
+      cigarTol: 0,
+      beerTol: 0,
       cigarInv: 3,
       beerInv: 3,
       ritual: null,
@@ -320,6 +342,8 @@ export class Simulation {
       lookYaw: 0,
       lookPitch: 0,
       pos: { x: LOBBY_SPAWNS[seat].x, y: 0, z: LOBBY_SPAWNS[seat].z },
+      vy: 0,
+      grounded: true,
       moveDir: { x: 0, z: 0 },
       moveYaw: LOBBY_SPAWNS[seat].yaw,
       alive: true,
@@ -337,6 +361,8 @@ export class Simulation {
     for (const q of this.players.values()) {
       q.waiting = false;
       q.moveDir = { x: 0, z: 0 }; // everyone stops mid-stride and takes a seat
+      q.vy = 0; // even the one who was mid-hop
+      q.grounded = true;
     }
     this.runPlayerCount = this.players.size;
     this.winnerId = null;
@@ -581,6 +607,8 @@ export class Simulation {
       q.doubled = false;
       q.cigarMeter = METER_MAX;
       q.beerMeter = METER_MAX;
+      q.cigarTol = 0;
+      q.beerTol = 0;
       q.cigarInv = 3;
       q.beerInv = 3;
       q.ritual = null;
@@ -592,6 +620,8 @@ export class Simulation {
       q.stats = freshStats();
       // back on their feet in the waiting room
       q.pos = { x: LOBBY_SPAWNS[q.seat].x, y: 0, z: LOBBY_SPAWNS[q.seat].z };
+      q.vy = 0;
+      q.grounded = true;
       q.moveDir = { x: 0, z: 0 };
       q.moveYaw = LOBBY_SPAWNS[q.seat].yaw;
     }
@@ -650,6 +680,18 @@ export class Simulation {
     p.ritual = { kind, progressTicks: 0, engaged: false };
   }
 
+  /* how much of the bar one vice restores: all of it at zero tolerance,
+     tapering to TOLERANCE_FILL_FLOOR at max. Computed BEFORE the use bumps
+     tolerance — the first one always works like it used to. */
+  private viceFill(tol: number): number {
+    return METER_MAX * (1 - (tol / TOLERANCE_MAX) * (1 - TOLERANCE_FILL_FLOOR));
+  }
+
+  /* a habituated body burns through the buzz faster */
+  private tolDrainMult(tol: number): number {
+    return 1 + (tol / TOLERANCE_MAX) * TOLERANCE_DRAIN_BONUS;
+  }
+
   private completeRitual(p: Player): void {
     const kind = p.ritual!.kind;
     p.ritual = null;
@@ -657,12 +699,14 @@ export class Simulation {
       if (p.cigarInv < 1) return;
       p.cigarInv--;
       p.stats.cigarsSmoked++;
-      p.cigarMeter = METER_MAX; // a good cigar fixes everything
+      p.cigarMeter = Math.min(METER_MAX, p.cigarMeter + this.viceFill(p.cigarTol));
+      p.cigarTol = Math.min(TOLERANCE_MAX, p.cigarTol + TOLERANCE_PER_USE);
     } else {
       if (p.beerInv < 1) return;
       p.beerInv--;
       p.stats.beersDrunk++;
-      p.beerMeter = METER_MAX; // drained to the last drop
+      p.beerMeter = Math.min(METER_MAX, p.beerMeter + this.viceFill(p.beerTol));
+      p.beerTol = Math.min(TOLERANCE_MAX, p.beerTol + TOLERANCE_PER_USE);
     }
     p.score += SCORE_VICE;
     this.events.push({ t: "score", playerId: p.id, points: SCORE_VICE });
@@ -675,7 +719,7 @@ export class Simulation {
      wherever they've wandered in the waiting room */
   private eyeOf(p: Player): V3 {
     return this.phase === "lobby"
-      ? { x: p.pos.x, y: LOBBY_EYE_HEIGHT, z: p.pos.z }
+      ? { x: p.pos.x, y: p.pos.y + LOBBY_EYE_HEIGHT, z: p.pos.z }
       : seatEye(p.seat);
   }
 
@@ -827,10 +871,10 @@ export class Simulation {
     this.tick++;
     if (this.phase === "lobby") {
       // the waiting room: integrate everyone's held walk input, and keep
-      // the physics running — pre-game litter flies for real
+      // the physics running — pre-game litter flies for real. Everyone
+      // steps every tick: gravity doesn't wait for key input.
       for (const p of this.players.values())
-        if (p.moveDir.x !== 0 || p.moveDir.z !== 0)
-          stepLobbyMove(p.pos, p.moveDir.x, p.moveDir.z, TICK_DT);
+        stepLobbyMove(p, p.moveDir.x, p.moveDir.z, TICK_DT);
       this.stepPhysics();
       return;
     }
@@ -874,8 +918,8 @@ export class Simulation {
         -JITTER,
         Math.min(JITTER, p.beerDrift + (this.rng.next() - 0.5) * 0.12)
       );
-      p.cigarMeter -= (base + p.cigarDrift) * dt;
-      p.beerMeter -= (base + p.beerDrift) * dt;
+      p.cigarMeter -= (base + p.cigarDrift) * this.tolDrainMult(p.cigarTol) * dt;
+      p.beerMeter -= (base + p.beerDrift) * this.tolDrainMult(p.beerTol) * dt;
 
       if (p.ritual?.engaged) {
         p.ritual.progressTicks++;
@@ -1128,6 +1172,8 @@ export class Simulation {
       hand: p.hand,
       cigarMeter: p.cigarMeter,
       beerMeter: p.beerMeter,
+      cigarTol: p.cigarTol,
+      beerTol: p.beerTol,
       cigarInv: p.cigarInv,
       beerInv: p.beerInv,
       ritual: p.ritual

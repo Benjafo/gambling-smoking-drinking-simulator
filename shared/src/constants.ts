@@ -14,10 +14,22 @@ export const LOBBY_PASSWORD_MAX = 32;
 
 export const START_MONEY = 1000;
 export const METER_MAX = 100;
-export const BASE_RATE = 2.0;
+export const BASE_RATE = 1.2;
 export const RAMP = 0.3;
 export const RATE_CAP = 6.0;
 export const JITTER = 0.5;
+
+/* ---- tolerance: the body adapts and the loop tightens. Each vice finished
+   builds tolerance for that vice; it never fades on its own — planned shop
+   items will trade levels between the two, and they must stay the ONLY way
+   down. One "level" = TOLERANCE_PER_USE, so item effects should move
+   tolerance in those units (one pip on the HUD). */
+export const TOLERANCE_MAX = 100;
+export const TOLERANCE_PER_USE = 10;
+/* at max tolerance the habit barely works: a vice refills only this fraction
+   of the bar, and that meter drains this much faster */
+export const TOLERANCE_FILL_FLOOR = 0.35;
+export const TOLERANCE_DRAIN_BONUS = 0.75;
 
 export const DECKS = 6;
 export const RESHUFFLE_AT = 52;
