@@ -77,6 +77,9 @@ export type SimEvent =
   | { t: "fling"; playerId: string; id: number; vel: V3 }
   | { t: "moneyDrop"; playerId: string; pos: V3; amount: number }
   | { t: "litter"; playerId: string; pos: V3; points: number }
+  /* score gains with no world anchor (hands settled, vices finished) —
+     the client picks a spot in the earner's own view */
+  | { t: "score"; playerId: string; points: number }
   | { t: "playerHit"; flingerId: string; victimId: string; pos: V3; points: number }
   | { t: "eliminated"; playerId: string; cause: string };
 

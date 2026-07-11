@@ -1197,6 +1197,16 @@ export class SceneView {
           this.points.emit(new THREE.Vector3(ev.pos.x, ev.pos.y + 0.03, ev.pos.z), ev.points);
           pointsSound();
         }
+      } else if (ev.t === "score") {
+        // anchor-less gains (hand settled, vice finished): your own head is
+        // behind the camera, so the pop lands just inside your view instead
+        if (ev.playerId === myId) {
+          const fwd = this.camera.getWorldDirection(new THREE.Vector3());
+          const at = this.camera.position.clone().addScaledVector(fwd, 0.6);
+          at.y -= 0.12;
+          this.points.emit(at, ev.points);
+          pointsSound();
+        }
       } else if (ev.t === "playerHit") {
         const at = new THREE.Vector3(ev.pos.x, ev.pos.y, ev.pos.z);
         if (ev.victimId === myId) {

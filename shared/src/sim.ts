@@ -528,11 +528,13 @@ export class Simulation {
       const res = settle(handValue(p.hand).total, d, isBlackjack(p.hand), dBJ, p.bet);
       this.setMoney(p, p.money + res.back);
       p.stats.handsPlayed++;
-      p.score += SCORE_HAND_PLAYED;
+      let pts = SCORE_HAND_PLAYED;
       if (res.kind === "win") {
         p.stats.handsWon++;
-        p.score += SCORE_HAND_WON;
+        pts += SCORE_HAND_WON;
       }
+      p.score += pts;
+      this.events.push({ t: "score", playerId: p.id, points: pts });
       this.events.push({
         t: "result",
         playerId: p.id,
@@ -663,6 +665,7 @@ export class Simulation {
       p.beerMeter = METER_MAX; // drained to the last drop
     }
     p.score += SCORE_VICE;
+    this.events.push({ t: "score", playerId: p.id, points: SCORE_VICE });
     // hands are guaranteed empty here: consumeStart refuses while holding
     p.held = { id: this.nextDebrisId++, kind, sinceTick: this.tick, earned: true, pos: null };
   }
