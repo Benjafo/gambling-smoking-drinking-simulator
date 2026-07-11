@@ -2,7 +2,7 @@
    client web worker and the Node server — that shared config is what makes
    client prediction match server results later. */
 import RAPIER from "@dimforge/rapier3d-compat";
-import { DEN_ROOM, TABLE, type V3 } from "./constants";
+import { CARD_H, CARD_W, DEN_ROOM, TABLE, type V3 } from "./constants";
 import { LOBBY_OBSTACLES, LOBBY_ROOM } from "./lobbyRoom";
 import type { Quat, ViceKind } from "./types";
 
@@ -23,6 +23,18 @@ export const DEBRIS_SHAPE: Record<ViceKind, { halfHeight: number; radius: number
   beer: { halfHeight: 0.09, radius: 0.035, density: 400 },
   cigar: { halfHeight: 0.055, radius: 0.012, density: 300 },
 };
+
+/* capsules have no rolling resistance and would roll forever; damping
+   stands in for it and lets bodies actually reach sleep */
+export const DEBRIS_LIN_DAMPING = 0.25;
+export const DEBRIS_ANG_DAMPING = 1.2;
+/* litter touching a dealt card below this speed grips hard (the sim swaps
+   in the damping below): every card leans at least a little, and a cylinder
+   rolls off ANY slope — without the grip, burying a rival's hand in trash
+   never sticks. Restored to the defaults when the cards go away. */
+export const CARD_STICK_SPEED = 2.0;
+export const CARD_STICK_LIN_DAMPING = 6;
+export const CARD_STICK_ANG_DAMPING = 12;
 
 export function createWorld(): RAPIER.World {
   const world = new RAPIER.World({ x: 0, y: -9.81, z: 0 });
@@ -160,6 +172,17 @@ function addLobbyRoomColliders(world: RAPIER.World): void {
   }
 }
 
+/* a dealt card as physics: a thin static plate matching the mesh the
+   renderer places via the same cardSlot() math. Grippy and dead so litter
+   stays put on a covered hand instead of sliding off. */
+export function cardColliderDesc(pos: V3, rot: Quat, scale: number): RAPIER.ColliderDesc {
+  return RAPIER.ColliderDesc.cuboid((CARD_W * scale) / 2, (CARD_H * scale) / 2, 0.004)
+    .setTranslation(pos.x, pos.y, pos.z)
+    .setRotation(rot)
+    .setFriction(0.85)
+    .setRestitution(0.05);
+}
+
 export function spawnDebrisBody(
   world: RAPIER.World,
   kind: ViceKind,
@@ -174,10 +197,8 @@ export function spawnDebrisBody(
     .setLinvel(vel.x, vel.y, vel.z)
     .setAngvel(angVel)
     .setCcdEnabled(true)
-    // capsules have no rolling resistance and would roll forever; damping
-    // stands in for it and lets bodies actually reach sleep
-    .setLinearDamping(0.25)
-    .setAngularDamping(1.2);
+    .setLinearDamping(DEBRIS_LIN_DAMPING)
+    .setAngularDamping(DEBRIS_ANG_DAMPING);
   if (rot) desc.setRotation(rot);
   const body = world.createRigidBody(desc);
   world.createCollider(

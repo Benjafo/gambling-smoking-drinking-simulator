@@ -67,10 +67,12 @@ export const PLAYER_HIT_Y_MAX = 1.5;
 export const PLAYER_HIT_RADIUS = 0.3; // includes debris-size slop
 
 /* head-tracking limits: the camera clamps here and the sim re-clamps
-   whatever clients report */
-export const LOOK_YAW_LIMIT = 1.45;
-export const LOOK_PITCH_MIN = -0.5;
-export const LOOK_PITCH_MAX = 0.35;
+   whatever clients report. Yaw reaches well past the shoulder — checking
+   the room behind you is allowed; avatars cap the SHOWN neck turn in
+   scene.ts so heads stay anatomical. */
+export const LOOK_YAW_LIMIT = 2.6;
+export const LOOK_PITCH_MIN = -0.65;
+export const LOOK_PITCH_MAX = 0.55;
 
 /* ---- scoring: the leaderboard currency. Rounds gambled pay, winning pays
    more, vices and littering pay — dying just stops the meter running. */
@@ -104,6 +106,53 @@ export interface V3 {
   x: number;
   y: number;
   z: number;
+}
+
+/* ---- cards on the felt: geometry + layout shared by the renderer (meshes)
+   and the sim (colliders) — a flung empty must land on exactly the cards
+   the players see. One layout for every viewer: your hand looks the same on
+   your screen and your neighbor's, so one set of colliders can match both. */
+export const CARD_W = 0.1;
+export const CARD_H = 0.145;
+export const CARD_SLOT_PITCH = 0.125; // center-to-center fan spacing, pre-scale
+export const CARD_LIFT = 0.004; // rest height above the felt
+export const HAND_ANCHOR_R = 0.86; // player hands sit at this table radius
+export const PLAYER_CARD_SCALE = 1.25;
+/* shallow on purpose: flat-ish cards read from every seat, and litter
+   dropped on a hand STAYS on it (a steeper ramp rolls bottles off, which
+   guts the bury-their-cards play) */
+export const PLAYER_CARD_LEAN = 0.2; // radians tipped back toward the owner
+export const DEALER_CARD_SCALE = 1.3;
+export const DEALER_CARD_LEAN = 0.3;
+export const DEALER_HAND_Z = -0.52;
+
+/* center + orientation of card slot i in a hand fanned at `yaw` around
+   `anchor`. The rotation is the renderer's euler (x: -π/2+lean, y: yaw,
+   order XYZ) written out as a quaternion so the sim needs no three.js.
+   Leaned cards pivot at their center: the y lift keeps the bottom edge on
+   the felt. */
+export function cardSlot(
+  anchor: V3,
+  yaw: number,
+  i: number,
+  scale: number,
+  lean: number
+): { pos: V3; rot: { x: number; y: number; z: number; w: number } } {
+  const off = (i - 1) * CARD_SLOT_PITCH * scale;
+  const pos = {
+    x: anchor.x + Math.cos(yaw) * off,
+    y: anchor.y + ((CARD_H * scale) / 2) * Math.sin(lean) * 0.95,
+    z: anchor.z - Math.sin(yaw) * off,
+  };
+  const hx = (-Math.PI / 2 + lean) / 2;
+  const hy = yaw / 2;
+  const rot = {
+    x: Math.sin(hx) * Math.cos(hy),
+    y: Math.cos(hx) * Math.sin(hy),
+    z: Math.sin(hx) * Math.sin(hy),
+    w: Math.cos(hx) * Math.cos(hy),
+  };
+  return { pos, rot };
 }
 
 export function seatAngle(i: number): number {

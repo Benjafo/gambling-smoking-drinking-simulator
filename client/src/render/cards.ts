@@ -2,10 +2,10 @@
    game) and deal/flip tweens driven by snapshot diffs. */
 import * as THREE from "three";
 import type { Card } from "@shared/blackjack";
+import { CARD_H, CARD_W, cardSlot } from "@shared/constants";
 import { tween, easeInOut } from "./tween";
 
-export const CARD_W = 0.1;
-export const CARD_H = 0.145;
+export { CARD_W, CARD_H };
 const CARD_T = 0.0022;
 
 const texCache = new Map<string, THREE.CanvasTexture>();
@@ -174,11 +174,9 @@ export class CardZone {
   }
 
   private slotPos(i: number): THREE.Vector3 {
-    const tangent = new THREE.Vector3(Math.cos(this.yaw), 0, -Math.sin(this.yaw));
-    const p = this.anchor.clone().addScaledVector(tangent, (i - 1) * 0.125 * this.scale);
-    // leaned cards pivot at their center: lift so the bottom edge stays on the felt
-    p.y += ((CARD_H * this.scale) / 2) * Math.sin(this.lean) * 0.95;
-    return p;
+    // shared math: the sim builds this exact slot's collider from it
+    const s = cardSlot(this.anchor, this.yaw, i, this.scale, this.lean);
+    return new THREE.Vector3(s.pos.x, s.pos.y, s.pos.z);
   }
 
   private beginAnim(): void {

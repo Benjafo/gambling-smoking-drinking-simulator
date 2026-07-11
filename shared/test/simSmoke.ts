@@ -3,7 +3,7 @@
    Run with: npm run test:sim */
 import { Simulation } from "../src/sim";
 import { handValue } from "../src/blackjack";
-import { seatEye, MAX_FLING_SPEED } from "../src/constants";
+import { seatEye, LOOK_PITCH_MIN, LOOK_YAW_LIMIT, MAX_FLING_SPEED } from "../src/constants";
 
 function assert(cond: unknown, msg: string): void {
   if (!cond) {
@@ -30,7 +30,7 @@ assert(snap.phase === "betting", "leader start enters betting");
 sim.applyIntent(ME, { type: "look", yaw: 9, pitch: -9 });
 snap = sim.snapshot();
 assert(
-  snap.players[0].look.yaw === 1.45 && snap.players[0].look.pitch === -0.5,
+  snap.players[0].look.yaw === LOOK_YAW_LIMIT && snap.players[0].look.pitch === LOOK_PITCH_MIN,
   "look intent mirrored and clamped"
 );
 sim.applyIntent(ME, { type: "look", yaw: 0.4, pitch: 0.1 });
