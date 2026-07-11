@@ -128,7 +128,8 @@ export const DEALER_HAND_Z = -0.52;
 
 /* center + orientation of card slot i in a hand fanned at `yaw` around
    `anchor`. The rotation is the renderer's euler (x: -π/2+lean, y: yaw,
-   order XYZ) written out as a quaternion so the sim needs no three.js.
+   order YXZ — yaw about world-up first, then lean about the card's own
+   width axis) written out as a quaternion so the sim needs no three.js.
    Leaned cards pivot at their center: the y lift keeps the bottom edge on
    the felt. */
 export function cardSlot(
@@ -149,7 +150,7 @@ export function cardSlot(
   const rot = {
     x: Math.sin(hx) * Math.cos(hy),
     y: Math.cos(hx) * Math.sin(hy),
-    z: Math.sin(hx) * Math.sin(hy),
+    z: -Math.sin(hx) * Math.sin(hy),
     w: Math.cos(hx) * Math.cos(hy),
   };
   return { pos, rot };

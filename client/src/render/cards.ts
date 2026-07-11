@@ -258,9 +258,11 @@ export class CardZone {
     obj.faceUp = false;
     const target = this.slotPos(i);
     const tilt = (Math.random() - 0.5) * 0.07;
-    // -90° is flat on the felt; the lean tips the face toward the owner
-    obj.group.rotation.set(-Math.PI / 2 + this.lean, 0, 0);
-    obj.group.rotation.y = this.yaw + tilt;
+    // -90° is flat on the felt; the lean tips the face toward the owner.
+    // Order matters: YXZ yaws about world-up FIRST, then leans about the
+    // card's own width axis — default XYZ leans yawed cards about world X,
+    // which stood side seats' cards up off the felt (33° at seat 1).
+    obj.group.rotation.set(-Math.PI / 2 + this.lean, this.yaw + tilt, 0, "YXZ");
     obj.group.scale.setScalar(this.scale);
     obj.group.position.copy(this.shoePos);
     this.scene.add(obj.group);
