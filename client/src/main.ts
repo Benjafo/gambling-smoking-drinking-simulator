@@ -51,6 +51,7 @@ function startSession(s: Session): void {
 
   s.onEnd((reason) => {
     session = null;
+    document.exitPointerLock?.(); // a lost connection mustn't strand a locked cursor
     ritual.update(undefined); // cancel any half-finished gesture overlay
     hud.sessionEnd();
     $("optionsBtn").classList.remove("active");
@@ -70,13 +71,31 @@ const toggleOptions = (on: boolean) => {
 
 $("optionsBtn").addEventListener("click", () => toggleOptions(!optionsOpen()));
 $("titleOptionsBtn").addEventListener("click", () => toggleOptions(true));
-$("resumeBtn").addEventListener("click", () => toggleOptions(false));
+$("resumeBtn").addEventListener("click", () => {
+  toggleOptions(false);
+  scene.captureLobbyPointer(); // straight back into mouse-look in the lobby
+});
 $("optionsBackBtn").addEventListener("click", () => toggleOptions(false));
 $("leaveBtn").addEventListener("click", () => session?.leave()); // onEnd does the rest
+
+/* Esc in the lobby wears two hats and the browser gets first grab: while
+   the pointer is locked, Esc only exits the lock (the keydown never
+   reaches us), so a lock loss over the lobby IS the menu request */
+let lastLockExit = 0;
+document.addEventListener("pointerlockchange", () => {
+  if (document.pointerLockElement) return;
+  lastLockExit = performance.now();
+  if (session && scene.inLobby && !optionsOpen()) toggleOptions(true);
+});
 addEventListener("keydown", (e) => {
   if (e.key !== "Escape") return;
-  if (session) toggleOptions(!optionsOpen());
-  else if (optionsOpen()) toggleOptions(false);
+  // an engine that DOES deliver the lock-exiting Esc mustn't double-toggle
+  if (optionsOpen() && performance.now() - lastLockExit < 350) return;
+  if (session) {
+    const opening = !optionsOpen();
+    toggleOptions(opening);
+    if (!opening) scene.captureLobbyPointer(); // best effort — Esc grants no gesture
+  } else if (optionsOpen()) toggleOptions(false);
 });
 
 /* audio: master SFX volume + mute, persisted by effects.ts */

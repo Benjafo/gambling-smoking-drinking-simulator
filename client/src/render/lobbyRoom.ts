@@ -1,7 +1,12 @@
 /* The waiting room: a grimy back-of-the-bar lounge rendered as its own
    scene. While the sim's phase is "lobby", SceneView routes pointer input
    here, renders this scene, and everyone walks around in first person —
-   WASD to wander, drag to look. Geometry matches shared/src/lobbyRoom.ts
+   WASD to wander, mouse to look. The pointer locks itself on entry
+   (FPS-style free look, crosshair marks the pick ray; a click re-captures
+   whenever the browser wanted a fresher gesture); Esc hands the cursor to
+   the options menu — main.ts owns that hand-off. Touch — and anywhere the
+   lock is refused, headless runs included — keeps the old drag-to-look.
+   Geometry matches shared/src/lobbyRoom.ts
    exactly: the furniture you see is the furniture the server collides you
    against, and local prediction runs the same stepLobbyMove() the sim runs,
    so the camera never fights the authority it's predicting. */
@@ -24,7 +29,11 @@ import { makeFigure, poseArm } from "./figure";
 
 const PITCH_MIN = -0.55;
 const PITCH_MAX = 0.7;
+const LOOK_SENS = 0.0023; // rad per px of captured mouse travel
 const WALK_ANIM_HZ = 7.5; // leg-swing speed, phase cycles per second-ish
+
+/* the crosshair's pick ray: dead center */
+const CENTER = new THREE.Vector2(0, 0);
 
 /* deterministic scatter for the trash — same filth every visit */
 function lcg(seed: number): () => number {
@@ -95,6 +104,9 @@ export class LobbyRoomView {
   private pitch = 0;
   private looking = false;
   private lastPointer = { x: 0, y: 0 };
+  /* virtual hand position for wind-up drags while the pointer is locked */
+  private virt = { x: 0, y: 0 };
+  private crosshairEl = document.getElementById("crosshair");
   private keys = new Set<string>();
   private lastSentDir = { x: 0, z: 0 };
   private lastSentYaw = 0;
@@ -146,6 +158,36 @@ export class LobbyRoomView {
     addEventListener("keyup", (e) => this.keys.delete(e.code));
     // alt-tabbing away with W held would walk you into a wall forever
     addEventListener("blur", () => this.keys.clear());
+    document.addEventListener("pointerlockchange", () => this.syncLockUi());
+  }
+
+  /* ---------------- pointer lock (mouse-look) ---------------- */
+  private get locked(): boolean {
+    return !!this.domElement && document.pointerLockElement === this.domElement;
+  }
+
+  /* called on lobby entry (riding the join click's user activation), on
+     any canvas click, and by SceneView when the options RESUME button
+     closes over the lobby */
+  captureLook(): void {
+    if (!this.active || this.locked || !this.domElement) return;
+    try {
+      // returns a promise in most engines, undefined in older ones; a
+      // refusal (headless, iframe policy, Esc cooldown) just leaves the
+      // drag fallback in charge
+      const r = this.domElement.requestPointerLock() as unknown as
+        | { catch?: (fn: () => void) => void }
+        | undefined;
+      r?.catch?.(() => undefined);
+    } catch {
+      /* no pointer lock here — drag-to-look still works */
+    }
+  }
+
+  private syncLockUi(): void {
+    const locked = this.locked;
+    this.crosshairEl?.classList.toggle("show", this.active && locked);
+    if (!locked) this.crosshairEl?.classList.remove("grab", "deny");
   }
 
   /* ---------------- the room shell ---------------- */
@@ -699,11 +741,17 @@ export class LobbyRoomView {
     if (this.active === on) return;
     this.active = on;
     this.keys.clear();
-    if (!on) {
+    if (on) {
+      // straight into free look: the click that joined the table is
+      // recent enough to count as the gesture the lock API wants
+      this.captureLook();
+    } else {
       this.looking = false;
       this.dispenseHint?.classList.remove("show");
+      if (this.locked) document.exitPointerLock();
       if (this.domElement) this.domElement.style.cursor = "";
     }
+    this.syncLockUi();
   }
 
   apply(snap: Snapshot, myId: string): void {
@@ -749,8 +797,12 @@ export class LobbyRoomView {
      same priority the table uses: grab the held empty > pick up litter >
      drag to look */
   pointerDown(e: PointerEvent): void {
-    const ndc = this.ndc(e);
-    if (this.held.pointerDown(ndc)) return;
+    if (e.pointerType === "mouse") this.captureLook(); // no-op once locked
+    const ndc = this.locked ? CENTER : this.ndc(e);
+    if (this.held.pointerDown(ndc)) {
+      this.beginVirtualCursor(e);
+      return;
+    }
     const target = this.findDebrisAt(ndc);
     if (target) {
       if (this.held.hasHeld) {
@@ -760,15 +812,33 @@ export class LobbyRoomView {
       }
       this.send({ type: "pickup", itemId: target.id });
       this.held.beginFloorGrab(target.kind, target.pos);
+      this.beginVirtualCursor(e);
       return;
     }
-    this.looking = true;
+    this.looking = true; // drag fallback: touch, or the lock was refused
     this.lastPointer = { x: e.clientX, y: e.clientY };
   }
   pointerMove(e: PointerEvent): void {
     if (this.held.isGrabbing) {
-      this.held.pointerMove(this.ndc(e));
+      if (this.locked) {
+        const [dx, dy] = this.lookDelta(e);
+        this.virt.x = Math.max(0, Math.min(innerWidth, this.virt.x + dx));
+        this.virt.y = Math.max(0, Math.min(innerHeight, this.virt.y + dy));
+        this.held.pointerMove(
+          new THREE.Vector2((this.virt.x / innerWidth) * 2 - 1, -(this.virt.y / innerHeight) * 2 + 1)
+        );
+      } else {
+        this.held.pointerMove(this.ndc(e));
+      }
       return;
+    }
+    if (this.locked) {
+      // free look: the gaze follows the mouse, no button held. Standard
+      // FPS signs (mouse down = look down), unlike the drag path below.
+      const [dx, dy] = this.lookDelta(e);
+      this.yaw = wrapAngle(this.yaw - dx * LOOK_SENS);
+      this.pitch = Math.max(PITCH_MIN, Math.min(PITCH_MAX, this.pitch - dy * LOOK_SENS));
+      return; // crosshair hover refreshes per frame, where walking counts too
     }
     if (!this.looking) {
       this.updateHover(this.ndc(e));
@@ -788,6 +858,33 @@ export class LobbyRoomView {
 
   private ndc(e: PointerEvent): THREE.Vector2 {
     return new THREE.Vector2((e.clientX / innerWidth) * 2 - 1, -(e.clientY / innerHeight) * 2 + 1);
+  }
+
+  /* the wind-up drag's hand starts where the grab happened: the crosshair
+     when locked (the cursor is gone), the cursor otherwise */
+  private beginVirtualCursor(e: PointerEvent): void {
+    this.virt.x = this.locked ? innerWidth / 2 : e.clientX;
+    this.virt.y = this.locked ? innerHeight / 2 : e.clientY;
+    this.lastPointer = { x: e.clientX, y: e.clientY };
+  }
+
+  /* mouse travel while locked, summed across coalesced events. Real locks
+     freeze clientX/Y and report movementX/Y; synthetic pointers (headless
+     runs) do the opposite, so zero movement falls back to position deltas. */
+  private lookDelta(e: PointerEvent): [number, number] {
+    let dx = 0;
+    let dy = 0;
+    const evs = e.getCoalescedEvents?.() ?? [];
+    for (const ev of evs.length ? evs : [e]) {
+      dx += ev.movementX;
+      dy += ev.movementY;
+    }
+    if (dx === 0 && dy === 0) {
+      dx = e.clientX - this.lastPointer.x;
+      dy = e.clientY - this.lastPointer.y;
+    }
+    this.lastPointer = { x: e.clientX, y: e.clientY };
+    return [dx, dy];
   }
 
   /* what grabbable litter is under the pointer — instance hit first, then
@@ -812,15 +909,16 @@ export class LobbyRoomView {
   }
 
   private updateHover(ndc: THREE.Vector2): void {
-    if (!this.domElement) return;
     const target = this.findDebrisAt(ndc);
-    if (target && this.held.hasHeld) {
-      this.debris.setHighlight(null);
-      this.domElement.style.cursor = "not-allowed";
-      return;
+    const denied = !!target && this.held.hasHeld;
+    this.debris.setHighlight(denied ? null : (target?.id ?? null));
+    if (this.locked) {
+      // no cursor to shape: the crosshair does the talking
+      this.crosshairEl?.classList.toggle("grab", !!target && !denied);
+      this.crosshairEl?.classList.toggle("deny", denied);
+    } else if (this.domElement) {
+      this.domElement.style.cursor = denied ? "not-allowed" : target ? "grab" : "";
     }
-    this.debris.setHighlight(target?.id ?? null);
-    this.domElement.style.cursor = target ? "grab" : "";
   }
 
   /* ---------------- dispensers ---------------- */
@@ -956,6 +1054,9 @@ export class LobbyRoomView {
       if (this.held.hasHeld) this.send({ type: "heldMove", pos: null });
     }
     if (this.active) this.updateDispenseHint();
+    // under lock the pick ray is the gaze: walking alone changes what the
+    // crosshair is over, so hover tracks per frame, not per pointer event
+    if (this.active && this.locked && !this.held.isGrabbing) this.updateHover(CENTER);
 
     // ambient life: the bulb has moods, the neon buzzes, the jukebox breathes
     if (now > this.bulbDropUntil && Math.random() < 0.004) this.bulbDropUntil = now + 90;

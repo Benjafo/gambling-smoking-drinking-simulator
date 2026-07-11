@@ -1024,6 +1024,18 @@ export class SceneView {
     this.renderer.domElement.style.cursor = target ? "grab" : "";
   }
 
+  /* whether the waiting room owns the screen right now — main.ts uses it
+     to route pointer-lock hand-offs */
+  get inLobby(): boolean {
+    return this.mode === "lobby";
+  }
+
+  /* re-capture the lobby mouse-look from a UI click (the options RESUME
+     button) — pointer lock demands a fresh user gesture */
+  captureLobbyPointer(): void {
+    if (this.mode === "lobby") this.lobbyRoom.captureLook();
+  }
+
   /* project a world point to CSS pixels — used by headless UI tests.
      Projects through whichever camera is live (table or waiting room). */
   screenPos(x: number, y: number, z: number): { x: number; y: number } {
