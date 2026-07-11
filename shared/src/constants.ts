@@ -74,6 +74,11 @@ export const REACH_RADIUS = 10;
 
 /* ---- world geometry ---- */
 export const TABLE = { radius: 1.5, height: 0.76, rimRadius: 1.47, rimTube: 0.055 };
+/* the small back room the table lives in. The client's walls and the
+   debris colliders in physics.ts both read these — a bottle must ricochet
+   off exactly the drywall the player sees. z runs from centerZ - halfD
+   (behind the dealer) to centerZ + halfD (behind the players). */
+export const DEN_ROOM = { halfW: 4.4, halfD: 4.2, height: 3.3, centerZ: 0.5 };
 export const SEAT_COUNT: number = 5;
 /* pushed out from 2.05: with smaller avatars this keeps a direct hit a
    skill shot instead of a gimme (adjacent seats ~1.23m apart) */
