@@ -1,5 +1,12 @@
 import type { Intent } from "@shared/types";
 import type { Session } from "./transport";
+import {
+  getSfxMuted,
+  getSfxVolume,
+  pickupSound,
+  setSfxMuted,
+  setSfxVolume,
+} from "./render/effects";
 import { SceneView } from "./render/scene";
 import { Hud } from "./ui/hud";
 import { MenuControl } from "./ui/menu";
@@ -32,7 +39,7 @@ const menu = new MenuControl(startSession);
 function startSession(s: Session): void {
   session = s;
   hud.sessionStart(s.tableName);
-  $("settingsBtn").classList.add("active");
+  $("optionsBtn").classList.add("active");
 
   s.onSnapshot((snap) => {
     scene.apply(snap, s.playerId);
@@ -46,30 +53,50 @@ function startSession(s: Session): void {
     session = null;
     ritual.update(undefined); // cancel any half-finished gesture overlay
     hud.sessionEnd();
-    $("settingsBtn").classList.remove("active");
-    $("settingsScreen").classList.remove("active");
+    $("optionsBtn").classList.remove("active");
+    $("optionsScreen").classList.remove("active");
     menu.show(reason === "lost" ? "CONNECTION TO THE TABLE LOST." : undefined);
   });
 }
 
-/* ---------------- settings ----------------
+/* ---------------- options ----------------
    reachable from the title screen too; "from-menu" swaps the in-game
    resume/leave slabs for a plain BACK */
-const settingsOpen = () => $("settingsScreen").classList.contains("active");
-const toggleSettings = (on: boolean) => {
-  $("settingsScreen").classList.toggle("active", on);
-  $("settingsScreen").classList.toggle("from-menu", !session);
+const optionsOpen = () => $("optionsScreen").classList.contains("active");
+const toggleOptions = (on: boolean) => {
+  $("optionsScreen").classList.toggle("active", on);
+  $("optionsScreen").classList.toggle("from-menu", !session);
 };
 
-$("settingsBtn").addEventListener("click", () => toggleSettings(!settingsOpen()));
-$("titleSettingsBtn").addEventListener("click", () => toggleSettings(true));
-$("resumeBtn").addEventListener("click", () => toggleSettings(false));
-$("settingsBackBtn").addEventListener("click", () => toggleSettings(false));
+$("optionsBtn").addEventListener("click", () => toggleOptions(!optionsOpen()));
+$("titleOptionsBtn").addEventListener("click", () => toggleOptions(true));
+$("resumeBtn").addEventListener("click", () => toggleOptions(false));
+$("optionsBackBtn").addEventListener("click", () => toggleOptions(false));
 $("leaveBtn").addEventListener("click", () => session?.leave()); // onEnd does the rest
 addEventListener("keydown", (e) => {
   if (e.key !== "Escape") return;
-  if (session) toggleSettings(!settingsOpen());
-  else if (settingsOpen()) toggleSettings(false);
+  if (session) toggleOptions(!optionsOpen());
+  else if (optionsOpen()) toggleOptions(false);
+});
+
+/* audio: master SFX volume + mute, persisted by effects.ts */
+const volInput = $("sfxVolInput") as HTMLInputElement;
+const muteChk = $("sfxMuteChk") as HTMLInputElement;
+const volVal = $("sfxVolVal");
+volInput.value = String(Math.round(getSfxVolume() * 100));
+volVal.textContent = volInput.value + "%";
+muteChk.checked = getSfxMuted();
+volInput.addEventListener("input", () => {
+  setSfxVolume(Number(volInput.value) / 100);
+  volVal.textContent = volInput.value + "%";
+});
+// preview blip on release so you hear where you landed
+volInput.addEventListener("change", () => {
+  if (!getSfxMuted()) pickupSound();
+});
+muteChk.addEventListener("change", () => {
+  setSfxMuted(muteChk.checked);
+  if (!muteChk.checked) pickupSound();
 });
 
 // testing hook: lets headless UI tests project world coords to screen px
