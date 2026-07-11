@@ -272,9 +272,10 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--open);outline-o
 #lobbyClearBtn{font-size:13px;padding:9px 20px}
 #lobbyClearBtn:disabled{opacity:.4;cursor:not-allowed;transform:none}
 .lobby-controls{
+  display:flex;flex-direction:column;align-items:flex-start;gap:7px;
   font-family:var(--tiny);font-size:8px;letter-spacing:.14em;color:var(--open);
   background:rgba(10,14,11,.85);border:2px solid var(--ink);
-  box-shadow:inset 0 0 0 1px var(--line);padding:8px 12px;
+  box-shadow:inset 0 0 0 1px var(--line);padding:10px 14px;
 }
 /* the table's tools stay holstered in the waiting room */
 body.lobby-room #sidebar,body.lobby-room #actionDock{display:none}
@@ -341,8 +342,16 @@ body.lobby-room #sidebar,body.lobby-room #actionDock{display:none}
   box-shadow:inset 0 0 0 1px var(--line),4px 4px 0 rgba(0,0,0,.4);padding:12px;
 }
 .panel h3{font-family:var(--tiny);font-weight:400;font-size:8px;letter-spacing:.26em;color:var(--smoke);margin-bottom:10px}
-.vice-head{display:flex;justify-content:space-between;align-items:baseline;font-family:var(--tiny);font-size:9px;color:var(--paper)}
+.vice-head{display:flex;justify-content:space-between;align-items:center;font-family:var(--tiny);font-size:9px;color:var(--paper)}
 .vice-head .inv{font-family:var(--crt);font-size:17px;color:var(--smoke)}
+
+/* tolerance pips: one lights per vice finished — lit means the next one
+   fills less and burns off faster. Upper half goes neon: deep in the habit. */
+.vice-head .tol{display:flex;gap:2px;align-items:center}
+.vice-head .tol i{width:5px;height:9px;background:var(--night);border:1px solid var(--line)}
+.vice-head .tol i.lit{background:var(--warn);border-color:var(--ink);animation:pipPop .3s steps(2)}
+.vice-head .tol i.hot.lit{background:var(--neon)}
+@keyframes pipPop{50%{filter:brightness(1.8)}}
 
 /* segmented cabinet meters */
 .meter{height:18px;background:var(--night);border:2px solid var(--ink);margin:6px 0 8px;position:relative;overflow:hidden}

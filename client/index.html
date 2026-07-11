@@ -28,7 +28,8 @@
   <div id="sidebar">
     <div class="panel">
       <h3>VICES</h3>
-      <div class="vice-head"><span>CIGARS</span><span class="inv" id="cigarInv">×3</span></div>
+      <div class="vice-head"><span>CIGARS</span><span class="tol" id="cigarTol"
+           title="TOLERANCE — every cigar you finish fills less and burns off faster"></span><span class="inv" id="cigarInv">×3</span></div>
       <div class="meter cigar"><div class="fill ok" id="cigarFill"></div></div>
       <div class="vice-item" id="cigarItem" role="button" tabindex="0"
            aria-label="Smoke a cigar: drag to the table target and hold still, or press Enter">
@@ -39,7 +40,8 @@
         <span>DRAG TO SMOKE</span>
       </div>
       <div style="height:12px"></div>
-      <div class="vice-head"><span>BEER</span><span class="inv" id="beerInv">×3</span></div>
+      <div class="vice-head"><span>BEER</span><span class="tol" id="beerTol"
+           title="TOLERANCE — every beer you finish fills less and wears off faster"></span><span class="inv" id="beerInv">×3</span></div>
       <div class="meter beer"><div class="fill ok" id="beerFill"></div></div>
       <div class="vice-item" id="beerItem" role="button" tabindex="0"
            aria-label="Drink a beer: drag to the table target, then swipe up and hold, or press Enter">
@@ -174,7 +176,13 @@
   <p class="tagline" id="lobbyHint"></p>
   <button class="big-btn" id="lobbyStartBtn">START THE GAME</button>
   <button class="big-btn secondary" id="lobbyClearBtn" style="display:none">CLEAR THE LITTER</button>
-  <p class="lobby-controls">WASD — WANDER &nbsp;·&nbsp; MOUSE — LOOK &nbsp;·&nbsp; E AT A MACHINE — FREE LITTER &nbsp;·&nbsp; ESC — MENU</p>
+  <p class="lobby-controls">
+    <span>WASD — WANDER</span>
+    <span>MOUSE — LOOK</span>
+    <span>SPACE — HOP</span>
+    <span>E AT A MACHINE — FREE LITTER</span>
+    <span>ESC — MENU</span>
+  </p>
 </div>
 
 <!-- ============ OPTIONS ============ -->
@@ -201,6 +209,7 @@
     <div class="ctl-row"><span class="key">ENTER</span><span>hands-free smoke or drink from a focused vice</span></div>
     <div class="ctl-row"><span class="key">WASD</span><span>wander the waiting room</span></div>
     <div class="ctl-row"><span class="key">MOUSE</span><span>look around the waiting room — Esc trades the view for this menu</span></div>
+    <div class="ctl-row"><span class="key">SPACE</span><span>hop — the stools are a staircase if you believe hard enough</span></div>
     <div class="ctl-row"><span class="key">E</span><span>work a machine in the waiting room</span></div>
     <div class="ctl-row"><span class="key">ESC</span><span>open or close this screen</span></div>
   </div>

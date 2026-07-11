@@ -120,3 +120,5 @@ muteChk.addEventListener("change", () => {
 
 // testing hook: lets headless UI tests project world coords to screen px
 (window as unknown as { __scene: unknown }).__scene = scene;
+// testing hook: drive intents without synthesizing drag gestures
+(window as unknown as { __send: unknown }).__send = send;
