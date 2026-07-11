@@ -97,11 +97,16 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--open);outline-o
   text-align:left;font-size:18px;max-width:380px;margin-top:7vh;
   text-shadow:2px 2px 0 rgba(0,0,0,.9);
 }
+/* the bottom of the screen falls off into darkness; the footer sits in it */
+#titleScreen::after{
+  content:"";position:absolute;left:0;right:0;bottom:0;height:170px;
+  pointer-events:none;z-index:0;
+  background:linear-gradient(transparent,rgba(7,9,7,.97));
+}
 .title-footer{
   position:absolute;left:0;right:0;bottom:0;
-  display:flex;justify-content:space-between;padding:12px 20px;
-  border-top:2px solid rgba(46,59,47,.5);background:rgba(7,9,7,.75);
-  font-family:var(--tiny);font-size:8px;letter-spacing:.22em;color:var(--smoke);
+  display:flex;justify-content:space-between;padding:18px 24px;
+  font-family:var(--tiny);font-size:12px;letter-spacing:.22em;color:var(--smoke);
 }
 
 /* ---------- shared screen furniture ---------- */

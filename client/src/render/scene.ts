@@ -170,6 +170,12 @@ export class SceneView {
   /* ambient life in the den: the wall neon buzzes, its light breathes */
   private neonMat!: THREE.MeshBasicMaterial;
   private neonLight!: THREE.PointLight;
+  /* the hanging lamp's parts, so the title screen can make its wiring act up */
+  private tableSpot!: THREE.SpotLight;
+  private lampBulbMat!: THREE.MeshBasicMaterial;
+  private lampInnerMat!: THREE.MeshBasicMaterial;
+  private lampHazeMat!: THREE.MeshBasicMaterial;
+  private titleScreenEl = document.getElementById("titleScreen")!;
 
   constructor(container: HTMLElement, private send: (intent: Intent) => void) {
     this.renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -235,6 +241,7 @@ export class SceneView {
     spot.castShadow = true;
     spot.shadow.mapSize.set(1024, 1024);
     this.scene.add(spot, spot.target);
+    this.tableSpot = spot;
     // the wall neon's glow — flickered alongside its sign in frame()
     this.neonLight = new THREE.PointLight(0xe0522b, 6, 7, 2);
     this.neonLight.position.set(-3.5, 2.0, -1.6);
@@ -269,9 +276,10 @@ export class SceneView {
       })
     );
     shade.position.y = 2.78;
+    this.lampInnerMat = new THREE.MeshBasicMaterial({ color: 0xffe2ae, side: THREE.BackSide });
     const shadeInner = new THREE.Mesh(
       new THREE.CylinderGeometry(0.088, 0.41, 0.29, 24, 1, true),
-      new THREE.MeshBasicMaterial({ color: 0xffe2ae, side: THREE.BackSide })
+      this.lampInnerMat
     );
     shadeInner.position.y = 2.78;
     const trim = new THREE.Mesh(
@@ -280,27 +288,23 @@ export class SceneView {
     );
     trim.rotation.x = Math.PI / 2;
     trim.position.y = 2.63;
-    const bulb = new THREE.Mesh(
-      new THREE.SphereGeometry(0.045, 12, 10),
-      new THREE.MeshBasicMaterial({ color: 0xfff2cf })
-    );
+    this.lampBulbMat = new THREE.MeshBasicMaterial({ color: 0xfff2cf });
+    const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.045, 12, 10), this.lampBulbMat);
     bulb.position.y = 2.72;
     lamp.add(cord, shade, shadeInner, trim, bulb);
     this.scene.add(lamp);
 
     // smoke hanging in the lamplight: a faint additive cone under the shade
-    const haze = new THREE.Mesh(
-      new THREE.ConeGeometry(1.05, 1.9, 24, 1, true),
-      new THREE.MeshBasicMaterial({
-        color: 0xffdca8,
-        transparent: true,
-        opacity: 0.045,
-        blending: THREE.AdditiveBlending,
-        side: THREE.DoubleSide,
-        depthWrite: false,
-        fog: false,
-      })
-    );
+    this.lampHazeMat = new THREE.MeshBasicMaterial({
+      color: 0xffdca8,
+      transparent: true,
+      opacity: 0.045,
+      blending: THREE.AdditiveBlending,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+      fog: false,
+    });
+    const haze = new THREE.Mesh(new THREE.ConeGeometry(1.05, 1.9, 24, 1, true), this.lampHazeMat);
     haze.position.y = 2.6 - 0.95;
     this.scene.add(haze);
   }
@@ -1568,6 +1572,21 @@ export class SceneView {
     const flick = 0.84 + 0.12 * Math.sin(now * 0.019) + 0.05 * Math.sin(now * 0.0073);
     this.neonMat.opacity = flick;
     this.neonLight.intensity = 3 + 4 * flick;
+
+    // while the title screen hangs over the den, the table lamp catches the
+    // same bad wiring as the marquee sign — but on its own slower 13.4s
+    // cycle (incommensurate with the sign's 7s, so they never lock step)
+    let lampF = 1;
+    if (this.titleScreenEl.classList.contains("active")) {
+      const t = now % 13400;
+      if (t > 9040 && t < 9130) lampF = 0.3;
+      else if (t > 9220 && t < 9280) lampF = 0.5;
+      else if (t > 12960 && t < 13010) lampF = 0.25;
+    }
+    this.tableSpot.intensity = 70 * lampF;
+    this.lampBulbMat.color.setHex(0xfff2cf).multiplyScalar(lampF);
+    this.lampInnerMat.color.setHex(0xffe2ae).multiplyScalar(lampF);
+    this.lampHazeMat.opacity = 0.045 * lampF;
 
     this.debrisView.frame(dt);
     this.held.frame(dt);
