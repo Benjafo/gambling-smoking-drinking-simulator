@@ -56,8 +56,18 @@ import {
   REACH_RADIUS,
   SEAT_COUNT,
   TABLE,
+  CARD_LIFT,
+  HAND_ANCHOR_R,
+  PLAYER_CARD_SCALE,
+  PLAYER_CARD_LEAN,
+  DEALER_CARD_SCALE,
+  DEALER_CARD_LEAN,
+  DEALER_HAND_Z,
+  cardSlot,
+  seatAngle,
   seatEye,
   seatPosition,
+  seatTablePoint,
   type V3,
 } from "./constants";
 import { Rng } from "./rng";
@@ -70,7 +80,19 @@ import {
   LOBBY_SPAWNS,
   stepLobbyMove,
 } from "./lobbyRoom";
-import { RAPIER, createWorld, spawnDebrisBody, initPhysics, LOBBY_WORLD_OFFSET } from "./physics";
+import {
+  RAPIER,
+  CARD_STICK_SPEED,
+  CARD_STICK_LIN_DAMPING,
+  CARD_STICK_ANG_DAMPING,
+  DEBRIS_LIN_DAMPING,
+  DEBRIS_ANG_DAMPING,
+  cardColliderDesc,
+  createWorld,
+  spawnDebrisBody,
+  initPhysics,
+  LOBBY_WORLD_OFFSET,
+} from "./physics";
 import type {
   Intent,
   PlayerSnap,
@@ -205,6 +227,11 @@ export class Simulation {
 
   debris = new Map<number, Debris>();
   private colliderDebris = new Map<number, number>(); // collider handle → debris id
+  /* the dealt cards' physical presence — see reconcileCardColliders */
+  private cardColliders: RAPIER_NS.Collider[] = [];
+  private cardHandles = new Set<number>();
+  private cardSlots: V3[] = [];
+  private cardSig = "";
   nextDebrisId = 1;
   private events: SimEvent[] = [];
   private schedule: ScheduledAction[] = [];
@@ -999,7 +1026,71 @@ export class Simulation {
       : rest;
   }
 
+  /* ---- card colliders: dealt hands exist physically. A flung empty lands
+     ON someone's cards and stays there — burying a rival's hand in trash is
+     a legitimate play; they have to pick it clean to read the felt. Rebuilt
+     whenever any hand's shape changes: a card dealt under settled litter
+     pops it on top of the deal, and a cleared hand un-freezes whatever was
+     resting on it so it drops back to the felt. */
+  private reconcileCardColliders(): void {
+    let sig = String(this.dealerHand.length);
+    for (const p of this.players.values()) sig += "," + p.seat + ":" + p.hand.length;
+    if (sig === this.cardSig) return;
+    this.cardSig = sig;
+
+    const slots: { pos: V3; rot: Quat; scale: number }[] = [];
+    const dealerAnchor = { x: 0, y: TABLE.height + CARD_LIFT, z: DEALER_HAND_Z };
+    for (let i = 0; i < this.dealerHand.length; i++)
+      slots.push({
+        ...cardSlot(dealerAnchor, 0, i, DEALER_CARD_SCALE, DEALER_CARD_LEAN),
+        scale: DEALER_CARD_SCALE,
+      });
+    for (const p of this.players.values()) {
+      const a = seatTablePoint(p.seat, HAND_ANCHOR_R);
+      const anchor = { x: a.x, y: a.y + CARD_LIFT, z: a.z };
+      for (let i = 0; i < p.hand.length; i++)
+        slots.push({
+          ...cardSlot(anchor, seatAngle(p.seat), i, PLAYER_CARD_SCALE, PLAYER_CARD_LEAN),
+          scale: PLAYER_CARD_SCALE,
+        });
+    }
+
+    // only the slots that actually appeared or vanished disturb litter:
+    // cards dealt under a settled empty lift it on top of the deal, cards
+    // swept out from under one drop it back to the felt. Debris sitting on
+    // an unchanged hand stays frozen scenery.
+    const near = (a: V3, b: V3) =>
+      Math.hypot(a.x - b.x, a.z - b.z) < 0.13 && Math.abs(a.y - b.y) < 0.25;
+    const same = (a: V3, b: V3) => a.x === b.x && a.y === b.y && a.z === b.z;
+    const added = slots.filter((s) => !this.cardSlots.some((o) => same(o, s.pos)));
+    const removed = this.cardSlots.filter((o) => !slots.some((s) => same(s.pos, o)));
+    for (const d of this.debris.values()) {
+      if (d.room !== "den" || !d.body) continue;
+      const nearAdded = added.some((s) => near(d.pos, s.pos));
+      if (!nearAdded && !removed.some((o) => near(d.pos, o))) continue;
+      if (d.phase === "settled") {
+        d.body.setBodyType(RAPIER.RigidBodyType.Dynamic, true);
+        d.phase = "flying";
+        d.stillTicks = 0;
+      }
+      // card-grip damping (see stepPhysics) must not outlive the cards; it
+      // comes back on the next card contact if there is one
+      d.body.setLinearDamping(DEBRIS_LIN_DAMPING);
+      d.body.setAngularDamping(DEBRIS_ANG_DAMPING);
+      if (nearAdded && d.pos.y < TABLE.height + 0.15)
+        d.body.setTranslation({ x: d.pos.x, y: TABLE.height + 0.15, z: d.pos.z }, true);
+    }
+
+    for (const c of this.cardColliders) this.world.removeCollider(c, true);
+    this.cardColliders = slots.map((s) =>
+      this.world.createCollider(cardColliderDesc(s.pos, s.rot, s.scale))
+    );
+    this.cardHandles = new Set(this.cardColliders.map((c) => c.handle));
+    this.cardSlots = slots.map((s) => s.pos);
+  }
+
   private stepPhysics(): void {
+    this.reconcileCardColliders();
     this.world.step(this.eventQueue);
 
     this.eventQueue.drainCollisionEvents((h1, h2, started) => {
@@ -1015,6 +1106,21 @@ export class Simulation {
           // scores nothing there
           if (d.earned && d.owner && d.room === "den")
             d.litterAt = this.tick + msTicks(LITTER_IMPACT_DELAY_MS);
+        }
+      }
+      // litter landing gently on a dealt hand grips instead of rolling off
+      // the lean — the trash stays where it was thrown until the cards go
+      // away (reconcileCardColliders restores the damping)
+      const vsCard = this.cardHandles.has(h1) ? h2 : this.cardHandles.has(h2) ? h1 : null;
+      if (vsCard !== null) {
+        const id = this.colliderDebris.get(vsCard);
+        const d = id === undefined ? undefined : this.debris.get(id);
+        if (d?.body) {
+          const v = d.body.linvel();
+          if (Math.hypot(v.x, v.y, v.z) < CARD_STICK_SPEED) {
+            d.body.setLinearDamping(CARD_STICK_LIN_DAMPING);
+            d.body.setAngularDamping(CARD_STICK_ANG_DAMPING);
+          }
         }
       }
       // impact events for sound, throttled

@@ -11,6 +11,13 @@ import {
   LOOK_YAW_LIMIT,
   LOOK_PITCH_MIN,
   LOOK_PITCH_MAX,
+  CARD_LIFT,
+  HAND_ANCHOR_R,
+  PLAYER_CARD_SCALE,
+  PLAYER_CARD_LEAN,
+  DEALER_CARD_SCALE,
+  DEALER_CARD_LEAN,
+  DEALER_HAND_Z,
   seatAngle,
   seatPosition,
   seatEye,
@@ -112,6 +119,10 @@ const _best = new THREE.Vector3();
    wide-FOV viewport is ~10-15° imprecise — social reads shouldn't be) */
 const GAZE_SNAP = 0.3;
 
+/* how far a rendered head may actually turn — the camera's LOOK_YAW_LIMIT
+   reaches ~150° but a neck showing that snaps bones */
+const HEAD_YAW_SHOWN_MAX = 1.5;
+
 /* The exact ray a player's camera looks along, given their seat and look
    offsets: from the seat's eye toward the table center, yawed about
    world-up, then pitched about the right axis. The local camera and every
@@ -206,13 +217,17 @@ export class SceneView {
     this.held = new HeldItemControl(this.scene, this.camera, send);
     this.dealerZone = new CardZone(
       this.scene,
-      new THREE.Vector3(0, TABLE.height + 0.004, -0.52),
+      new THREE.Vector3(0, TABLE.height + CARD_LIFT, DEALER_HAND_Z),
       0,
       SHOE_POS,
       dealSound,
       // propped toward the players, sized for distance; the total pill sits
       // on the felt in front of the cards, not over the dealer's face
-      { scale: 1.3, lean: 0.3, badgeOffset: { x: 0, y: 0.03, z: 0.3 } }
+      {
+        scale: DEALER_CARD_SCALE,
+        lean: DEALER_CARD_LEAN,
+        badgeOffset: { x: 0, y: 0.03, z: 0.3 },
+      }
     );
 
     this.lobbyRoom = new LobbyRoomView(send);
@@ -234,8 +249,9 @@ export class SceneView {
     this.scene.add(new THREE.AmbientLight(0x342b1e, 1.6));
     // gentle top-down lift so the walls read as walls, not void
     this.scene.add(new THREE.HemisphereLight(0x564a33, 0x120d08, 1.0));
-    // the spot hangs from the lamp over the table
-    const spot = new THREE.SpotLight(0xffdca8, 70, 12, Math.PI / 3.1, 0.5, 1.5);
+    // the spot hangs from the lamp over the table; high penumbra melts the
+    // pool's edge into the ambient murk instead of stamping a hard circle
+    const spot = new THREE.SpotLight(0xffdca8, 70, 12, Math.PI / 3.1, 0.8, 1.5);
     spot.position.set(0, 2.65, 0);
     spot.target.position.set(0, TABLE.height, 0);
     spot.castShadow = true;
@@ -294,11 +310,24 @@ export class SceneView {
     lamp.add(cord, shade, shadeInner, trim, bulb);
     this.scene.add(lamp);
 
-    // smoke hanging in the lamplight: a faint additive cone under the shade
+    // smoke hanging in the lamplight: a faint additive cone under the shade,
+    // faded out along its length so it dissolves above the felt instead of
+    // ending in a hard glowing edge sliced off by the tabletop
+    const hazeCv = document.createElement("canvas");
+    hazeCv.width = 1;
+    hazeCv.height = 64;
+    const hazeCtx = hazeCv.getContext("2d")!;
+    const hazeGrad = hazeCtx.createLinearGradient(0, 0, 0, 64);
+    hazeGrad.addColorStop(0, "#ffdca8"); // apex, right under the shade
+    hazeGrad.addColorStop(0.7, "#40361f");
+    hazeGrad.addColorStop(1, "#000000"); // additive black = fully gone
+    hazeCtx.fillStyle = hazeGrad;
+    hazeCtx.fillRect(0, 0, 1, 64);
+    const hazeTex = new THREE.CanvasTexture(hazeCv);
     this.lampHazeMat = new THREE.MeshBasicMaterial({
-      color: 0xffdca8,
+      map: hazeTex,
       transparent: true,
-      opacity: 0.045,
+      opacity: 0.055,
       blending: THREE.AdditiveBlending,
       side: THREE.DoubleSide,
       depthWrite: false,
@@ -964,7 +993,8 @@ export class SceneView {
         return;
       }
       if (this.looking) {
-        // wide enough to center the neighboring seats (~74° off-axis)
+        // well past the shoulder (~150°) — checking the room behind you is
+        // allowed; avatars cap the SHOWN neck turn in the frame loop
         this.yawOff = clamp(
           this.yawOff - (e.clientX - this.lastPointer.x) * 0.003,
           -LOOK_YAW_LIMIT,
@@ -1137,19 +1167,26 @@ export class SceneView {
     for (const p of snap.players) {
       let zone = this.playerZones.get(p.id);
       if (!zone) {
-        const anchor = seatTablePoint(p.seat, 0.86);
+        const anchor = seatTablePoint(p.seat, HAND_ANCHOR_R);
         const mine = p.id === myId;
+        // ONE layout for every viewer (shared constants): the sim's card
+        // colliders match what everyone sees, and a neighbor's hand is big
+        // enough to actually follow as they play it. Only the badge differs —
+        // your own total pill tucks in close so it never blocks your cards.
         zone = new CardZone(
           this.scene,
-          new THREE.Vector3(anchor.x, anchor.y + 0.004, anchor.z),
+          new THREE.Vector3(anchor.x, anchor.y + CARD_LIFT, anchor.z),
           seatAngle(p.seat),
           SHOE_POS,
           dealSound,
-          // your own hand is the one you must read at a glance; neighbors'
-          // lean gently toward their owners, still identifiable from above
           mine
-            ? { scale: 1.3, lean: 0.55, badgeScale: 0.8, badgeOffset: { x: 0, y: 0.17, z: 0 } }
-            : { scale: 1.05, lean: 0.12 }
+            ? {
+                scale: PLAYER_CARD_SCALE,
+                lean: PLAYER_CARD_LEAN,
+                badgeScale: 0.8,
+                badgeOffset: { x: 0, y: 0.17, z: 0 },
+              }
+            : { scale: PLAYER_CARD_SCALE, lean: PLAYER_CARD_LEAN }
         );
         this.playerZones.set(p.id, zone);
       }
@@ -1502,7 +1539,12 @@ export class SceneView {
     const k = Math.min(1, dt * 10);
     const kp = Math.min(1, dt * 5); // props raise/lower in ~half a second
     for (const av of this.avatars.values()) {
-      lookDir(av.seat, av.targetYaw, av.targetPitch, _dir);
+      // a camera may crank to LOOK_YAW_LIMIT, but a rendered neck cannot:
+      // cap the shown turn short of exorcist territory. Past the cap the
+      // owner is looking off into the room, never at another player, so
+      // eye-contact fidelity survives the clamp.
+      const headYaw = clamp(av.targetYaw, -HEAD_YAW_SHOWN_MAX, HEAD_YAW_SHOWN_MAX);
+      lookDir(av.seat, headYaw, av.targetPitch, _dir);
       this.snapGaze(av, _dir);
       _m.lookAt(_dir, ORIGIN, UP); // basis with +Z along the gaze ray
       _q.setFromRotationMatrix(_m);
@@ -1608,7 +1650,7 @@ export class SceneView {
     this.tableSpot.intensity = 70 * lampF;
     this.lampBulbMat.color.setHex(0xfff2cf).multiplyScalar(lampF);
     this.lampInnerMat.color.setHex(0xffe2ae).multiplyScalar(lampF);
-    this.lampHazeMat.opacity = 0.045 * lampF;
+    this.lampHazeMat.opacity = 0.055 * lampF;
 
     this.debrisView.frame(dt);
     this.held.frame(dt);

@@ -2,10 +2,10 @@
    game) and deal/flip tweens driven by snapshot diffs. */
 import * as THREE from "three";
 import type { Card } from "@shared/blackjack";
+import { CARD_H, CARD_W, cardSlot } from "@shared/constants";
 import { tween, easeInOut } from "./tween";
 
-export const CARD_W = 0.1;
-export const CARD_H = 0.145;
+export { CARD_W, CARD_H };
 const CARD_T = 0.0022;
 
 const texCache = new Map<string, THREE.CanvasTexture>();
@@ -174,11 +174,9 @@ export class CardZone {
   }
 
   private slotPos(i: number): THREE.Vector3 {
-    const tangent = new THREE.Vector3(Math.cos(this.yaw), 0, -Math.sin(this.yaw));
-    const p = this.anchor.clone().addScaledVector(tangent, (i - 1) * 0.125 * this.scale);
-    // leaned cards pivot at their center: lift so the bottom edge stays on the felt
-    p.y += ((CARD_H * this.scale) / 2) * Math.sin(this.lean) * 0.95;
-    return p;
+    // shared math: the sim builds this exact slot's collider from it
+    const s = cardSlot(this.anchor, this.yaw, i, this.scale, this.lean);
+    return new THREE.Vector3(s.pos.x, s.pos.y, s.pos.z);
   }
 
   private beginAnim(): void {
@@ -260,9 +258,11 @@ export class CardZone {
     obj.faceUp = false;
     const target = this.slotPos(i);
     const tilt = (Math.random() - 0.5) * 0.07;
-    // -90° is flat on the felt; the lean tips the face toward the owner
-    obj.group.rotation.set(-Math.PI / 2 + this.lean, 0, 0);
-    obj.group.rotation.y = this.yaw + tilt;
+    // -90° is flat on the felt; the lean tips the face toward the owner.
+    // Order matters: YXZ yaws about world-up FIRST, then leans about the
+    // card's own width axis — default XYZ leans yawed cards about world X,
+    // which stood side seats' cards up off the felt (33° at seat 1).
+    obj.group.rotation.set(-Math.PI / 2 + this.lean, this.yaw + tilt, 0, "YXZ");
     obj.group.scale.setScalar(this.scale);
     obj.group.position.copy(this.shoePos);
     this.scene.add(obj.group);
