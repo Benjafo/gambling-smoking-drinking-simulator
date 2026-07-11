@@ -112,45 +112,56 @@
   <div id="lighterGfx"><div class="flame"></div><div class="wheel"></div><div class="hood"></div><div class="body"></div></div>
 </div>
 
-<!-- ============ MAIN MENU ============ -->
-<div id="menuScreen" class="screen active">
+<!-- ============ TITLE SCREEN (attract mode over the live den) ============ -->
+<div id="titleScreen" class="screen active">
   <div class="marquee">DEGENERATE<br>BLACKJACK<small class="vices-title">SMOKE · DRINK · GO BROKE</small></div>
-  <p class="tagline">One thousand dollars. Infinite hands. Keep smoking. Keep drinking.
-    Fling the empties wherever you like — the floor belongs to the house too.
-    Last degenerate breathing takes the crown.</p>
-  <input id="nameInput" maxlength="24" placeholder="YOUR NAME" autocomplete="off" spellcheck="false">
   <p class="conn bad" id="menuNotice"></p>
-  <div id="menuPanels">
-    <div class="menu-panel">
-      <h3>TABLES ON THE WIRE</h3>
-      <p class="conn" id="serverStatus"></p>
-      <div id="serverList" class="server-list"></div>
-      <div id="joinBox" style="display:none">
-        <span class="conn" id="joinLabel"></span>
-        <div class="menu-row">
-          <input class="menu-input" id="joinPassInput" type="password" maxlength="32"
-                 placeholder="PASSWORD" autocomplete="off">
-          <button class="menu-btn" id="joinGoBtn">SIT DOWN</button>
-          <button class="menu-btn" id="joinCancelBtn">NEVER MIND</button>
-        </div>
-      </div>
-      <p class="conn bad" id="menuErr"></p>
-      <div class="menu-divider"></div>
+  <nav id="titleNav">
+    <button class="title-item" id="titlePlayBtn">PLAY</button>
+    <button class="title-item" id="titleSoloBtn">PLAY SOLO</button>
+    <button class="title-item" id="titleSettingsBtn">SETTINGS</button>
+  </nav>
+  <p class="tagline title-tagline">One thousand dollars. Infinite hands.
+    Keep smoking. Keep drinking.
+    Last degenerate breathing takes the crown.</p>
+  <div class="title-footer">
+    <span></span>
+    <span>&#169; 2026 Ben Foley</span>
+  </div>
+</div>
+
+<!-- ============ FIND A TABLE (server browser) ============ -->
+<div id="menuScreen" class="screen">
+  <button class="menu-btn back-btn" id="browseBackBtn">&lt; BACK</button>
+  <div class="marquee sub">FIND A TABLE</div>
+  <div class="name-field">
+    <label class="field-label" for="nameInput">PLAYING AS</label>
+    <input id="nameInput" maxlength="24" placeholder="YOUR NAME" autocomplete="off" spellcheck="false">
+  </div>
+  <div class="menu-panel browse-panel">
+    <h3>TABLES ON THE WIRE</h3>
+    <p class="conn" id="serverStatus"></p>
+    <div id="serverList" class="server-list"></div>
+    <div id="joinBox" style="display:none">
+      <span class="conn" id="joinLabel"></span>
       <div class="menu-row">
-        <input class="menu-input" id="lobbyNameInput" maxlength="32"
-               placeholder="NAME YOUR TABLE" autocomplete="off" spellcheck="false">
-        <label class="chk"><input type="checkbox" id="privateChk"> PRIVATE</label>
-      </div>
-      <div class="menu-row">
-        <input class="menu-input" id="lobbyPassInput" type="password" maxlength="32"
-               placeholder="PASSWORD" autocomplete="off" style="display:none">
-        <button class="menu-btn" id="createBtn">OPEN A NEW TABLE</button>
+        <input class="menu-input" id="joinPassInput" type="password" maxlength="32"
+               placeholder="PASSWORD" autocomplete="off">
+        <button class="menu-btn" id="joinGoBtn">SIT DOWN</button>
+        <button class="menu-btn" id="joinCancelBtn">NEVER MIND</button>
       </div>
     </div>
-    <div class="menu-panel">
-      <h3>DRINK ALONE</h3>
-      <p class="menu-note">No witnesses. No competition.<br>Just you, the dealer, and the meters.</p>
-      <button class="big-btn" id="soloBtn">PLAY SOLO</button>
+    <p class="conn bad" id="menuErr"></p>
+    <div class="menu-divider"></div>
+    <div class="menu-row">
+      <input class="menu-input" id="lobbyNameInput" maxlength="32"
+             placeholder="NAME YOUR TABLE" autocomplete="off" spellcheck="false">
+      <label class="chk"><input type="checkbox" id="privateChk"> PRIVATE</label>
+    </div>
+    <div class="menu-row">
+      <input class="menu-input" id="lobbyPassInput" type="password" maxlength="32"
+             placeholder="PASSWORD" autocomplete="off" style="display:none">
+      <button class="menu-btn" id="createBtn">OPEN A NEW TABLE</button>
     </div>
   </div>
 </div>
@@ -168,10 +179,20 @@
 <!-- ============ SETTINGS ============ -->
 <button id="settingsBtn" aria-label="Settings" title="Settings (Esc)">ESC</button>
 <div id="settingsScreen" class="screen">
-  <div class="marquee" style="font-size:clamp(28px,4vw,48px)">SETTINGS</div>
+  <div class="marquee sub">SETTINGS</div>
+  <div class="menu-panel controls-panel">
+    <h3>HOUSE CONTROLS</h3>
+    <div class="ctl-row"><span class="key">DRAG A VICE</span><span>pull it to the table target — hold to smoke or drink</span></div>
+    <div class="ctl-row"><span class="key">DRAG &amp; RELEASE</span><span>fling the empty bottle wherever you like</span></div>
+    <div class="ctl-row"><span class="key">ENTER</span><span>hands-free smoke or drink from a focused vice</span></div>
+    <div class="ctl-row"><span class="key">WASD</span><span>wander the waiting room</span></div>
+    <div class="ctl-row"><span class="key">E</span><span>work a machine in the waiting room</span></div>
+    <div class="ctl-row"><span class="key">ESC</span><span>open or close this screen</span></div>
+  </div>
   <button class="big-btn" id="resumeBtn">BACK TO THE TABLE</button>
   <button class="big-btn leave" id="leaveBtn">LEAVE THE TABLE</button>
-  <p class="tagline">Leaving drops you back at the main menu.<br>Your seat, your chips, and your mess stay behind.</p>
+  <button class="big-btn secondary" id="settingsBackBtn">BACK</button>
+  <p class="tagline" id="settingsLeaveHint">Leaving drops you back at the main menu.<br>Your seat, your chips, and your mess stay behind.</p>
 </div>
 
 <!-- ============ GAME OVER ============ -->

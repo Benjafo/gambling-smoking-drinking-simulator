@@ -7,7 +7,7 @@ import { LOBBY_OBSTACLES, LOBBY_ROOM } from "./lobbyRoom";
 import type { Quat, ViceKind } from "./types";
 
 /* The waiting room's physics lives in the SAME world as the table, parked
-   100m away so nothing ever collides across rooms. The sim adds/strips this
+  100m away so nothing ever collides across rooms. The sim adds/strips this
    offset at the room boundary; everything outside physics.ts speaks
    room-local coordinates. */
 export const LOBBY_WORLD_OFFSET: V3 = { x: 100, y: 0, z: 0 };
