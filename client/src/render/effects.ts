@@ -2,7 +2,21 @@
    client-side. */
 import * as THREE from "three";
 
+/* every sound routes through one master gain so the OPTIONS screen can turn
+   the whole bar up or down; slider value is squared into gain so the low end
+   of the range is actually usable */
+const VOL_KEY = "degen-sfx-vol";
+const MUTE_KEY = "degen-sfx-mute";
+let sfxVolume = (() => {
+  const v = Number(localStorage.getItem(VOL_KEY));
+  return Number.isFinite(v) && localStorage.getItem(VOL_KEY) !== null
+    ? Math.min(1, Math.max(0, v))
+    : 1;
+})();
+let sfxMuted = localStorage.getItem(MUTE_KEY) === "1";
+
 let ctx: AudioContext | null = null;
+let master: GainNode | null = null;
 function audio(): AudioContext | null {
   if (!ctx) {
     try {
@@ -10,9 +24,33 @@ function audio(): AudioContext | null {
     } catch {
       return null;
     }
+    master = ctx.createGain();
+    master.gain.value = effectiveGain();
+    master.connect(ctx.destination);
   }
   if (ctx.state === "suspended") void ctx.resume();
   return ctx;
+}
+
+function effectiveGain(): number {
+  return sfxMuted ? 0 : sfxVolume * sfxVolume;
+}
+
+export function getSfxVolume(): number {
+  return sfxVolume;
+}
+export function setSfxVolume(v: number): void {
+  sfxVolume = Math.min(1, Math.max(0, v));
+  localStorage.setItem(VOL_KEY, String(sfxVolume));
+  if (master) master.gain.value = effectiveGain();
+}
+export function getSfxMuted(): boolean {
+  return sfxMuted;
+}
+export function setSfxMuted(m: boolean): void {
+  sfxMuted = m;
+  localStorage.setItem(MUTE_KEY, m ? "1" : "0");
+  if (master) master.gain.value = effectiveGain();
 }
 
 export function impactSound(speed: number): void {
@@ -30,7 +68,7 @@ export function impactSound(speed: number): void {
   filter.frequency.value = 900 + speed * 260;
   const gain = ac.createGain();
   gain.gain.value = Math.min(0.5, 0.05 + speed / 22);
-  src.connect(filter).connect(gain).connect(ac.destination);
+  src.connect(filter).connect(gain).connect(master!);
   src.start();
 }
 
@@ -44,7 +82,7 @@ export function denySound(): void {
   const gain = ac.createGain();
   gain.gain.setValueAtTime(0.05, ac.currentTime);
   gain.gain.exponentialRampToValueAtTime(0.001, ac.currentTime + 0.14);
-  osc.connect(gain).connect(ac.destination);
+  osc.connect(gain).connect(master!);
   osc.start();
   osc.stop(ac.currentTime + 0.15);
 }
@@ -65,7 +103,7 @@ export function hurtSound(): void {
   filter.frequency.value = 500;
   const thud = ac.createGain();
   thud.gain.value = 0.3;
-  src.connect(filter).connect(thud).connect(ac.destination);
+  src.connect(filter).connect(thud).connect(master!);
   src.start();
   // ...plus a short descending groan
   const osc = ac.createOscillator();
@@ -75,7 +113,7 @@ export function hurtSound(): void {
   const gain = ac.createGain();
   gain.gain.setValueAtTime(0.12, ac.currentTime);
   gain.gain.exponentialRampToValueAtTime(0.001, ac.currentTime + 0.18);
-  osc.connect(gain).connect(ac.destination);
+  osc.connect(gain).connect(master!);
   osc.start();
   osc.stop(ac.currentTime + 0.2);
 }
@@ -90,7 +128,7 @@ export function pickupSound(): void {
   const gain = ac.createGain();
   gain.gain.setValueAtTime(0.08, ac.currentTime);
   gain.gain.exponentialRampToValueAtTime(0.001, ac.currentTime + 0.09);
-  osc.connect(gain).connect(ac.destination);
+  osc.connect(gain).connect(master!);
   osc.start();
   osc.stop(ac.currentTime + 0.1);
 }
@@ -114,7 +152,7 @@ export function whooshSound(): void {
   filter.frequency.exponentialRampToValueAtTime(1600, ac.currentTime + dur);
   const gain = ac.createGain();
   gain.gain.value = 0.1;
-  src.connect(filter).connect(gain).connect(ac.destination);
+  src.connect(filter).connect(gain).connect(master!);
   src.start();
 }
 
@@ -136,7 +174,7 @@ export function chipRiffleSound(): void {
     filter.frequency.value = 2200;
     const gain = ac.createGain();
     gain.gain.value = 0.05 + Math.random() * 0.03;
-    src.connect(filter).connect(gain).connect(ac.destination);
+    src.connect(filter).connect(gain).connect(master!);
     src.start(at);
   }
 }
@@ -157,7 +195,7 @@ export function pointsSound(): void {
     gain.gain.setValueAtTime(0.0001, ac.currentTime + at);
     gain.gain.exponentialRampToValueAtTime(0.06, ac.currentTime + at + 0.012);
     gain.gain.exponentialRampToValueAtTime(0.001, ac.currentTime + at + 0.22);
-    osc.connect(gain).connect(ac.destination);
+    osc.connect(gain).connect(master!);
     osc.start(ac.currentTime + at);
     osc.stop(ac.currentTime + at + 0.25);
   }
@@ -178,7 +216,7 @@ export function cashSound(): void {
     gain.gain.setValueAtTime(0.0001, ac.currentTime + at);
     gain.gain.exponentialRampToValueAtTime(0.09, ac.currentTime + at + 0.015);
     gain.gain.exponentialRampToValueAtTime(0.001, ac.currentTime + at + 0.35);
-    osc.connect(gain).connect(ac.destination);
+    osc.connect(gain).connect(master!);
     osc.start(ac.currentTime + at);
     osc.stop(ac.currentTime + at + 0.4);
   }
@@ -193,7 +231,7 @@ export function dealSound(): void {
   const gain = ac.createGain();
   gain.gain.setValueAtTime(0.06, ac.currentTime);
   gain.gain.exponentialRampToValueAtTime(0.001, ac.currentTime + 0.07);
-  osc.connect(gain).connect(ac.destination);
+  osc.connect(gain).connect(master!);
   osc.start();
   osc.stop(ac.currentTime + 0.08);
 }

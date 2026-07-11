@@ -1,9 +1,9 @@
 /* The front of house: a title screen (attract mode over the live 3D den —
-   PLAY / PLAY SOLO / SETTINGS) and, behind PLAY, the "FIND A TABLE" server
+   PLAY / PLAY SOLO / OPTIONS) and, behind PLAY, the "FIND A TABLE" server
    browser where you set your name, open a table (optionally private with a
    password), or sit down at one. PLAY SOLO seats you against a local worker
    straight from the title. Hands a Session to main.ts and gets out of the
-   way; the title screen reappears when the session ends (settings → leave,
+   way; the title screen reappears when the session ends (options → leave,
    or the connection dying). */
 import { LOBBY_NAME_MAX } from "@shared/constants";
 import type { LobbyInfo } from "@shared/types";
