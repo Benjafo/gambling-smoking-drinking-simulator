@@ -608,6 +608,17 @@ body.lobby-room #sidebar,body.lobby-room #actionDock{display:none}
 }
 #dispenseHint.show{display:block;animation:hintPulse 1.4s steps(2) infinite}
 
+/* waiting-room mouse-look: a pixel crosshair while the pointer is captured */
+#crosshair{
+  position:absolute;left:50%;top:50%;display:none;
+  width:6px;height:6px;transform:translate(-50%,-50%);
+  background:var(--paper);box-shadow:0 0 0 2px rgba(0,0,0,.55);
+  pointer-events:none;opacity:.9;
+}
+#crosshair.show{display:block}
+#crosshair.grab{background:var(--bulb);transform:translate(-50%,-50%) scale(1.7)}
+#crosshair.deny{background:var(--neon);transform:translate(-50%,-50%) scale(1.7)}
+
 #flavorBar{
   position:absolute;left:0;right:0;bottom:0;padding:8px 22px;
   background:linear-gradient(transparent,rgba(9,12,9,.9) 55%);

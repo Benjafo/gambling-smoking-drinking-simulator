@@ -1,7 +1,12 @@
 /* The waiting room: a grimy back-of-the-bar lounge rendered as its own
    scene. While the sim's phase is "lobby", SceneView routes pointer input
    here, renders this scene, and everyone walks around in first person —
-   WASD to wander, drag to look. Geometry matches shared/src/lobbyRoom.ts
+   WASD to wander, mouse to look. The pointer locks itself on entry
+   (FPS-style free look, crosshair marks the pick ray; a click re-captures
+   whenever the browser wanted a fresher gesture); Esc hands the cursor to
+   the options menu — main.ts owns that hand-off. Touch — and anywhere the
+   lock is refused, headless runs included — keeps the old drag-to-look.
+   Geometry matches shared/src/lobbyRoom.ts
    exactly: the furniture you see is the furniture the server collides you
    against, and local prediction runs the same stepLobbyMove() the sim runs,
    so the camera never fights the authority it's predicting. */
@@ -10,10 +15,12 @@ import {
   DISPENSE_RADIUS,
   LOBBY_DISPENSERS,
   LOBBY_EYE_HEIGHT,
+  LOBBY_JUMP_SPEED,
   LOBBY_OBSTACLES,
   LOBBY_REACH,
   LOBBY_ROOM,
   stepLobbyMove,
+  type LobbyMotion,
 } from "@shared/lobbyRoom";
 import type { Intent, PlayerSnap, Snapshot, ViceKind } from "@shared/types";
 import { carpetTexture, leatherTexture, woodTexture } from "./textures";
@@ -24,7 +31,11 @@ import { makeFigure, poseArm } from "./figure";
 
 const PITCH_MIN = -0.55;
 const PITCH_MAX = 0.7;
+const LOOK_SENS = 0.0023; // rad per px of captured mouse travel
 const WALK_ANIM_HZ = 7.5; // leg-swing speed, phase cycles per second-ish
+
+/* the crosshair's pick ray: dead center */
+const CENTER = new THREE.Vector2(0, 0);
 
 /* deterministic scatter for the trash — same filth every visit */
 function lcg(seed: number): () => number {
@@ -87,14 +98,20 @@ export class LobbyRoomView {
   private myId = "";
   private latest: Snapshot | null = null;
 
-  /* first-person state: locally predicted position + free look */
+  /* first-person state: locally predicted position + free look. motion
+     wraps myPos (same object) so prediction runs the sim's exact step,
+     jumps included. */
   private myPos = new THREE.Vector3();
+  private motion: LobbyMotion = { pos: this.myPos, vy: 0, grounded: true };
   private posInit = false;
   private correction = new THREE.Vector3();
   private yaw = 0;
   private pitch = 0;
   private looking = false;
   private lastPointer = { x: 0, y: 0 };
+  /* virtual hand position for wind-up drags while the pointer is locked */
+  private virt = { x: 0, y: 0 };
+  private crosshairEl = document.getElementById("crosshair");
   private keys = new Set<string>();
   private lastSentDir = { x: 0, z: 0 };
   private lastSentYaw = 0;
@@ -135,10 +152,18 @@ export class LobbyRoomView {
     addEventListener("keydown", (e) => {
       if (!this.active || (e.target as HTMLElement)?.tagName === "INPUT") return;
       if (e.code === "KeyE") {
+        this.captureLook(); // any gameplay key re-arms mouse-look (Esc can't)
         this.tryDispense();
         return;
       }
+      if (e.code === "Space") {
+        this.captureLook();
+        this.tryJump();
+        e.preventDefault();
+        return;
+      }
       if (KEY_DIRS[e.code]) {
+        this.captureLook();
         this.keys.add(e.code);
         e.preventDefault();
       }
@@ -146,6 +171,36 @@ export class LobbyRoomView {
     addEventListener("keyup", (e) => this.keys.delete(e.code));
     // alt-tabbing away with W held would walk you into a wall forever
     addEventListener("blur", () => this.keys.clear());
+    document.addEventListener("pointerlockchange", () => this.syncLockUi());
+  }
+
+  /* ---------------- pointer lock (mouse-look) ---------------- */
+  private get locked(): boolean {
+    return !!this.domElement && document.pointerLockElement === this.domElement;
+  }
+
+  /* called on lobby entry (riding the join click's user activation), on
+     any canvas click, and by SceneView when the options RESUME button
+     closes over the lobby */
+  captureLook(): void {
+    if (!this.active || this.locked || !this.domElement) return;
+    try {
+      // returns a promise in most engines, undefined in older ones; a
+      // refusal (headless, iframe policy, Esc cooldown) just leaves the
+      // drag fallback in charge
+      const r = this.domElement.requestPointerLock() as unknown as
+        | { catch?: (fn: () => void) => void }
+        | undefined;
+      r?.catch?.(() => undefined);
+    } catch {
+      /* no pointer lock here — drag-to-look still works */
+    }
+  }
+
+  private syncLockUi(): void {
+    const locked = this.locked;
+    this.crosshairEl?.classList.toggle("show", this.active && locked);
+    if (!locked) this.crosshairEl?.classList.remove("grab", "deny");
   }
 
   /* ---------------- the room shell ---------------- */
@@ -680,17 +735,17 @@ export class LobbyRoomView {
     poseArm(armR, new THREE.Vector3(0.21, 0.58, 0.06));
     poseArm(armL, new THREE.Vector3(-0.21, 0.58, 0.06));
     group.add(nameSprite(p.name));
-    group.position.set(p.pos.x, 0, p.pos.z);
+    group.position.set(p.pos.x, p.pos.y, p.pos.z);
     group.rotation.y = p.moveYaw;
     this.scene.add(group);
     return {
       group,
       legs: legs!,
-      targetPos: new THREE.Vector3(p.pos.x, 0, p.pos.z),
+      targetPos: new THREE.Vector3(p.pos.x, p.pos.y, p.pos.z),
       targetYaw: p.moveYaw,
       moving: p.moving,
       walkPhase: 0,
-      baseY: 0,
+      baseY: p.pos.y,
     };
   }
 
@@ -699,11 +754,17 @@ export class LobbyRoomView {
     if (this.active === on) return;
     this.active = on;
     this.keys.clear();
-    if (!on) {
+    if (on) {
+      // straight into free look: the click that joined the table is
+      // recent enough to count as the gesture the lock API wants
+      this.captureLook();
+    } else {
       this.looking = false;
       this.dispenseHint?.classList.remove("show");
+      if (this.locked) document.exitPointerLock();
       if (this.domElement) this.domElement.style.cursor = "";
     }
+    this.syncLockUi();
   }
 
   apply(snap: Snapshot, myId: string): void {
@@ -715,15 +776,24 @@ export class LobbyRoomView {
     for (const p of snap.players) {
       if (p.id === myId) {
         if (!this.posInit) {
-          this.myPos.set(p.pos.x, 0, p.pos.z);
+          this.myPos.set(p.pos.x, p.pos.y, p.pos.z);
+          this.motion.vy = 0;
+          this.motion.grounded = true;
           this.yaw = p.moveYaw;
           this.posInit = true;
           this.correction.set(0, 0, 0);
         } else {
-          // authoritative minus predicted: fold in gently, snap if wild
-          this.correction.set(p.pos.x - this.myPos.x, 0, p.pos.z - this.myPos.z);
+          // authoritative minus predicted: fold in gently, snap if wild.
+          // Height only reconciles on the ground — mid-jump the server's
+          // arc lags ours by the wire, and tugging y would soften every hop
+          this.correction.set(
+            p.pos.x - this.myPos.x,
+            this.motion.grounded ? p.pos.y - this.myPos.y : 0,
+            p.pos.z - this.myPos.z
+          );
           if (this.correction.length() > 1.2) {
-            this.myPos.set(p.pos.x, 0, p.pos.z);
+            this.myPos.set(p.pos.x, p.pos.y, p.pos.z);
+            this.motion.vy = 0;
             this.correction.set(0, 0, 0);
           }
         }
@@ -734,7 +804,7 @@ export class LobbyRoomView {
         av = this.makeLobbyAvatar(p);
         this.avatars.set(p.id, av);
       }
-      av.targetPos.set(p.pos.x, 0, p.pos.z);
+      av.targetPos.set(p.pos.x, p.pos.y, p.pos.z);
       av.targetYaw = p.moveYaw;
       av.moving = p.moving;
     }
@@ -749,8 +819,12 @@ export class LobbyRoomView {
      same priority the table uses: grab the held empty > pick up litter >
      drag to look */
   pointerDown(e: PointerEvent): void {
-    const ndc = this.ndc(e);
-    if (this.held.pointerDown(ndc)) return;
+    if (e.pointerType === "mouse") this.captureLook(); // no-op once locked
+    const ndc = this.locked ? CENTER : this.ndc(e);
+    if (this.held.pointerDown(ndc)) {
+      this.beginVirtualCursor(e);
+      return;
+    }
     const target = this.findDebrisAt(ndc);
     if (target) {
       if (this.held.hasHeld) {
@@ -760,15 +834,33 @@ export class LobbyRoomView {
       }
       this.send({ type: "pickup", itemId: target.id });
       this.held.beginFloorGrab(target.kind, target.pos);
+      this.beginVirtualCursor(e);
       return;
     }
-    this.looking = true;
+    this.looking = true; // drag fallback: touch, or the lock was refused
     this.lastPointer = { x: e.clientX, y: e.clientY };
   }
   pointerMove(e: PointerEvent): void {
     if (this.held.isGrabbing) {
-      this.held.pointerMove(this.ndc(e));
+      if (this.locked) {
+        const [dx, dy] = this.lookDelta(e);
+        this.virt.x = Math.max(0, Math.min(innerWidth, this.virt.x + dx));
+        this.virt.y = Math.max(0, Math.min(innerHeight, this.virt.y + dy));
+        this.held.pointerMove(
+          new THREE.Vector2((this.virt.x / innerWidth) * 2 - 1, -(this.virt.y / innerHeight) * 2 + 1)
+        );
+      } else {
+        this.held.pointerMove(this.ndc(e));
+      }
       return;
+    }
+    if (this.locked) {
+      // free look: the gaze follows the mouse, no button held. Standard
+      // FPS signs (mouse down = look down), unlike the drag path below.
+      const [dx, dy] = this.lookDelta(e);
+      this.yaw = wrapAngle(this.yaw - dx * LOOK_SENS);
+      this.pitch = Math.max(PITCH_MIN, Math.min(PITCH_MAX, this.pitch - dy * LOOK_SENS));
+      return; // crosshair hover refreshes per frame, where walking counts too
     }
     if (!this.looking) {
       this.updateHover(this.ndc(e));
@@ -788,6 +880,33 @@ export class LobbyRoomView {
 
   private ndc(e: PointerEvent): THREE.Vector2 {
     return new THREE.Vector2((e.clientX / innerWidth) * 2 - 1, -(e.clientY / innerHeight) * 2 + 1);
+  }
+
+  /* the wind-up drag's hand starts where the grab happened: the crosshair
+     when locked (the cursor is gone), the cursor otherwise */
+  private beginVirtualCursor(e: PointerEvent): void {
+    this.virt.x = this.locked ? innerWidth / 2 : e.clientX;
+    this.virt.y = this.locked ? innerHeight / 2 : e.clientY;
+    this.lastPointer = { x: e.clientX, y: e.clientY };
+  }
+
+  /* mouse travel while locked, summed across coalesced events. Real locks
+     freeze clientX/Y and report movementX/Y; synthetic pointers (headless
+     runs) do the opposite, so zero movement falls back to position deltas. */
+  private lookDelta(e: PointerEvent): [number, number] {
+    let dx = 0;
+    let dy = 0;
+    const evs = e.getCoalescedEvents?.() ?? [];
+    for (const ev of evs.length ? evs : [e]) {
+      dx += ev.movementX;
+      dy += ev.movementY;
+    }
+    if (dx === 0 && dy === 0) {
+      dx = e.clientX - this.lastPointer.x;
+      dy = e.clientY - this.lastPointer.y;
+    }
+    this.lastPointer = { x: e.clientX, y: e.clientY };
+    return [dx, dy];
   }
 
   /* what grabbable litter is under the pointer — instance hit first, then
@@ -812,15 +931,16 @@ export class LobbyRoomView {
   }
 
   private updateHover(ndc: THREE.Vector2): void {
-    if (!this.domElement) return;
     const target = this.findDebrisAt(ndc);
-    if (target && this.held.hasHeld) {
-      this.debris.setHighlight(null);
-      this.domElement.style.cursor = "not-allowed";
-      return;
+    const denied = !!target && this.held.hasHeld;
+    this.debris.setHighlight(denied ? null : (target?.id ?? null));
+    if (this.locked) {
+      // no cursor to shape: the crosshair does the talking
+      this.crosshairEl?.classList.toggle("grab", !!target && !denied);
+      this.crosshairEl?.classList.toggle("deny", denied);
+    } else if (this.domElement) {
+      this.domElement.style.cursor = denied ? "not-allowed" : target ? "grab" : "";
     }
-    this.debris.setHighlight(target?.id ?? null);
-    this.domElement.style.cursor = target ? "grab" : "";
   }
 
   /* ---------------- dispensers ---------------- */
@@ -831,6 +951,16 @@ export class LobbyRoomView {
         (d) => Math.hypot(this.myPos.x - d.x, this.myPos.z - d.z) <= DISPENSE_RADIUS
       ) ?? null
     );
+  }
+
+  /* predict the hop immediately; the sim keeps its own grounded record, so
+     the intent is a request, not a command */
+  private tryJump(): void {
+    if (this.motion.grounded) {
+      this.motion.vy = LOBBY_JUMP_SPEED;
+      this.motion.grounded = false;
+    }
+    this.send({ type: "jump" });
   }
 
   private tryDispense(): void {
@@ -890,19 +1020,21 @@ export class LobbyRoomView {
     }
 
     if (this.posInit) {
-      // prediction: exactly the sim's step, at render rate
-      if (dirX !== 0 || dirZ !== 0) stepLobbyMove(this.myPos, dirX, dirZ, dt);
+      // prediction: exactly the sim's step, at render rate — every frame,
+      // gravity and landings don't wait for key input
+      stepLobbyMove(this.motion, dirX, dirZ, dt);
       // fold in the server's opinion of where I am
       if (this.correction.lengthSq() > 1e-8) {
         const k = Math.min(1, dt * 4);
         this.myPos.addScaledVector(this.correction, k);
         this.correction.multiplyScalar(1 - k);
       }
-      this.camera.position.set(this.myPos.x, LOBBY_EYE_HEIGHT, this.myPos.z);
+      const eyeY = this.myPos.y + LOBBY_EYE_HEIGHT;
+      this.camera.position.set(this.myPos.x, eyeY, this.myPos.z);
       const cp = Math.cos(this.pitch);
       this.camera.lookAt(
         this.myPos.x + sy * cp,
-        LOBBY_EYE_HEIGHT + Math.sin(this.pitch),
+        eyeY + Math.sin(this.pitch),
         this.myPos.z + cy * cp
       );
 
@@ -929,6 +1061,8 @@ export class LobbyRoomView {
     for (const av of this.avatars.values()) {
       av.group.position.x += (av.targetPos.x - av.group.position.x) * k;
       av.group.position.z += (av.targetPos.z - av.group.position.z) * k;
+      // jumps read as jumps: track height faster than the x/z stroll-ease
+      av.baseY += (av.targetPos.y - av.baseY) * Math.min(1, dt * 20);
       av.group.rotation.y += wrapAngle(av.targetYaw - av.group.rotation.y) * k;
       const strideTarget = av.moving ? 1 : 0;
       if (av.moving) av.walkPhase += dt * WALK_ANIM_HZ;
@@ -956,6 +1090,9 @@ export class LobbyRoomView {
       if (this.held.hasHeld) this.send({ type: "heldMove", pos: null });
     }
     if (this.active) this.updateDispenseHint();
+    // under lock the pick ray is the gaze: walking alone changes what the
+    // crosshair is over, so hover tracks per frame, not per pointer event
+    if (this.active && this.locked && !this.held.isGrabbing) this.updateHover(CENTER);
 
     // ambient life: the bulb has moods, the neon buzzes, the jukebox breathes
     if (now > this.bulbDropUntil && Math.random() < 0.004) this.bulbDropUntil = now + 90;

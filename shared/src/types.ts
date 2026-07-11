@@ -39,6 +39,10 @@ export interface PlayerSnap {
   hand: Card[];
   cigarMeter: number;
   beerMeter: number;
+  /* per-vice tolerance 0..TOLERANCE_MAX: refills shrink and drain speeds up
+     as it climbs. HUD shows it as pips of TOLERANCE_PER_USE each. */
+  cigarTol: number;
+  beerTol: number;
   cigarInv: number;
   beerInv: number;
   ritual: { kind: ViceKind; progress: number } | null;
@@ -130,6 +134,8 @@ export type Intent =
   /* lobby-room walking: a held input direction (world-space, unit or less)
      plus facing; the sim integrates it every tick until it changes */
   | { type: "move"; dirX: number; dirZ: number; yaw: number }
+  /* lobby-room hop: an impulse, honored only with feet on something */
+  | { type: "jump" }
   | { type: "restart" };
 
 /* what the server tells browsers about each lobby — never the password */
