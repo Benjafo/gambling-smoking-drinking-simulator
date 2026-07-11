@@ -1,8 +1,10 @@
-/* Main menu: the door of the establishment. Shows the live table (lobby)
-   list from the server, lets you open a table (optionally private with a
-   password), sit down at one, or play solo against a local worker. Hands a
-   Session to main.ts and gets out of the way; reappears when the session
-   ends (settings → leave, or the connection dying). */
+/* The front of house: a title screen (attract mode over the live 3D den —
+   PLAY / PLAY SOLO / SETTINGS) and, behind PLAY, the "FIND A TABLE" server
+   browser where you set your name, open a table (optionally private with a
+   password), or sit down at one. PLAY SOLO seats you against a local worker
+   straight from the title. Hands a Session to main.ts and gets out of the
+   way; the title screen reappears when the session ends (settings → leave,
+   or the connection dying). */
 import { LOBBY_NAME_MAX } from "@shared/constants";
 import type { LobbyInfo } from "@shared/types";
 import {
@@ -55,8 +57,15 @@ export class MenuControl {
       localStorage.getItem("degen-name") ??
       "";
 
-    $("soloBtn").addEventListener("click", () => {
+    $("titlePlayBtn").addEventListener("click", () => this.showBrowse());
+    $("titleSoloBtn").addEventListener("click", () => {
+      if (this.busy) return;
       this.seat(Promise.resolve(new LocalSession(this.playerName())));
+    });
+    $("browseBackBtn").addEventListener("click", () => this.showTitle());
+    addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && $("menuScreen").classList.contains("active"))
+        this.showTitle();
     });
 
     const privateChk = $("privateChk") as HTMLInputElement;
@@ -183,7 +192,7 @@ export class MenuControl {
       )
       .join("");
     ($("createBtn") as HTMLButtonElement).disabled = !canAct;
-    ($("soloBtn") as HTMLButtonElement).disabled = this.busy;
+    ($("titleSoloBtn") as HTMLButtonElement).disabled = this.busy;
 
     // password prompt for the selected locked table
     if (this.joinTarget && !lobbies.some((l) => l.id === this.joinTarget!.id)) {
@@ -195,19 +204,36 @@ export class MenuControl {
       $("joinLabel").textContent = `SITTING AT «${this.joinTarget.name}» — SPEAK THE PASSWORD:`;
   }
 
-  /* ---------------- visibility ---------------- */
+  /* ---------------- visibility ----------------
+     two fronts: the title screen and the FIND A TABLE browser. show()
+     always lands on the title (that's "back to the menu" after a game). */
   visible(): boolean {
-    return $("menuScreen").classList.contains("active");
+    return (
+      $("titleScreen").classList.contains("active") ||
+      $("menuScreen").classList.contains("active")
+    );
   }
   show(notice?: string): void {
     $("menuNotice").textContent = notice ?? "";
     this.error("");
-    $("menuScreen").classList.add("active");
-    // the list may be stale after a game; a live socket will push fresh soon
-    this.render();
+    this.showTitle();
   }
   hide(): void {
     $("menuNotice").textContent = "";
+    $("titleScreen").classList.remove("active");
     $("menuScreen").classList.remove("active");
+  }
+  private showTitle(): void {
+    $("menuScreen").classList.remove("active");
+    $("titleScreen").classList.add("active");
+    this.render();
+  }
+  private showBrowse(): void {
+    $("titleScreen").classList.remove("active");
+    $("menuScreen").classList.add("active");
+    // the list may be stale after a game; a live socket will push fresh soon
+    this.render();
+    const name = $("nameInput") as HTMLInputElement;
+    if (!name.value) name.focus();
   }
 }

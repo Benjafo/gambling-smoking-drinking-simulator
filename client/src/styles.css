@@ -61,14 +61,52 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--open);outline-o
   flex-direction:column;align-items:center;justify-content:center;gap:26px;text-align:center;
 }
 .screen.active{display:flex}
-#menuScreen{background:var(--night)}
+#menuScreen{background:rgba(9,12,9,.92)}
 #overScreen{background:#160d0c}
 /* CRT scanlines on the full-bleed screens (not the transparent lobby overlay) */
-#menuScreen::before,#overScreen::before,#settingsScreen::before{
+#titleScreen::before,#menuScreen::before,#overScreen::before,#settingsScreen::before{
   content:"";position:absolute;inset:0;pointer-events:none;z-index:0;
   background:repeating-linear-gradient(rgba(0,0,0,.22) 0 1px,transparent 1px 3px);
 }
-#menuScreen > *,#overScreen > *,#settingsScreen > *{z-index:1}
+#titleScreen > *,#menuScreen > *,#overScreen > *,#settingsScreen > *{z-index:1}
+
+/* ---------- title screen: attract mode over the live den ---------- */
+/* the 3D room stays visible on the right; an ink scrim carries the menu */
+#titleScreen{
+  background:linear-gradient(90deg,
+    rgba(7,9,7,.96) 0%,rgba(7,9,7,.9) 30%,rgba(7,9,7,.45) 58%,rgba(7,9,7,0) 80%);
+  align-items:flex-start;justify-content:center;text-align:left;
+  padding:0 0 9vh clamp(28px,8vw,130px);gap:0;
+}
+#titleScreen .marquee{font-size:clamp(38px,5.2vw,64px);margin-bottom:7vh}
+#titleScreen .marquee small{margin-top:12px;letter-spacing:.3em}
+#titleScreen #menuNotice{margin-bottom:14px}
+#titleNav{display:flex;flex-direction:column;align-items:flex-start;gap:8px}
+.title-item{
+  background:none;border:2px solid transparent;text-align:left;
+  font-family:var(--px);font-weight:700;font-size:clamp(24px,2.6vw,32px);
+  letter-spacing:.04em;color:var(--paper);padding:4px 26px 6px 14px;
+  text-shadow:.09em .09em 0 var(--ink);min-width:min(300px,60vw);
+}
+.title-item:hover:not(:disabled),.title-item:focus-visible{
+  background:var(--bulb);color:#241a00;text-shadow:none;outline:none;
+  border-color:var(--ink);box-shadow:5px 5px 0 var(--ink);
+}
+.title-item:active:not(:disabled){transform:translate(3px,3px);box-shadow:2px 2px 0 var(--ink)}
+.title-tagline{
+  text-align:left;font-size:18px;max-width:380px;margin-top:7vh;
+  text-shadow:2px 2px 0 rgba(0,0,0,.9);
+}
+.title-footer{
+  position:absolute;left:0;right:0;bottom:0;
+  display:flex;justify-content:space-between;padding:12px 20px;
+  border-top:2px solid rgba(46,59,47,.5);background:rgba(7,9,7,.75);
+  font-family:var(--tiny);font-size:8px;letter-spacing:.22em;color:var(--smoke);
+}
+
+/* ---------- shared screen furniture ---------- */
+.marquee.sub{font-size:clamp(26px,3.6vw,44px)}
+.back-btn{position:absolute;top:16px;left:18px;padding:11px 18px}
 
 /* ---------- the marquee: a buzzing bar sign ---------- */
 .marquee{
@@ -134,8 +172,7 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--open);outline-o
 #overStats b{color:var(--bulb)}
 .epitaph{font-family:var(--crt);font-size:19px;color:var(--smoke)}
 
-/* ---------- main menu ---------- */
-#menuPanels{display:flex;gap:22px;align-items:stretch;justify-content:center;flex-wrap:wrap;max-width:92vw}
+/* ---------- find-a-table (server browser) ---------- */
 .menu-panel{
   background:var(--night-2);border:2px solid var(--ink);
   box-shadow:inset 0 0 0 1px var(--line),5px 5px 0 rgba(0,0,0,.4);
@@ -143,7 +180,9 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--open);outline-o
   display:flex;flex-direction:column;gap:12px;align-items:stretch;justify-content:flex-start;
 }
 .menu-panel h3{font-family:var(--tiny);font-weight:400;font-size:9px;letter-spacing:.28em;color:var(--smoke)}
-.menu-note{color:var(--smoke);font-size:19px;line-height:1.35;margin:auto 0}
+.browse-panel{width:min(560px,92vw)}
+.name-field{display:flex;flex-direction:column;gap:7px;align-items:center}
+.field-label{font-family:var(--tiny);font-size:8px;letter-spacing:.28em;color:var(--smoke)}
 .menu-row{display:flex;gap:10px;align-items:center;justify-content:center}
 .menu-row .menu-input{flex:1;min-width:0}
 .menu-divider{border-top:2px solid var(--line);margin:4px 0}
@@ -192,6 +231,16 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--open);outline-o
 #settingsBtn.active{display:block}
 #settingsBtn:hover{background:#231d06}
 #settingsScreen{z-index:120;background:rgba(9,12,9,.93)}
+.controls-panel{width:min(520px,92vw);text-align:left}
+.ctl-row{display:flex;align-items:baseline;gap:16px;font-family:var(--crt);font-size:18px;color:var(--smoke)}
+.ctl-row .key{
+  font-family:var(--tiny);font-size:8px;letter-spacing:.12em;color:var(--bulb);
+  flex:0 0 132px;padding-top:2px;
+}
+/* opened from the title screen: no table to go back to or leave */
+#settingsScreen.from-menu #resumeBtn,#settingsScreen.from-menu #leaveBtn,
+#settingsScreen.from-menu #settingsLeaveHint{display:none}
+#settingsScreen:not(.from-menu) #settingsBackBtn{display:none}
 
 /* ---------- lobby: a slim panel over the 3D waiting room ---------- */
 #lobbyScreen{

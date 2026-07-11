@@ -52,15 +52,24 @@ function startSession(s: Session): void {
   });
 }
 
-/* ---------------- settings ---------------- */
+/* ---------------- settings ----------------
+   reachable from the title screen too; "from-menu" swaps the in-game
+   resume/leave slabs for a plain BACK */
 const settingsOpen = () => $("settingsScreen").classList.contains("active");
-const toggleSettings = (on: boolean) => $("settingsScreen").classList.toggle("active", on);
+const toggleSettings = (on: boolean) => {
+  $("settingsScreen").classList.toggle("active", on);
+  $("settingsScreen").classList.toggle("from-menu", !session);
+};
 
 $("settingsBtn").addEventListener("click", () => toggleSettings(!settingsOpen()));
+$("titleSettingsBtn").addEventListener("click", () => toggleSettings(true));
 $("resumeBtn").addEventListener("click", () => toggleSettings(false));
+$("settingsBackBtn").addEventListener("click", () => toggleSettings(false));
 $("leaveBtn").addEventListener("click", () => session?.leave()); // onEnd does the rest
 addEventListener("keydown", (e) => {
-  if (e.key === "Escape" && session) toggleSettings(!settingsOpen());
+  if (e.key !== "Escape") return;
+  if (session) toggleSettings(!settingsOpen());
+  else if (settingsOpen()) toggleSettings(false);
 });
 
 // testing hook: lets headless UI tests project world coords to screen px
