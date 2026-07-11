@@ -4,6 +4,7 @@
 import * as THREE from "three";
 import {
   TABLE,
+  DEN_ROOM,
   SEAT_COUNT,
   DEALER_POS,
   REACH_RADIUS,
@@ -18,7 +19,15 @@ import {
 import type { Intent, PlayerSnap, Snapshot } from "@shared/types";
 import type { ViceKind } from "@shared/types";
 import { handValue } from "@shared/blackjack";
-import { feltTexture, woodTexture, carpetTexture, leatherTexture } from "./textures";
+import {
+  feltTexture,
+  woodTexture,
+  carpetTexture,
+  leatherTexture,
+  plasterTexture,
+  floorboardTexture,
+  ceilingTexture,
+} from "./textures";
 import { makeFigure, poseArm, type ArmRig } from "./figure";
 import { LobbyRoomView } from "./lobbyRoom";
 import { CardZone } from "./cards";
@@ -158,6 +167,9 @@ export class SceneView {
      calls the "lobby" phase */
   private mode: "table" | "lobby" = "table";
   readonly lobbyRoom: LobbyRoomView;
+  /* ambient life in the den: the wall neon buzzes, its light breathes */
+  private neonMat!: THREE.MeshBasicMaterial;
+  private neonLight!: THREE.PointLight;
 
   constructor(container: HTMLElement, private send: (intent: Intent) => void) {
     this.renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -172,7 +184,8 @@ export class SceneView {
     this.setCameraSeat(2);
 
     this.scene.background = new THREE.Color(0x0d0b08);
-    this.scene.fog = new THREE.Fog(0x0d0b08, 6, 16);
+    // the room is small now — fog just murks up the far corners
+    this.scene.fog = new THREE.Fog(0x0d0b08, 5, 14);
 
     this.buildLights();
     this.buildRoom();
@@ -213,6 +226,8 @@ export class SceneView {
   /* ---------------- static world ---------------- */
   private buildLights(): void {
     this.scene.add(new THREE.AmbientLight(0x342b1e, 1.6));
+    // gentle top-down lift so the walls read as walls, not void
+    this.scene.add(new THREE.HemisphereLight(0x564a33, 0x120d08, 1.0));
     // the spot hangs from the lamp over the table
     const spot = new THREE.SpotLight(0xffdca8, 70, 12, Math.PI / 3.1, 0.5, 1.5);
     spot.position.set(0, 2.65, 0);
@@ -220,9 +235,10 @@ export class SceneView {
     spot.castShadow = true;
     spot.shadow.mapSize.set(1024, 1024);
     this.scene.add(spot, spot.target);
-    const rim = new THREE.PointLight(0xe0522b, 6, 7, 2);
-    rim.position.set(-3, 1.6, -2.5);
-    this.scene.add(rim);
+    // the wall neon's glow — flickered alongside its sign in frame()
+    this.neonLight = new THREE.PointLight(0xe0522b, 6, 7, 2);
+    this.neonLight.position.set(-3.5, 2.0, -1.6);
+    this.scene.add(this.neonLight);
 
     // warm den glow hung over the seat ring: the other degenerates are
     // meant to be SEEN — the fog still swallows the room beyond the table
@@ -239,10 +255,10 @@ export class SceneView {
     // the hanging lamp itself: cord, brass-trimmed shade, glowing bulb
     const lamp = new THREE.Group();
     const cord = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.008, 0.008, 1.6, 6),
+      new THREE.CylinderGeometry(0.008, 0.008, DEN_ROOM.height - 2.78, 6),
       new THREE.MeshStandardMaterial({ color: 0x0d0b08, roughness: 0.9 })
     );
-    cord.position.y = 3.55;
+    cord.position.y = (DEN_ROOM.height + 2.78) / 2; // shade top to the ceiling
     const shade = new THREE.Mesh(
       new THREE.CylinderGeometry(0.09, 0.42, 0.3, 24, 1, true),
       new THREE.MeshStandardMaterial({
@@ -271,28 +287,386 @@ export class SceneView {
     bulb.position.y = 2.72;
     lamp.add(cord, shade, shadeInner, trim, bulb);
     this.scene.add(lamp);
+
+    // smoke hanging in the lamplight: a faint additive cone under the shade
+    const haze = new THREE.Mesh(
+      new THREE.ConeGeometry(1.05, 1.9, 24, 1, true),
+      new THREE.MeshBasicMaterial({
+        color: 0xffdca8,
+        transparent: true,
+        opacity: 0.045,
+        blending: THREE.AdditiveBlending,
+        side: THREE.DoubleSide,
+        depthWrite: false,
+        fog: false,
+      })
+    );
+    haze.position.y = 2.6 - 0.95;
+    this.scene.add(haze);
   }
 
+  /* the den itself: a small dingy back room — floorboards under a tired
+     rug, stained plaster over wood wainscot, a boarded-up door (the felt
+     says NO EXITS and it means it), wall neon, and the kind of clutter a
+     room like this accretes. Matches DEN_ROOM, which physics.ts also reads:
+     the walls you see are the walls the bottles bounce off. */
   private buildRoom(): void {
+    const { halfW, halfD, height, centerZ } = DEN_ROOM;
+    const zBack = centerZ - halfD; // behind the dealer
+    const zFront = centerZ + halfD; // behind the players
+
+    // floorboards under everything, the old rug under the table
+    const boards = floorboardTexture();
+    boards.repeat.set(4, 4);
     const floor = new THREE.Mesh(
-      new THREE.CircleGeometry(11, 40),
-      new THREE.MeshStandardMaterial({ map: carpetTexture(), roughness: 0.97 })
+      new THREE.PlaneGeometry(halfW * 2, halfD * 2),
+      new THREE.MeshStandardMaterial({ map: boards, roughness: 0.9 })
     );
     floor.rotation.x = -Math.PI / 2;
+    floor.position.set(0, 0, centerZ);
     floor.receiveShadow = true;
-    this.scene.add(floor);
 
-    // far-off bar lights: dim amber orbs floating in the dark, softened by fog
-    const orbMat = new THREE.MeshBasicMaterial({ color: 0xd99a4e });
-    const orbGeo = new THREE.SphereGeometry(0.05, 8, 6);
-    const ORBS: [number, number, number][] = [
-      [-7.5, 2.2, -4], [-8.2, 1.7, 1.5], [-5.5, 2.5, -6.5], [6.8, 2.1, -5],
-      [8.4, 1.8, 0.5], [5.8, 2.4, -7.2], [-2.5, 2.6, -8.5], [2.8, 2.0, -8.8],
+    const rug = new THREE.Mesh(
+      new THREE.CircleGeometry(3.3, 48),
+      new THREE.MeshStandardMaterial({ map: carpetTexture(), roughness: 0.97 })
+    );
+    rug.rotation.x = -Math.PI / 2;
+    rug.position.y = 0.006;
+    rug.receiveShadow = true;
+
+    const ceiling = new THREE.Mesh(
+      new THREE.PlaneGeometry(halfW * 2, halfD * 2),
+      new THREE.MeshStandardMaterial({ map: ceilingTexture(), roughness: 1 })
+    );
+    ceiling.rotation.x = Math.PI / 2;
+    ceiling.position.set(0, height, centerZ);
+    this.scene.add(floor, rug, ceiling);
+
+    // walls: grimy plaster above wood wainscot, rail and baseboard between
+    const plaster = plasterTexture();
+    plaster.repeat.set(3, 1); // y=1: the grime gradient spans floor→ceiling
+    const plasterMat = new THREE.MeshStandardMaterial({ map: plaster, roughness: 0.95 });
+    const wainWood = woodTexture();
+    wainWood.repeat.set(5, 1);
+    const wainMat = new THREE.MeshStandardMaterial({
+      map: wainWood,
+      color: 0xb8a88f, // knocked back: paneling in shadow, not fresh varnish
+      roughness: 0.8,
+    });
+    const railMat = new THREE.MeshStandardMaterial({ color: 0x1c150c, roughness: 0.85 });
+    const baseMat = new THREE.MeshStandardMaterial({ color: 0x120e08, roughness: 0.9 });
+    const WAIN_H = 0.95;
+    const wallSpecs: { w: number; x: number; z: number; ry: number }[] = [
+      { w: halfW * 2, x: 0, z: zBack, ry: 0 },
+      { w: halfW * 2, x: 0, z: zFront, ry: Math.PI },
+      { w: halfD * 2, x: -halfW, z: centerZ, ry: Math.PI / 2 },
+      { w: halfD * 2, x: halfW, z: centerZ, ry: -Math.PI / 2 },
     ];
-    for (const [x, y, z] of ORBS) {
-      const orb = new THREE.Mesh(orbGeo, orbMat);
-      orb.position.set(x, y, z);
-      this.scene.add(orb);
+    for (const s of wallSpecs) {
+      const wall = new THREE.Mesh(new THREE.PlaneGeometry(s.w, height), plasterMat);
+      wall.position.set(s.x, height / 2, s.z);
+      wall.rotation.y = s.ry;
+      wall.receiveShadow = true;
+      const wain = new THREE.Mesh(new THREE.PlaneGeometry(s.w, WAIN_H), wainMat);
+      wain.position.set(s.x, WAIN_H / 2, s.z);
+      wain.rotation.y = s.ry;
+      wain.translateZ(0.012);
+      wain.receiveShadow = true;
+      const rail = new THREE.Mesh(new THREE.BoxGeometry(s.w, 0.045, 0.035), railMat);
+      rail.position.set(s.x, WAIN_H + 0.02, s.z);
+      rail.rotation.y = s.ry;
+      rail.translateZ(0.024);
+      const base = new THREE.Mesh(new THREE.PlaneGeometry(s.w, 0.12), baseMat);
+      base.position.set(s.x, 0.06, s.z);
+      base.rotation.y = s.ry;
+      base.translateZ(0.02);
+      this.scene.add(wall, wain, rail, base);
+    }
+
+    // shared prop materials
+    const wood = woodTexture();
+    const woodMat = new THREE.MeshStandardMaterial({ map: wood, roughness: 0.75 });
+    const oldWoodMat = new THREE.MeshStandardMaterial({
+      map: woodTexture(),
+      color: 0x9a8a72,
+      roughness: 0.9,
+    });
+    const frameMat = new THREE.MeshStandardMaterial({ color: 0x1c150c, roughness: 0.8 });
+    const brassMat = new THREE.MeshStandardMaterial({
+      color: 0xe8c469,
+      metalness: 0.8,
+      roughness: 0.35,
+    });
+
+    /* the door out, boarded shut — the game ends when the game says so */
+    const doorX = -1.9;
+    const door = new THREE.Mesh(new THREE.BoxGeometry(0.95, 2.05, 0.07), woodMat);
+    door.position.set(doorX, 1.025, zBack + 0.05);
+    for (const side of [-0.52, 0.52]) {
+      const jamb = new THREE.Mesh(new THREE.BoxGeometry(0.09, 2.2, 0.11), frameMat);
+      jamb.position.set(doorX + side, 1.1, zBack + 0.05);
+      this.scene.add(jamb);
+    }
+    const lintel = new THREE.Mesh(new THREE.BoxGeometry(1.13, 0.09, 0.11), frameMat);
+    lintel.position.set(doorX, 2.16, zBack + 0.05);
+    const knob = new THREE.Mesh(new THREE.SphereGeometry(0.035, 10, 8), brassMat);
+    knob.position.set(doorX + 0.35, 1.0, zBack + 0.11);
+    this.scene.add(door, lintel, knob);
+    for (const [by, tilt] of [
+      [1.42, 0.24],
+      [0.78, -0.31],
+    ]) {
+      const board = new THREE.Mesh(new THREE.BoxGeometry(1.35, 0.14, 0.03), oldWoodMat);
+      board.position.set(doorX, by, zBack + 0.1);
+      board.rotation.z = tilt;
+      board.castShadow = true;
+      this.scene.add(board);
+    }
+
+    /* back bar behind the dealer: a low cabinet, its bottles, a sconce */
+    const cabinet = new THREE.Group();
+    const cabBody = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.92, 0.42), woodMat);
+    cabBody.position.y = 0.46;
+    cabBody.castShadow = true;
+    const cabTop = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.05, 0.48), frameMat);
+    cabTop.position.y = 0.945;
+    for (const px of [-0.36, 0.36]) {
+      const panel = new THREE.Mesh(new THREE.PlaneGeometry(0.56, 0.62), oldWoodMat);
+      panel.position.set(px, 0.48, 0.212);
+      cabinet.add(panel);
+      const pull = new THREE.Mesh(new THREE.SphereGeometry(0.016, 8, 6), brassMat);
+      pull.position.set(px + (px < 0 ? 0.2 : -0.2), 0.5, 0.22);
+      cabinet.add(pull);
+    }
+    cabinet.add(cabBody, cabTop);
+    cabinet.position.set(1.9, 0, zBack + 0.24);
+    this.scene.add(cabinet);
+    this.scatterBottles(
+      [
+        [1.62, 0.97, zBack + 0.2, false],
+        [1.78, 0.97, zBack + 0.3, false],
+        [2.02, 0.97, zBack + 0.22, false],
+        [2.24, 0.97, zBack + 0.28, false],
+        [2.38, 0.99, zBack + 0.24, true], // the one nobody stood back up
+      ]
+    );
+    this.sconce(1.9, 2.3, zBack + 0.035, 0, 3);
+    this.sconce(-3.6, 2.3, zBack + 0.035, 0, 2);
+
+    /* what passes for décor */
+    const poster = (
+      lines: [string, string],
+      x: number,
+      y: number,
+      z: number,
+      ry: number,
+      tilt: number
+    ): void => {
+      const p = new THREE.Mesh(
+        new THREE.PlaneGeometry(0.58, 0.78),
+        new THREE.MeshStandardMaterial({
+          map: canvasTexture(256, 344, (ctx) => {
+            ctx.fillStyle = "#c9b98f";
+            ctx.fillRect(0, 0, 256, 344);
+            ctx.strokeStyle = "#6b5836";
+            ctx.lineWidth = 10;
+            ctx.strokeRect(8, 8, 240, 328);
+            ctx.textAlign = "center";
+            ctx.fillStyle = "#3a2c18";
+            ctx.font = "700 36px 'Pixelify Sans',sans-serif";
+            const words = lines[0].split(" ");
+            words.forEach((w, i) => ctx.fillText(w, 128, 96 + i * 48));
+            ctx.font = "22px 'VT323',monospace";
+            ctx.fillStyle = "#6b5836";
+            ctx.fillText(lines[1], 128, 300);
+          }),
+          roughness: 0.9,
+        })
+      );
+      p.position.set(x, y, z);
+      p.rotation.y = ry;
+      p.rotateZ(tilt);
+      this.scene.add(p);
+    };
+    poster(["THE HOUSE ALWAYS WINS", "it lives here, after all"], 0.35, 2.45, zBack + 0.02, 0, -0.04);
+    poster(["WINNERS SIT STILL", "everyone else also sits still"], -halfW + 0.02, 1.75, 1.4, Math.PI / 2, 0.06);
+    poster(["CASH ONLY", "and it stays here"], 2.6, 1.8, zFront - 0.02, Math.PI, -0.05);
+
+    /* neon on the west wall, naming the whole enterprise */
+    this.neonMat = new THREE.MeshBasicMaterial({
+      map: canvasTexture(640, 160, (ctx) => {
+        // no backing fill: just tubes and glow floating on the plaster
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.font = "700 58px 'Pixelify Sans',sans-serif";
+        ctx.shadowColor = "#e0522b";
+        ctx.shadowBlur = 26;
+        ctx.strokeStyle = "#ff8a5e";
+        ctx.lineWidth = 3;
+        ctx.strokeText("DRINK · SMOKE · BET", 320, 64);
+        ctx.fillStyle = "#ffb08a";
+        ctx.fillText("DRINK · SMOKE · BET", 320, 64);
+        ctx.font = "28px 'VT323',monospace";
+        ctx.shadowBlur = 12;
+        ctx.fillStyle = "#c9836a";
+        ctx.fillText("repeat until done", 320, 124);
+      }),
+      transparent: true,
+    });
+    const neon = new THREE.Mesh(new THREE.PlaneGeometry(2.0, 0.5), this.neonMat);
+    neon.position.set(-halfW + 0.03, 2.0, -1.6);
+    neon.rotation.y = Math.PI / 2;
+    this.scene.add(neon);
+
+    /* barred window on the east wall: night outside, and it stays outside */
+    const winX = halfW - 0.02;
+    const pane = new THREE.Mesh(
+      new THREE.PlaneGeometry(0.72, 0.56),
+      new THREE.MeshBasicMaterial({ color: 0x131c26 })
+    );
+    pane.position.set(winX, 2.35, 2.3);
+    pane.rotation.y = -Math.PI / 2;
+    this.scene.add(pane);
+    for (const [w, h, oy, oz] of [
+      [0.84, 0.07, 0.315, 0],
+      [0.84, 0.07, -0.315, 0],
+      [0.07, 0.56, 0, 0.385],
+      [0.07, 0.56, 0, -0.385],
+    ]) {
+      const strip = new THREE.Mesh(new THREE.BoxGeometry(0.05, h, w), frameMat);
+      strip.position.set(winX - 0.01, 2.35 + oy, 2.3 + oz);
+      this.scene.add(strip);
+    }
+    for (const oz of [-0.15, 0.05, 0.25]) {
+      const bar = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.011, 0.011, 0.56, 6),
+        new THREE.MeshStandardMaterial({ color: 0x2a2d31, metalness: 0.7, roughness: 0.5 })
+      );
+      bar.position.set(winX - 0.03, 2.35, 2.2 + oz);
+      this.scene.add(bar);
+    }
+    const moon = new THREE.PointLight(0x35507a, 2.4, 4.5, 2);
+    moon.position.set(winX - 0.3, 2.35, 2.3);
+    this.scene.add(moon);
+
+    /* shelf of the house's private reserve, east wall */
+    const shelf = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.04, 1.1), woodMat);
+    shelf.position.set(halfW - 0.11, 1.45, -0.8);
+    shelf.castShadow = true;
+    this.scene.add(shelf);
+    for (const bz of [-1.15, -0.85, -0.55]) {
+      const bracket = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.14, 0.04), frameMat);
+      bracket.position.set(halfW - 0.09, 1.36, bz);
+      this.scene.add(bracket);
+    }
+    this.scatterBottles([
+      [halfW - 0.12, 1.47, -1.1, false],
+      [halfW - 0.1, 1.47, -0.88, false],
+      [halfW - 0.13, 1.47, -0.62, false],
+      [halfW - 0.11, 1.47, -0.42, false],
+    ]);
+
+    /* sconces over the players' shoulders — fixtures only, the ambient
+       carries them; real lights stay budgeted for the table and neon */
+    this.sconce(-2.5, 2.25, zFront - 0.035, Math.PI, 1.5);
+    this.sconce(2.5, 2.25, zFront - 0.035, Math.PI, 1.5);
+
+    /* floor clutter: crates in one corner, a bucket that lost its mop */
+    const crate1 = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.55, 0.55), oldWoodMat);
+    crate1.position.set(3.55, 0.275, zFront - 0.75);
+    crate1.rotation.y = 0.3;
+    crate1.castShadow = true;
+    const crate2 = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.5, 0.5), oldWoodMat);
+    crate2.position.set(3.62, 0.8, zFront - 0.82);
+    crate2.rotation.y = -0.2;
+    crate2.castShadow = true;
+    const bucket = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.14, 0.11, 0.26, 14, 1, true),
+      new THREE.MeshStandardMaterial({
+        color: 0x3f4448,
+        metalness: 0.6,
+        roughness: 0.5,
+        side: THREE.DoubleSide,
+      })
+    );
+    bucket.position.set(-3.7, 0.13, zFront - 0.6);
+    bucket.castShadow = true;
+    const broom = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.014, 0.014, 1.3, 6),
+      new THREE.MeshStandardMaterial({ color: 0x6b5433, roughness: 0.9 })
+    );
+    broom.position.set(-3.35, 0.66, zFront - 0.28);
+    broom.rotation.z = 0.28;
+    const brush = new THREE.Mesh(
+      new THREE.BoxGeometry(0.26, 0.12, 0.06),
+      new THREE.MeshStandardMaterial({ color: 0x8a6f3f, roughness: 1 })
+    );
+    brush.position.set(-3.53, 0.06, zFront - 0.28);
+    this.scene.add(crate1, crate2, bucket, broom, brush);
+  }
+
+  /* a wall sconce: half-shade, glowing bulb, and optionally a real light
+     (most are set dressing — the ambient does their lifting) */
+  private sconce(x: number, y: number, z: number, ry: number, glow: number): void {
+    const g = new THREE.Group();
+    const plate = new THREE.Mesh(
+      new THREE.BoxGeometry(0.1, 0.16, 0.02),
+      new THREE.MeshStandardMaterial({ color: 0x2a2416, metalness: 0.4, roughness: 0.6 })
+    );
+    const shade = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.085, 0.045, 0.11, 12, 1, true),
+      new THREE.MeshStandardMaterial({
+        color: 0x1e3a28,
+        roughness: 0.55,
+        metalness: 0.25,
+        side: THREE.DoubleSide,
+      })
+    );
+    shade.position.set(0, 0.05, 0.07);
+    const bulb = new THREE.Mesh(
+      new THREE.SphereGeometry(0.028, 10, 8),
+      new THREE.MeshBasicMaterial({ color: 0xffe2ae })
+    );
+    bulb.position.set(0, 0.09, 0.07);
+    g.add(plate, shade, bulb);
+    g.position.set(x, y, z);
+    g.rotation.y = ry;
+    this.scene.add(g);
+    if (glow > 0) {
+      const light = new THREE.PointLight(0xffc07a, glow, 4.5, 1.8);
+      light.position.set(x, y + 0.18, z);
+      light.translateZ(0.3 * (ry === 0 ? 1 : -1));
+      this.scene.add(light);
+    }
+  }
+
+  /* dead soldiers and full ones alike: quick dark-glass bottles for the
+     shelf and the back bar. [x, y(surface), z, tippedOver] */
+  private scatterBottles(spots: [number, number, number, boolean][]): void {
+    const glassColors = [0x24402a, 0x4a2a12, 0x1e2a1a, 0x3d2317];
+    let i = 0;
+    for (const [x, y, z, tipped] of spots) {
+      const mat = new THREE.MeshStandardMaterial({
+        color: glassColors[i++ % glassColors.length],
+        roughness: 0.15,
+        metalness: 0.1,
+      });
+      const g = new THREE.Group();
+      const body = new THREE.Mesh(new THREE.CylinderGeometry(0.032, 0.035, 0.16, 10), mat);
+      body.position.y = 0.08;
+      body.castShadow = true;
+      const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.011, 0.024, 0.08, 8), mat);
+      neck.position.y = 0.19;
+      g.add(body, neck);
+      if (tipped) {
+        g.rotation.z = Math.PI / 2;
+        g.position.set(x, y + 0.035, z);
+        g.rotation.y = 0.7;
+      } else {
+        g.position.set(x, y, z);
+        g.rotation.y = i * 1.7;
+      }
+      this.scene.add(g);
     }
   }
 
@@ -329,17 +703,52 @@ export class SceneView {
     inlay.rotation.x = Math.PI / 2;
     inlay.position.y = TABLE.height + 0.004;
 
+    // apron: the skirt under the felt's edge, so the top reads as a solid
+    // slab instead of a floating disc when seen from a stool
+    const apron = new THREE.Mesh(
+      new THREE.CylinderGeometry(TABLE.radius - 0.005, TABLE.radius - 0.05, 0.15, 64, 1, true),
+      rimWood
+    );
+    apron.position.y = TABLE.height - 0.155;
+
     const pedestalWood = new THREE.MeshStandardMaterial({ map: woodTexture(), roughness: 0.7 });
     const pedestal = new THREE.Mesh(
       new THREE.CylinderGeometry(0.32, 0.52, TABLE.height - 0.08, 24),
       pedestalWood
     );
     pedestal.position.y = (TABLE.height - 0.08) / 2;
+    pedestal.castShadow = true;
+    // lathe-turned details: a collar at the top, a bulge mid-column
+    const collar = new THREE.Mesh(new THREE.TorusGeometry(0.335, 0.02, 8, 32), pedestalWood);
+    collar.rotation.x = Math.PI / 2;
+    collar.position.y = 0.65;
+    const bulge = new THREE.Mesh(new THREE.TorusGeometry(0.43, 0.035, 10, 36), pedestalWood);
+    bulge.rotation.x = Math.PI / 2;
+    bulge.position.y = 0.32;
     const base = new THREE.Mesh(
       new THREE.CylinderGeometry(0.58, 0.62, 0.05, 24),
       pedestalWood
     );
     base.position.y = 0.025;
+    // brass footrest ring for restless heels, strutted to the pedestal
+    const brassRail = new THREE.MeshStandardMaterial({
+      color: 0xe8c469,
+      metalness: 0.8,
+      roughness: 0.35,
+    });
+    const footRing = new THREE.Mesh(new THREE.TorusGeometry(0.52, 0.018, 10, 48), brassRail);
+    footRing.rotation.x = Math.PI / 2;
+    footRing.position.y = 0.22;
+    this.scene.add(collar, bulge, footRing);
+    for (let i = 0; i < 4; i++) {
+      const holder = new THREE.Group();
+      holder.rotation.y = (i / 4) * Math.PI * 2;
+      const strut = new THREE.Mesh(new THREE.CylinderGeometry(0.011, 0.011, 0.12, 6), brassRail);
+      strut.rotation.z = Math.PI / 2;
+      strut.position.set(0.47, 0.22, 0);
+      holder.add(strut);
+      this.scene.add(holder);
+    }
 
     // the shoe: wooden body with a brass lip
     const shoe = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.14, 0.16), rimWood);
@@ -353,34 +762,61 @@ export class SceneView {
     shoeLip.position.copy(SHOE_POS).add(new THREE.Vector3(0, 0.077, 0));
     shoeLip.rotation.y = -0.25;
 
-    this.scene.add(felt, rim, inlay, pedestal, base, shoe, shoeLip);
+    this.scene.add(felt, rim, inlay, apron, pedestal, base, shoe, shoeLip);
 
-    // stools: worn leather tops with a brass trim ring
+    // stools: padded leather cushions with a rolled edge over a turned
+    // column and four splayed legs — the cushion's top stays at ~0.66 so
+    // the seated figures still land on the seat
     const leather = new THREE.MeshStandardMaterial({ map: leatherTexture(), roughness: 0.65 });
     const brass = new THREE.MeshStandardMaterial({
       color: 0xe8c469,
       metalness: 0.8,
       roughness: 0.35,
     });
+    const darkWood = new THREE.MeshStandardMaterial({ color: 0x17130d, roughness: 0.6 });
     for (let i = 0; i < SEAT_COUNT; i++) {
       const p = seatPosition(i);
       const stool = new THREE.Group();
-      const top = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.2, 0.08, 18), leather);
-      top.position.y = 0.62;
-      const ring = new THREE.Mesh(new THREE.TorusGeometry(0.205, 0.011, 8, 24), brass);
-      ring.rotation.x = Math.PI / 2;
-      ring.position.y = 0.585;
-      const leg = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.04, 0.09, 0.6, 10),
-        new THREE.MeshStandardMaterial({ color: 0x17130d, roughness: 0.6 })
+      const cushion = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.215, 0.06, 24), leather);
+      cushion.position.y = 0.633;
+      const roll = new THREE.Mesh(new THREE.TorusGeometry(0.19, 0.032, 10, 28), leather);
+      roll.rotation.x = Math.PI / 2;
+      roll.position.y = 0.648;
+      const button = new THREE.Mesh(
+        new THREE.SphereGeometry(0.018, 8, 6),
+        new THREE.MeshStandardMaterial({ color: 0x3d0e10, roughness: 0.5 })
       );
-      leg.position.y = 0.3;
-      const foot = new THREE.Mesh(new THREE.TorusGeometry(0.14, 0.012, 8, 20), brass);
-      foot.rotation.x = Math.PI / 2;
-      foot.position.y = 0.16;
-      stool.add(top, ring, leg, foot);
+      button.scale.y = 0.45;
+      button.position.y = 0.664;
+      const trim = new THREE.Mesh(new THREE.TorusGeometry(0.208, 0.01, 8, 28), brass);
+      trim.rotation.x = Math.PI / 2;
+      trim.position.y = 0.605;
+      const seatPlate = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.11, 0.05, 14), darkWood);
+      seatPlate.position.y = 0.578;
+      const column = new THREE.Mesh(new THREE.CylinderGeometry(0.038, 0.052, 0.5, 12), darkWood);
+      column.position.y = 0.33;
+      const collar = new THREE.Mesh(new THREE.TorusGeometry(0.048, 0.013, 8, 16), darkWood);
+      collar.rotation.x = Math.PI / 2;
+      collar.position.y = 0.52;
+      const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.062, 0.07, 0.07, 10), darkWood);
+      hub.position.y = 0.29;
+      stool.add(cushion, roll, button, trim, seatPlate, column, collar, hub);
+      for (let l = 0; l < 4; l++) {
+        const a = (l / 4) * Math.PI * 2 + 0.4;
+        const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.016, 0.021, 0.36, 8), darkWood);
+        leg.position.set(Math.sin(a) * 0.105, 0.16, Math.cos(a) * 0.105);
+        leg.quaternion.setFromAxisAngle(_dir.set(Math.cos(a), 0, -Math.sin(a)), -0.45);
+        leg.castShadow = true;
+        stool.add(leg);
+      }
+      const footRail = new THREE.Mesh(new THREE.TorusGeometry(0.155, 0.011, 8, 24), brass);
+      footRail.rotation.x = Math.PI / 2;
+      footRail.position.y = 0.1;
+      stool.add(footRail);
+      for (const m of [cushion, roll, column, seatPlate]) m.castShadow = true;
       stool.position.set(p.x, 0, p.z);
-      stool.castShadow = true;
+      // each stool has been dragged and re-parked a thousand times
+      stool.rotation.y = i * 1.9 + 0.6;
       this.scene.add(stool);
     }
   }
@@ -1128,6 +1564,11 @@ export class SceneView {
         this.shakeAmp = 0;
       }
     }
+    // the neon buzzes: two incommensurate sines read as electrical, not tidal
+    const flick = 0.84 + 0.12 * Math.sin(now * 0.019) + 0.05 * Math.sin(now * 0.0073);
+    this.neonMat.opacity = flick;
+    this.neonLight.intensity = 3 + 4 * flick;
+
     this.debrisView.frame(dt);
     this.held.frame(dt);
     this.smoke.frame(dt);
@@ -1163,4 +1604,19 @@ function makeLighterMesh(): { group: THREE.Group; flame: THREE.Mesh } {
 
 function clamp(v: number, lo: number, hi: number): number {
   return Math.max(lo, Math.min(hi, v));
+}
+
+/* one-off canvas texture for signs and posters */
+function canvasTexture(
+  w: number,
+  h: number,
+  draw: (ctx: CanvasRenderingContext2D) => void
+): THREE.CanvasTexture {
+  const cv = document.createElement("canvas");
+  cv.width = w;
+  cv.height = h;
+  draw(cv.getContext("2d")!);
+  const tex = new THREE.CanvasTexture(cv);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
 }

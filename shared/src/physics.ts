@@ -2,7 +2,7 @@
    client web worker and the Node server — that shared config is what makes
    client prediction match server results later. */
 import RAPIER from "@dimforge/rapier3d-compat";
-import { TABLE, type V3 } from "./constants";
+import { DEN_ROOM, TABLE, type V3 } from "./constants";
 import { LOBBY_OBSTACLES, LOBBY_ROOM } from "./lobbyRoom";
 import type { Quat, ViceKind } from "./types";
 
@@ -73,8 +73,40 @@ export function createWorld(): RAPIER.World {
     );
   }
 
+  addDenRoomColliders(world);
   addLobbyRoomColliders(world);
   return world;
+}
+
+/* the den's shell: four walls and a ceiling matching the room the client
+   draws, so a hard fling clatters off the drywall instead of sailing into
+   the void and resting outside the visible room. Cuboids, per the tabletop
+   plank rule — cuboid-vs-capsule contacts are the stable kind. */
+function addDenRoomColliders(world: RAPIER.World): void {
+  const { halfW, halfD, height, centerZ } = DEN_ROOM;
+  // ceiling — skyward flings come back down into the room
+  world.createCollider(
+    RAPIER.ColliderDesc.cuboid(halfW + 0.3, 0.1, halfD + 0.3)
+      .setTranslation(0, height + 0.1, centerZ)
+      .setFriction(0.6)
+      .setRestitution(0.2)
+  );
+  // walls: inner faces exactly at the visual wall planes
+  const wallSpecs: [number, number, number, number][] = [
+    // [hx, hz, x, z]
+    [halfW + 0.3, 0.15, 0, centerZ - halfD - 0.15],
+    [halfW + 0.3, 0.15, 0, centerZ + halfD + 0.15],
+    [0.15, halfD + 0.3, -halfW - 0.15, centerZ],
+    [0.15, halfD + 0.3, halfW + 0.15, centerZ],
+  ];
+  for (const [hx, hz, x, z] of wallSpecs) {
+    world.createCollider(
+      RAPIER.ColliderDesc.cuboid(hx, height / 2 + 0.2, hz)
+        .setTranslation(x, height / 2, z)
+        .setFriction(0.5)
+        .setRestitution(0.3)
+    );
+  }
 }
 
 /* the waiting room, rebuilt as static colliders at LOBBY_WORLD_OFFSET so

@@ -421,13 +421,11 @@ export class Hud {
     const cause = $("deathCause");
     if (snap.winnerId === this.myId) {
       cause.textContent = "LAST DEGENERATE STANDING";
-      cause.style.color = "var(--amber)";
-      cause.style.textShadow = "0 0 20px rgba(233,166,58,.5)";
+      cause.style.color = "var(--bulb)";
     } else {
       cause.textContent =
         me.causeOfDeath ?? (winner ? winner.name + " OUTLASTED THE TABLE" : "THE HOUSE OUTLASTED YOU.");
       cause.style.color = "";
-      cause.style.textShadow = "";
     }
 
     $("leaderboard").innerHTML =
@@ -440,7 +438,7 @@ export class Hud {
             (p.id === snap.winnerId ? "winner " : "") +
             (p.id === this.myId ? "you " : "") +
             (p.alive ? "" : "dead");
-          const badge = p.id === snap.winnerId ? "👑 " : p.alive ? "" : "💀 ";
+          const badge = p.id === snap.winnerId ? "★ " : p.alive ? "" : "× ";
           return `<tr class="${cls}">
               <td class="num">${i + 1}</td><td class="who">${badge}${esc(p.name)}</td>
               <td class="num score">${p.score}</td>
