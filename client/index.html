@@ -112,7 +112,12 @@
     <div class="target-label" id="targetLabel">HOLD HERE</div>
   </div>
   <div id="swipeHint"><div class="arrow">▲</div>SWIPE UP<br>&amp; HOLD</div>
-  <div id="lighterGfx"><div class="flame"></div><div class="wheel"></div><div class="hood"></div><div class="body"></div></div>
+</div>
+
+<!-- game-start countdown: sim-driven, pinned above every overlay -->
+<div id="startBanner" aria-live="polite">
+  <span class="sb-label">LAST CALL</span>
+  <span class="sb-text">GAME STARTS IN <b id="startCount">10</b></span>
 </div>
 
 <!-- ============ TITLE SCREEN (attract mode over the live den) ============ -->
@@ -173,8 +178,7 @@
   <div class="marquee" id="lobbyTitle">THE TABLE</div>
   <div id="lobbyList" class="lobby-list"></div>
   <p class="tagline" id="lobbyHint"></p>
-  <button class="big-btn" id="lobbyStartBtn">START THE GAME</button>
-  <button class="big-btn secondary" id="lobbyClearBtn" style="display:none">CLEAR THE LITTER (C)</button>
+  <button class="big-btn secondary" id="lobbyClearBtn" style="display:none">CLEAR THE LITTER (O)</button>
   <p class="lobby-controls">
     <span>WASD — WANDER</span>
     <span>MOUSE — LOOK</span>
@@ -182,7 +186,7 @@
     <span>E AT A MACHINE — FREE LITTER</span>
     <span>E AT THE DOOR — START (LEADER)</span>
     <span>F — FLING YOUR EMPTY</span>
-    <span>C — CLEAR LITTER (LEADER)</span>
+    <span>O — CLEAR LITTER (LEADER)</span>
     <span>ESC — MENU</span>
   </p>
 </div>

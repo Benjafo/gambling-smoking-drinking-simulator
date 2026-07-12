@@ -40,6 +40,7 @@ import { LobbyRoomView, LOOK_SENS } from "./lobbyRoom";
 import { CardZone } from "./cards";
 import { DebrisView } from "./debris";
 import { HeldItemControl, makeBottleMesh, makeCigarMesh } from "./held";
+import { ZippoLighter } from "./zippo";
 import {
   SmokeSystem,
   CashBurst,
@@ -119,6 +120,7 @@ const _grip = new THREE.Vector3();
 const _from = new THREE.Vector3();
 const _cand = new THREE.Vector3();
 const _best = new THREE.Vector3();
+const _zippoTip = new THREE.Vector3();
 
 /* eye-contact magnetism: a reported gaze ray passing within this cone of
    someone's head locks onto it exactly (aiming through a HUD-cluttered,
@@ -174,6 +176,9 @@ export class SceneView {
 
   private ritualGhost: THREE.Group | null = null;
   private ritualGhostKind: ViceKind | null = null;
+  /* the first-person zippo — rises to the ghost cigar's tip during the
+     lighting ritual */
+  private zippo: ZippoLighter;
   private ritualRay = new THREE.Raycaster();
   private mySeat = DEFAULT_SEAT;
   private eyePos = new THREE.Vector3();
@@ -240,6 +245,7 @@ export class SceneView {
     this.ouch = new OuchBubbles(this.scene);
     this.debrisView = new DebrisView(this.scene);
     this.held = new HeldItemControl(this.scene, this.camera, send);
+    this.zippo = new ZippoLighter(this.scene);
     this.dealerZone = new CardZone(
       this.scene,
       new THREE.Vector3(0, TABLE.height + CARD_LIFT, DEALER_HAND_Z),
@@ -266,6 +272,9 @@ export class SceneView {
       this.renderer.setSize(innerWidth, innerHeight);
     });
     this.bindPointer();
+    // warm every program up front — compile() walks invisible objects too,
+    // so the zippo's flame shader and sprites don't hitch the first strike
+    this.renderer.compile(this.scene, this.camera);
     requestAnimationFrame(() => this.frame());
   }
 
@@ -535,6 +544,9 @@ export class SceneView {
             const words = lines[0].split(" ");
             words.forEach((w, i) => ctx.fillText(w, 128, 96 + i * 48));
             ctx.font = "22px 'VT323',monospace";
+            // the fine print stays inside the frame — shrink to fit
+            const sub = ctx.measureText(lines[1]).width;
+            if (sub > 218) ctx.font = `${Math.floor((22 * 218) / sub)}px 'VT323',monospace`;
             ctx.fillStyle = "#6b5836";
             ctx.fillText(lines[1], 128, 300);
           }),
@@ -1116,10 +1128,16 @@ export class SceneView {
       }
       if (this.tableLocked) {
         // free look: the gaze follows the mouse, no button held — exactly
-        // the waiting room's mechanics, just clamped to the seated pose
+        // the waiting room's mechanics, just clamped to the seated pose.
+        // Eased back in after a fling so the whip's tail doesn't jerk the view.
         const [dx, dy] = this.lookDelta(e);
-        this.yawOff = clamp(this.yawOff - dx * LOOK_SENS, -LOOK_YAW_LIMIT, LOOK_YAW_LIMIT);
-        this.pitchOff = clamp(this.pitchOff - dy * LOOK_SENS, LOOK_PITCH_MIN, LOOK_PITCH_MAX);
+        const ease = this.held.lookEase(performance.now());
+        this.yawOff = clamp(this.yawOff - dx * LOOK_SENS * ease, -LOOK_YAW_LIMIT, LOOK_YAW_LIMIT);
+        this.pitchOff = clamp(
+          this.pitchOff - dy * LOOK_SENS * ease,
+          LOOK_PITCH_MIN,
+          LOOK_PITCH_MAX
+        );
         this.applyLook();
         this.lookDirty = true; // everyone else gets to watch the head turn
         return; // crosshair hover refreshes per frame
@@ -1352,13 +1370,14 @@ export class SceneView {
     this.ritualGhost.updateMatrixWorld();
   }
 
-  /* screen position of the ghost's far tip (+Y end: ember / bottle neck) —
-     the lighter flame parks itself here */
-  ritualGhostTipScreen(): { x: number; y: number } | null {
-    if (!this.ritualGhost) return null;
-    const tip = this.ritualGhost.localToWorld(new THREE.Vector3(0, 0.075, 0));
-    const v = tip.project(this.camera);
-    return { x: ((v.x + 1) / 2) * innerWidth, y: ((1 - v.y) / 2) * innerHeight };
+  /* the zippo comes up while the drag holds the cigar in the zone;
+     frame() keeps it parked under the ghost's ember */
+  showRitualLighter(): void {
+    this.zippo.show();
+  }
+
+  hideRitualLighter(): void {
+    this.zippo.hide();
   }
 
   ritualGhostWorldPos(): THREE.Vector3 | null {
@@ -1375,6 +1394,7 @@ export class SceneView {
     if (this.ritualGhost) this.scene.remove(this.ritualGhost);
     this.ritualGhost = null;
     this.ritualGhostKind = null;
+    this.zippo.hide();
   }
 
   /* ---------------- snapshot reconcile ---------------- */
@@ -1913,6 +1933,14 @@ export class SceneView {
 
     this.debrisView.frame(dt);
     this.held.frame(dt);
+    this.zippo.frame(
+      dt,
+      now,
+      this.camera,
+      this.ritualGhost && this.ritualGhostKind === "cigar"
+        ? this.ritualGhost.localToWorld(_zippoTip.set(0, 0.074, 0))
+        : null
+    );
     this.smoke.frame(dt);
     this.cash.frame(dt);
     this.points.frame(dt);

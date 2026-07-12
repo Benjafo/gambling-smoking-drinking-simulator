@@ -45,6 +45,7 @@ export const DEAL_STEP_MS = 600;
 export const DEALER_DRAW_MS = 850;
 export const RESULT_PAUSE_MS = 1500;
 export const BETTING_WINDOW_MS = 15000; // after first commit, stragglers sit out
+export const GAME_START_COUNTDOWN_MS = 10000; // leader hit the door → banner counts down
 export const ACT_TIMEOUT_MS = 30000; // auto-stand an AFK player
 
 export const MAX_DEBRIS = 200;

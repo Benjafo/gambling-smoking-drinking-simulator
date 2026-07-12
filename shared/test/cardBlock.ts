@@ -31,7 +31,8 @@ const B = "p2";
 
 sim.applyIntent(A, { type: "join", name: "LITTERBUG" });
 sim.applyIntent(B, { type: "join", name: "BYSTANDER" });
-sim.applyIntent(A, { type: "startGame" }); // -> betting, hands still empty
+sim.applyIntent(A, { type: "startGame" }); // -> betting (after the countdown), hands still empty
+for (let i = 0; i < 60 * 11 && sim.snapshot().phase === "lobby"; i++) sim.step(); // ride out the start countdown
 
 const snap = (): Snapshot => sim.snapshot();
 const me = () => snap().players.find((q) => q.id === A)!;

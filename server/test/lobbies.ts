@@ -135,17 +135,22 @@ assert(
   "BRAVO seats BOB and CLEO only"
 );
 
-/* ---- isolation: ALPHA starts its game; BRAVO must not notice ---- */
+/* ---- isolation: ALPHA starts its game; BRAVO must not notice ----
+   (the start queues a 10s countdown — waiting it out in real time would
+   drag the suite, so the queued countdown is the proof of the start) */
 anna.send({ type: "intent", intent: { type: "startGame" } });
 anna.clear();
 for (let i = 0; i < 100; i++) {
   snap = await anna.snapshot();
-  if (snap.phase !== "lobby") break;
+  if (snap.startsIn !== null) break;
 }
-assert(snap.phase === "betting", "ALPHA's leader started ALPHA's game");
+assert(snap.startsIn !== null, "ALPHA's leader queued ALPHA's start countdown");
 bob.clear();
 const bravoSnap = await bob.snapshot();
-assert(bravoSnap.phase === "lobby", "BRAVO still sits in its lobby — other tables don't leak");
+assert(
+  bravoSnap.phase === "lobby" && bravoSnap.startsIn === null,
+  "BRAVO still sits in its lobby, no countdown — other tables don't leak"
+);
 assert(
   bravoSnap.players.every((p) => p.name !== "ANNA"),
   "no cross-lobby players in BRAVO's snapshots"

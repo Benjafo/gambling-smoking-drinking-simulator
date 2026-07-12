@@ -77,6 +77,7 @@ export class HeldItemControl {
   private pendingFling: { origin: THREE.Vector3; vel: THREE.Vector3; angVel: THREE.Vector3 } | null =
     null;
   private denyUntil = 0;
+  private releasedAt = -1e9;
 
   constructor(
     private scene: THREE.Scene,
@@ -94,6 +95,15 @@ export class HeldItemControl {
      so other players watch the wind-up */
   grabWorldPos(): THREE.Vector3 | null {
     return this.grabbing && this.heldId !== null && this.mesh ? this.mesh.position : null;
+  }
+
+  /* 0→1 multiplier on free-look input after a fling release: the whip's
+     last mouse burst would otherwise slam straight into the camera the
+     frame the drag ends. Quadratic ramp over ~a second — near-frozen right
+     after the throw, back to full speed by the end. */
+  lookEase(now: number): number {
+    const t = (now - this.releasedAt) / 900;
+    return t >= 1 ? 1 : Math.max(0, t * t);
   }
 
   apply(me: PlayerSnap | undefined): void {
@@ -208,6 +218,7 @@ export class HeldItemControl {
         ? this.samples[this.samples.length - 1].p.distanceTo(this.samples[0].p)
         : 0;
     if (travel < 0.03 && this.grabSource !== "ritual") return;
+    this.releasedAt = performance.now(); // the look ease starts at the throw
 
     let vel = new THREE.Vector3();
     if (this.samples.length >= 2) {
@@ -254,6 +265,8 @@ export class HeldItemControl {
      can't tell the difference. */
   quickFling(): boolean {
     if (!this.mesh || (this.heldId === null && this.pendingKind === null)) return false;
+    // F mid-wind-up cuts a drag short: same ease as a whip release
+    if (this.grabbing) this.releasedAt = performance.now();
     this.grabbing = false;
     const fwd = new THREE.Vector3();
     this.camera.getWorldDirection(fwd);

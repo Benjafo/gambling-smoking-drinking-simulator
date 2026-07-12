@@ -27,6 +27,7 @@ function assert(cond: unknown, msg: string): void {
   sim.applyIntent(KEEPER, { type: "join", name: "KEEPER" });
   sim.applyIntent(SPRAYER, { type: "join", name: "SPRAYER" });
   sim.applyIntent(KEEPER, { type: "startGame" });
+  for (let i = 0; i < 60 * 11 && sim.snapshot().phase === "lobby"; i++) sim.step(); // ride out the start countdown
 
   let snap: Snapshot = sim.snapshot();
   const player = (id: string) => snap.players.find((p) => p.id === id)!;
@@ -103,6 +104,7 @@ async function deadHeat(
   sim.applyIntent("a", { type: "join", name: "A" });
   sim.applyIntent("b", { type: "join", name: "B" });
   sim.applyIntent("a", { type: "startGame" });
+  for (let i = 0; i < 60 * 11 && sim.snapshot().phase === "lobby"; i++) sim.step(); // ride out the start countdown
   const A = sim.players.get("a")!;
   const B = sim.players.get("b")!;
   rig(A, B);

@@ -179,7 +179,7 @@ export class RitualControl {
         this.setRing(0);
         $("dropTarget").classList.remove("armed");
         $("targetLabel").textContent = "HOLD CIGAR HERE";
-        $("lighterGfx").classList.remove("show");
+        this.scene.hideRitualLighter();
       } else if (Math.hypot(x - this.anchorX, y - this.anchorY) > STILL_TOLERANCE) {
         // wobbled: the flame restarts
         this.anchorX = x;
@@ -269,7 +269,7 @@ export class RitualControl {
     this.scene.hideRitualGhost();
     $("dropTarget").classList.remove("show", "armed");
     $("swipeHint").classList.remove("show");
-    $("lighterGfx").classList.remove("show");
+    this.scene.hideRitualLighter();
   }
 
   private cleanup(): void {
@@ -281,17 +281,10 @@ export class RitualControl {
   }
 
   /* ---------------- flourishes ---------------- */
-  /* the flame parks under the cigar's lit end — the far tip, projected to
-     screen — not at some fixed offset from the cursor */
+  /* the 3D zippo rises to the cigar's lit end and runs its open/strike/
+     burn sequence; the scene keeps it tracked to the ember every frame */
   private showLighter(): void {
-    const tip = this.scene.ritualGhostTipScreen();
-    if (!tip) return;
-    const l = $("lighterGfx");
-    l.classList.add("show");
-    // flame center sits ~32px right of the element's left edge, near its
-    // top — park the flame just under the ember so the body hangs clear
-    l.style.left = tip.x - 32 + "px";
-    l.style.top = tip.y - 2 + "px";
+    this.scene.showRitualLighter();
   }
 
   private startSpill(): void {
