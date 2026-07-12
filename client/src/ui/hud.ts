@@ -88,8 +88,8 @@ export class Hud {
   /* ---------------- wiring ---------------- */
   private wire(): void {
     // joining lives on the main menu now (ui/menu.ts); this wires the table
-    // leader-only intents: the sim ignores them from anyone else
-    $("lobbyStartBtn").addEventListener("click", () => this.send({ type: "startGame" }));
+    // leader-only intents: the sim ignores them from anyone else.
+    // starting the game has no button — the leader walks to the door (E)
     $("lobbyClearBtn").addEventListener("click", () => this.send({ type: "clearLitter" }));
     $("retryBtn").addEventListener("click", () => this.send({ type: "restart" }));
 
@@ -424,10 +424,6 @@ export class Hud {
            </div>`
       )
       .join("");
-    const startBtn = $("lobbyStartBtn") as HTMLButtonElement;
-    startBtn.style.display = amLeader ? "" : "none";
-    startBtn.disabled = counting;
-    startBtn.textContent = counting ? "STARTING…" : "START THE GAME";
     // the janitor option: leader-only, and only worth pressing when there's
     // actually filth on the floor (either room — the count covers both)
     const clearBtn = $("lobbyClearBtn") as HTMLButtonElement;

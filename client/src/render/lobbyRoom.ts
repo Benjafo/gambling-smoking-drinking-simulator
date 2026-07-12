@@ -161,8 +161,9 @@ export class LobbyRoomView {
         else this.tryDispense();
         return;
       }
-      if (e.code === "KeyC") {
-        // the janitor key — leader-only, same intent as the lobby button
+      if (e.code === "KeyO" || e.code === "KeyC") {
+        // the janitor key (O, with C as a legacy alias) — leader-only,
+        // same intent as the lobby button
         if (this.latest?.leaderId === this.myId) this.send({ type: "clearLitter" });
         return;
       }
@@ -237,7 +238,6 @@ export class LobbyRoomView {
 
     // nicotine-stained plaster above wood wainscot, on all four walls
     const plaster = new THREE.MeshStandardMaterial({ color: 0x37301f, roughness: 0.95 });
-    const wood = woodTexture();
     const wainscotWood = woodTexture();
     wainscotWood.repeat.set(4, 1); // paneling, not one 8-meter plank
     const wainscotMat = new THREE.MeshStandardMaterial({ map: wainscotWood, roughness: 0.8 });
@@ -296,20 +296,42 @@ export class LobbyRoomView {
     // the door back to the table, +Z wall — where everyone's headed anyway.
     // Its position is shared geometry now: E within DOOR_RADIUS starts the game
     const doorX = LOBBY_DOOR.x;
-    const frameMat = new THREE.MeshStandardMaterial({ color: 0x1c150c, roughness: 0.8 });
+    const frameMat = new THREE.MeshStandardMaterial({ color: 0x0f0b06, roughness: 0.8 });
+    // painted, not wood-grain: the only green surface in a room of plaster
+    // and paneling, so the way out reads from anywhere
     const door = new THREE.Mesh(
       new THREE.BoxGeometry(0.95, 2.1, 0.06),
-      new THREE.MeshStandardMaterial({ map: wood, roughness: 0.75 })
+      new THREE.MeshStandardMaterial({ color: 0x356041, roughness: 0.5 })
     );
     door.position.set(doorX, 1.05, halfD - 0.02);
-    const lintel = new THREE.Mesh(new THREE.BoxGeometry(1.15, 0.1, 0.1), frameMat);
+    // inset panels a shade darker, slightly proud — depth the flat slab lacked
+    const panelMat = new THREE.MeshStandardMaterial({ color: 0x27452f, roughness: 0.6 });
+    for (const [py, ph] of [
+      [1.5, 0.8],
+      [0.55, 0.8],
+    ]) {
+      const panel = new THREE.Mesh(new THREE.BoxGeometry(0.62, ph, 0.03), panelMat);
+      panel.position.set(doorX, py, halfD - 0.06);
+      this.scene.add(panel);
+    }
+    // a full frame, not just a lintel — jambs make it a doorway, not wallpaper
+    const lintel = new THREE.Mesh(new THREE.BoxGeometry(1.19, 0.1, 0.12), frameMat);
     lintel.position.set(doorX, 2.15, halfD - 0.03);
-    const knob = new THREE.Mesh(
-      new THREE.SphereGeometry(0.035, 10, 8),
-      new THREE.MeshStandardMaterial({ color: 0xe8c469, metalness: 0.8, roughness: 0.3 })
-    );
+    const jambGeo = new THREE.BoxGeometry(0.12, 2.2, 0.12);
+    const jambL = new THREE.Mesh(jambGeo, frameMat);
+    jambL.position.set(doorX - 0.535, 1.1, halfD - 0.03);
+    const jambR = new THREE.Mesh(jambGeo, frameMat);
+    jambR.position.set(doorX + 0.535, 1.1, halfD - 0.03);
+    const brassDoorMat = new THREE.MeshStandardMaterial({
+      color: 0xe8c469,
+      metalness: 0.8,
+      roughness: 0.3,
+    });
+    const knob = new THREE.Mesh(new THREE.SphereGeometry(0.035, 10, 8), brassDoorMat);
     knob.position.set(doorX - 0.35, 1.02, halfD - 0.09);
-    this.scene.add(door, lintel, knob);
+    const kick = new THREE.Mesh(new THREE.BoxGeometry(0.86, 0.2, 0.02), brassDoorMat);
+    kick.position.set(doorX, 0.14, halfD - 0.06);
+    this.scene.add(door, lintel, jambL, jambR, knob, kick);
 
     // glowing sign over the door
     const tableSign = new THREE.Mesh(
@@ -385,6 +407,9 @@ export class LobbyRoomView {
             const words = lines[0].split(" ");
             words.forEach((w, i) => ctx.fillText(w, 128, 96 + i * 48));
             ctx.font = "22px 'VT323',monospace";
+            // the fine print stays inside the frame — shrink to fit
+            const sub = ctx.measureText(lines[1]).width;
+            if (sub > 218) ctx.font = `${Math.floor((22 * 218) / sub)}px 'VT323',monospace`;
             ctx.fillStyle = "#6b5836";
             ctx.fillText(lines[1], 128, 300);
           }),
@@ -892,9 +917,11 @@ export class LobbyRoomView {
     if (this.locked) {
       // free look: the gaze follows the mouse, no button held. Standard
       // FPS signs (mouse down = look down), unlike the drag path below.
+      // Eased back in after a fling so the whip's tail doesn't jerk the view.
       const [dx, dy] = this.lookDelta(e);
-      this.yaw = wrapAngle(this.yaw - dx * LOOK_SENS);
-      this.pitch = Math.max(PITCH_MIN, Math.min(PITCH_MAX, this.pitch - dy * LOOK_SENS));
+      const ease = this.held.lookEase(performance.now());
+      this.yaw = wrapAngle(this.yaw - dx * LOOK_SENS * ease);
+      this.pitch = Math.max(PITCH_MIN, Math.min(PITCH_MAX, this.pitch - dy * LOOK_SENS * ease));
       return; // crosshair hover refreshes per frame, where walking counts too
     }
     if (!this.looking) {

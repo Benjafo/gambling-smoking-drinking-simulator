@@ -544,6 +544,9 @@ export class SceneView {
             const words = lines[0].split(" ");
             words.forEach((w, i) => ctx.fillText(w, 128, 96 + i * 48));
             ctx.font = "22px 'VT323',monospace";
+            // the fine print stays inside the frame — shrink to fit
+            const sub = ctx.measureText(lines[1]).width;
+            if (sub > 218) ctx.font = `${Math.floor((22 * 218) / sub)}px 'VT323',monospace`;
             ctx.fillStyle = "#6b5836";
             ctx.fillText(lines[1], 128, 300);
           }),
@@ -1125,10 +1128,16 @@ export class SceneView {
       }
       if (this.tableLocked) {
         // free look: the gaze follows the mouse, no button held — exactly
-        // the waiting room's mechanics, just clamped to the seated pose
+        // the waiting room's mechanics, just clamped to the seated pose.
+        // Eased back in after a fling so the whip's tail doesn't jerk the view.
         const [dx, dy] = this.lookDelta(e);
-        this.yawOff = clamp(this.yawOff - dx * LOOK_SENS, -LOOK_YAW_LIMIT, LOOK_YAW_LIMIT);
-        this.pitchOff = clamp(this.pitchOff - dy * LOOK_SENS, LOOK_PITCH_MIN, LOOK_PITCH_MAX);
+        const ease = this.held.lookEase(performance.now());
+        this.yawOff = clamp(this.yawOff - dx * LOOK_SENS * ease, -LOOK_YAW_LIMIT, LOOK_YAW_LIMIT);
+        this.pitchOff = clamp(
+          this.pitchOff - dy * LOOK_SENS * ease,
+          LOOK_PITCH_MIN,
+          LOOK_PITCH_MAX
+        );
         this.applyLook();
         this.lookDirty = true; // everyone else gets to watch the head turn
         return; // crosshair hover refreshes per frame

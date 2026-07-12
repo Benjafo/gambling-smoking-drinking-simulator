@@ -268,7 +268,6 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--open);outline-o
 }
 #lobbyScreen .tagline{font-size:18px;max-width:330px;margin:0;
   text-shadow:2px 2px 0 rgba(0,0,0,.9)}
-#lobbyStartBtn{font-size:17px;padding:11px 26px}
 #lobbyClearBtn{font-size:13px;padding:9px 20px}
 #lobbyClearBtn:disabled{opacity:.4;cursor:not-allowed;transform:none}
 .lobby-controls{
