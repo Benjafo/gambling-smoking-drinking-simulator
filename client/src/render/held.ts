@@ -238,6 +238,11 @@ export class HeldItemControl {
     this.dropMesh();
   }
 
+  /* session teardown: retire the mesh, confirmed or optimistic alike */
+  reset(): void {
+    this.dropMesh();
+  }
+
   /* hands-full pickup denied: pulse the held item red twice */
   flashDeny(): void {
     if (!this.mesh || this.denyUntil > performance.now()) return;

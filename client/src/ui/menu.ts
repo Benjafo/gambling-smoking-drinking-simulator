@@ -134,10 +134,12 @@ export class MenuControl {
     this.render();
     pending
       .then((s) => {
-        this.busy = false;
+        // stay up (and busy) until the first snapshot has told the scene
+        // which room to show — main.ts calls hide() then. Hiding now would
+        // flash the den for a beat before a lobby join lands in the
+        // waiting room.
         this.joinTarget = null;
         ($("joinPassInput") as HTMLInputElement).value = "";
-        this.hide();
         this.onSession(s);
       })
       .catch((e: Error) => {
@@ -214,11 +216,13 @@ export class MenuControl {
     );
   }
   show(notice?: string): void {
+    this.busy = false; // the session is gone, however it went
     $("menuNotice").textContent = notice ?? "";
     this.error("");
     this.showTitle();
   }
   hide(): void {
+    this.busy = false;
     $("menuNotice").textContent = "";
     $("titleScreen").classList.remove("active");
     $("menuScreen").classList.remove("active");

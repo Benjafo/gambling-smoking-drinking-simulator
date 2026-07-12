@@ -31,7 +31,9 @@ import { makeFigure, poseArm } from "./figure";
 
 const PITCH_MIN = -0.55;
 const PITCH_MAX = 0.7;
-const LOOK_SENS = 0.0023; // rad per px of captured mouse travel
+/* rad per px of captured mouse travel — the table's free look imports this
+   so both rooms turn at exactly the same rate */
+export const LOOK_SENS = 0.0023;
 const WALK_ANIM_HZ = 7.5; // leg-swing speed, phase cycles per second-ish
 
 /* the crosshair's pick ray: dead center */
@@ -761,10 +763,28 @@ export class LobbyRoomView {
     } else {
       this.looking = false;
       this.dispenseHint?.classList.remove("show");
-      if (this.locked) document.exitPointerLock();
+      // the lock itself survives: the walk from the waiting room to the
+      // table keeps free look seamless (both rooms share the canvas).
+      // Session teardown exits it explicitly in main.ts.
       if (this.domElement) this.domElement.style.cursor = "";
     }
     this.syncLockUi();
+  }
+
+  /* forget the session: sweep the other players and the litter, drop any
+     held empty, and unlearn my position so the next join starts clean from
+     the server's spawn instead of correcting away from a stale one */
+  reset(): void {
+    for (const av of this.avatars.values()) this.scene.remove(av.group);
+    this.avatars.clear();
+    this.debris.apply([]);
+    this.held.reset();
+    this.latest = null;
+    this.myId = "";
+    this.posInit = false;
+    this.yaw = 0;
+    this.pitch = 0;
+    this.keys.clear();
   }
 
   apply(snap: Snapshot, myId: string): void {

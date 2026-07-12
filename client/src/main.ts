@@ -38,11 +38,19 @@ const menu = new MenuControl(startSession);
 
 function startSession(s: Session): void {
   session = s;
-  hud.sessionStart(s.tableName);
-  $("optionsBtn").classList.add("active");
+  // the menu stays on stage until the first snapshot has routed the scene
+  // (table vs waiting room) — hiding it on join would flash the den for a
+  // beat before a lobby join lands in the waiting room
+  let arrived = false;
 
   s.onSnapshot((snap) => {
     scene.apply(snap, s.playerId);
+    if (!arrived) {
+      arrived = true;
+      hud.sessionStart(s.tableName);
+      $("optionsBtn").classList.add("active");
+      menu.hide();
+    }
     hud.apply(snap, s.playerId);
     ritual.update(snap.players.find((p) => p.id === s.playerId));
     // debugging/testing hook: latest authoritative state, read-only by convention
@@ -54,6 +62,7 @@ function startSession(s: Session): void {
     document.exitPointerLock?.(); // a lost connection mustn't strand a locked cursor
     ritual.update(undefined); // cancel any half-finished gesture overlay
     hud.sessionEnd();
+    scene.sessionEnded(); // menu backdrop = the boot den: default chair, no leftovers
     $("optionsBtn").classList.remove("active");
     $("optionsScreen").classList.remove("active");
     menu.show(reason === "lost" ? "CONNECTION TO THE TABLE LOST." : undefined);
@@ -73,7 +82,7 @@ $("optionsBtn").addEventListener("click", () => toggleOptions(!optionsOpen()));
 $("titleOptionsBtn").addEventListener("click", () => toggleOptions(true));
 $("resumeBtn").addEventListener("click", () => {
   toggleOptions(false);
-  scene.captureLobbyPointer(); // straight back into mouse-look in the lobby
+  scene.capturePointer(); // straight back into mouse-look, either room
 });
 $("optionsBackBtn").addEventListener("click", () => toggleOptions(false));
 $("leaveBtn").addEventListener("click", () => session?.leave()); // onEnd does the rest
@@ -94,7 +103,7 @@ addEventListener("keydown", (e) => {
   if (session) {
     const opening = !optionsOpen();
     toggleOptions(opening);
-    if (!opening) scene.captureLobbyPointer(); // best effort — Esc grants no gesture
+    if (!opening) scene.capturePointer(); // best effort — Esc grants no gesture
   } else if (optionsOpen()) toggleOptions(false);
 });
 
