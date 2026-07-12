@@ -119,6 +119,93 @@ export class Hud {
     $("buyCigar5").addEventListener("click", () => this.send({ type: "buy", item: "cigar", qty: 5 }));
     $("buyBeer1").addEventListener("click", () => this.send({ type: "buy", item: "beer", qty: 1 }));
     $("buyBeer5").addEventListener("click", () => this.send({ type: "buy", item: "beer", qty: 5 }));
+
+    // pointer lock has no cursor to reach the dock buttons with, so the rack
+    // IS the keyboard: 1-4 stack that chip, wheel or +/- nudges one small
+    // chip at a time, ENTER deals, R rebets, BKSP clears, H/S/D act
+    addEventListener("keydown", (e) => this.onKey(e));
+    addEventListener("wheel", (e) => this.onWheel(e), { passive: true });
+
+    // holding SHIFT flips the rack into take-away mode (SHIFT+1-4 unstacks);
+    // the CSS mirrors it so the labels read -1..-4 while it's held
+    addEventListener("keydown", (e) => {
+      if (e.key === "Shift") $("chipRack").classList.add("shifted");
+    });
+    addEventListener("keyup", (e) => {
+      if (e.key === "Shift") $("chipRack").classList.remove("shifted");
+    });
+    addEventListener("blur", () => $("chipRack").classList.remove("shifted"));
+  }
+
+  /* keys stay dead while a full-screen UI owns the keyboard (title, menu,
+     options) or the user is typing in a field */
+  private keysBlocked(target: EventTarget | null): boolean {
+    const tag = (target as HTMLElement)?.tagName;
+    if (tag === "INPUT" || tag === "TEXTAREA") return true;
+    return ["titleScreen", "menuScreen", "optionsScreen"].some((id) =>
+      $(id).classList.contains("active")
+    );
+  }
+
+  private get bettingOpen(): boolean {
+    const { snap, me } = this;
+    if (!snap || !me) return false;
+    return (
+      snap.phase === "betting" &&
+      me.alive && !me.waiting && !me.committed && !me.sittingOut &&
+      me.money > 0
+    );
+  }
+  private get myTurn(): boolean {
+    const snap = this.snap;
+    return !!snap && snap.phase === "acting" && snap.turnPlayerId === this.myId;
+  }
+
+  private onKey(e: KeyboardEvent): void {
+    if (e.repeat || this.keysBlocked(e.target)) return;
+    if (this.myTurn) {
+      if (e.code === "KeyH") this.send({ type: "hit" });
+      else if (e.code === "KeyS") this.send({ type: "stand" });
+      else if (e.code === "KeyD" && !($("doubleBtn") as HTMLButtonElement).disabled)
+        this.send({ type: "double" });
+      return;
+    }
+    if (!this.bettingOpen) return;
+    const chip = ["Digit1", "Digit2", "Digit3", "Digit4"].indexOf(e.code);
+    if (chip >= 0)
+      this.adjustBet((e.shiftKey ? -1 : 1) * (chipDenoms(this.me?.money ?? 0)[chip] ?? 0));
+    else if (e.key === "Enter") {
+      this.send({ type: "setBet", amount: this.localPending });
+      this.send({ type: "commitBet" });
+    } else if (e.code === "KeyR" && (this.me?.lastBet ?? 0) > 0) this.applyPreset("rebet");
+    else if (e.key === "Backspace") this.setPending(0);
+    // key CODES, not values — SHIFT turns "-" into "_" and would eat the key
+    else if (e.code === "Equal" || e.code === "NumpadAdd") this.adjustBet(this.chipStep());
+    else if (e.code === "Minus" || e.code === "NumpadSubtract") this.adjustBet(-this.chipStep());
+  }
+
+  /* one wheel detent = one smallest chip, no matter how hard the wheel was
+     flicked — OS scroll acceleration banks pixels, and converting pixels to
+     chips made flick speed change the increment. Trackpads drip small
+     deltas, so a detent is ~100 accumulated px; a direction flip (trackpad
+     inertia wobble) clears the tab instead of stepping backwards. */
+  private wheelAcc = 0;
+  private chipStep(): number {
+    return chipDenoms(this.me?.money ?? 0)[0];
+  }
+  private onWheel(e: WheelEvent): void {
+    if (!this.bettingOpen || this.keysBlocked(e.target)) {
+      this.wheelAcc = 0;
+      return;
+    }
+    const raw = e.deltaY !== 0 ? e.deltaY : e.deltaX; // some mice re-axis
+    if (!raw) return;
+    const d = e.deltaMode === 1 ? raw * 40 : raw; // line-mode wheels (Firefox)
+    if (Math.sign(d) !== Math.sign(this.wheelAcc)) this.wheelAcc = 0;
+    this.wheelAcc += d;
+    if (Math.abs(this.wheelAcc) < 100) return;
+    this.wheelAcc = 0; // never more than one chip per event
+    this.adjustBet(d < 0 ? this.chipStep() : -this.chipStep());
   }
 
   private adjustBet(delta: number): void {
@@ -303,11 +390,11 @@ export class Hud {
     const me = this.me;
     if (!snap || !me) return;
     const inRound = me.alive && !me.waiting && !me.committed;
-    const betting = snap.phase === "betting" && inRound && !me.sittingOut && me.money > 0;
+    const betting = this.bettingOpen; // shared with the key/wheel gating
     // the DEAL ME IN panel stays up through the whole round they're skipping
     const sittingOut =
       me.sittingOut && inRound && snap.phase !== "lobby" && snap.phase !== "over";
-    const myTurn = snap.phase === "acting" && snap.turnPlayerId === this.myId;
+    const myTurn = this.myTurn;
 
     $("betPanel").style.display = betting ? "" : "none";
     $("sitOutPanel").style.display = sittingOut ? "" : "none";
@@ -328,7 +415,8 @@ export class Hud {
         : me.money <= 0 && !me.committed && !me.sittingOut
           ? "No money. No bets. Only vices remain."
           : betting
-            ? "Chips stack. Min bet $10. The meters don't wait." + closing
+            ? "1-4 stack chips, SHIFT unstacks, scroll nudges, ENTER deals. Min bet $10." +
+              closing
             : "";
     $("dockHint").textContent = hint;
 
@@ -344,6 +432,7 @@ export class Hud {
                  <button class="chip-step plus" data-denom="${v}" aria-label="Add ${chipLabel(v)}">＋</button>
                  <div class="chip-face c${i}">${chipLabel(v)}</div>
                  <button class="chip-step minus" data-denom="${v}" aria-label="Remove ${chipLabel(v)}">−</button>
+                 <kbd class="chip-key">${i + 1}</kbd>
                </div>`
           )
           .join("");
