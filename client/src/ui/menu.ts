@@ -125,7 +125,7 @@ export class MenuControl {
   private playerName(): string {
     const name = ($("nameInput") as HTMLInputElement).value.trim().slice(0, 24);
     if (name) localStorage.setItem("degen-name", name);
-    return name || "DEGENERATE";
+    return name || "GAMBLER";
   }
 
   private seat(pending: Promise<Session>): void {

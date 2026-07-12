@@ -1,4 +1,4 @@
-# Degenerate Blackjack 3D
+# Joint Liability
 
 A 3D, multiplayer-shaped rebuild of `degenerate-blackjack.html`: players sit
 around a blackjack table, gamble, chain-smoke and drink to stay alive, and
