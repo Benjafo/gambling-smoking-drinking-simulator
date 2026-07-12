@@ -77,7 +77,7 @@ export function startServer(port: number): Server {
     lobby.clients.set(ws, playerId);
     conn.lobby = lobby;
     conn.playerId = playerId;
-    const name = playerName.trim().slice(0, PLAYER_NAME_MAX) || "DEGENERATE";
+    const name = playerName.trim().slice(0, PLAYER_NAME_MAX) || "GAMBLER";
     lobby.sim.applyIntent(playerId, { type: "join", name });
     send(ws, { type: "joined", lobbyId: lobby.id, lobbyName: lobby.name, playerId });
     console.log(`${playerId} "${name}" joined ${lobby.id} "${lobby.name}" (${lobby.clients.size} seated)`);

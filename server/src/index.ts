@@ -5,4 +5,4 @@ import { startServer } from "./server";
 
 const PORT = Number(process.env.PORT ?? 8081);
 startServer(PORT);
-console.log(`degenerate blackjack house open on ws://localhost:${PORT}`);
+console.log(`blackjack house open on ws://localhost:${PORT}`);

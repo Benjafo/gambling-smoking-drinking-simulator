@@ -541,7 +541,7 @@ export class Hud {
       : amLeader
         ? snap.players.length === 1
           ? "Drinking alone is still drinking. The door starts it — walk up and press E."
-          : `${snap.players.length} degenerates seated. Start at the door — walk up and press E.`
+          : `${snap.players.length} gamblers seated. Start at the door — walk up and press E.`
         : "The leader starts the game at the door. Sit tight.";
   }
 
@@ -562,7 +562,7 @@ export class Hud {
     const winner = snap.players.find((p) => p.id === snap.winnerId);
     const cause = $("deathCause");
     if (snap.winnerId === this.myId) {
-      cause.textContent = "LAST DEGENERATE STANDING";
+      cause.textContent = "LAST GAMBLER STANDING";
       cause.style.color = "var(--bulb)";
     } else {
       cause.textContent =
@@ -572,7 +572,7 @@ export class Hud {
 
     $("leaderboard").innerHTML =
       `<table>
-         <tr><th class="num">#</th><th>DEGENERATE</th><th class="num">SCORE</th>
+         <tr><th class="num">#</th><th>GAMBLER</th><th class="num">SCORE</th>
              <th class="num">HANDS</th><th class="num">WON</th><th class="num">VICES</th></tr>` +
       ranked
         .map((p, i) => {
