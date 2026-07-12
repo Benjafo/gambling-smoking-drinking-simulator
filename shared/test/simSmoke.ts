@@ -16,6 +16,11 @@ function assert(cond: unknown, msg: string): void {
 const sim = await Simulation.create(1234);
 const ME = "p1";
 
+/* the waiting room comes pre-seeded with litter and toys — den-side
+   assertions must not count them */
+type Snap = ReturnType<typeof sim.snapshot>;
+const denDebris = (s: Snap) => s.debris.filter((d) => d.room === "den");
+
 sim.applyIntent(ME, { type: "join", name: "TESTER" });
 let snap = sim.snapshot();
 assert(snap.players.length === 1, "player joined");
@@ -110,7 +115,8 @@ assert(
     Math.hypot(flingEv.vel.x, flingEv.vel.y, flingEv.vel.z) <= MAX_FLING_SPEED + 1e-6,
   "fling event carries the clamped throw velocity"
 );
-assert(snap.debris.length === 1 && snap.debris[0].phase === "flying", "debris body flying");
+const denAfterFling = denDebris(snap);
+assert(denAfterFling.length === 1 && denAfterFling[0].phase === "flying", "debris body flying");
 
 // let physics run until it settles; the litter payout must land mid-clatter
 // (a beat after first impact), NOT at settle
@@ -120,7 +126,7 @@ let litterSeen = false;
 for (let i = 0; i < 60 * 20; i++) {
   sim.step();
   const s = sim.snapshot();
-  const d = s.debris[0];
+  const d = denDebris(s)[0];
   if (s.events.some((e) => e.t === "litter")) {
     litterSeen = true;
     litterWhileFlying = !!d && d.phase === "flying";
@@ -134,15 +140,15 @@ snap = sim.snapshot();
 assert(settled, "debris settled and froze");
 assert(litterSeen, "earned fling scored litter points");
 assert(litterWhileFlying, "litter fires shortly after first impact, before settling");
-assert(snap.debris[0].pos.y > -5, "debris rests in-bounds at y=" + snap.debris[0].pos.y.toFixed(2));
+const rested = denDebris(snap)[0];
+assert(rested.pos.y > -5, "debris rests in-bounds at y=" + rested.pos.y.toFixed(2));
 
 // pick the settled butt back up — it landed across the room, still in reach
-const settledId = snap.debris[0].id;
-sim.applyIntent(ME, { type: "pickup", itemId: settledId });
+sim.applyIntent(ME, { type: "pickup", itemId: rested.id });
 sim.step();
 snap = sim.snapshot();
 assert(snap.players[0].held?.kind === "cigar", "settled debris picked back up from afar");
-assert(snap.debris.length === 0, "picked-up debris left the world");
+assert(denDebris(snap).length === 0, "picked-up debris left the world");
 
 // hands-full pickup is DENIED, not swapped: drop the butt, drink a beer
 // (now holding the empty bottle), then try to grab the butt
@@ -158,7 +164,7 @@ sim.applyIntent(ME, {
 // settle policy trips — give it room
 for (let i = 0; i < 60 * 10; i++) sim.step();
 snap = sim.snapshot();
-const buttOnFloor = snap.debris.find((d) => d.kind === "cigar" && d.phase === "settled");
+const buttOnFloor = denDebris(snap).find((d) => d.kind === "cigar" && d.phase === "settled");
 assert(buttOnFloor !== undefined, "butt settled again");
 sim.applyIntent(ME, { type: "consumeStart", kind: "beer" });
 sim.applyIntent(ME, { type: "ritualEngage", on: true });
@@ -184,7 +190,7 @@ sim.applyIntent(ME, {
 });
 for (let i = 0; i < 12; i++) sim.step(); // ~0.2s: definitely still airborne
 snap = sim.snapshot();
-const flying = snap.debris.find((d) => d.kind === "beer" && d.phase === "flying");
+const flying = denDebris(snap).find((d) => d.kind === "beer" && d.phase === "flying");
 assert(flying !== undefined, "bottle airborne");
 sim.applyIntent(ME, { type: "pickup", itemId: flying!.id });
 sim.step();
@@ -222,7 +228,7 @@ sim.applyIntent(ME, {
 });
 sim.step();
 snap = sim.snapshot();
-const bottle = snap.debris.find((d) => d.kind === "beer");
+const bottle = denDebris(snap).find((d) => d.kind === "beer");
 assert(bottle !== undefined, "bottle spawned");
 
 console.log("\nALL SIM SMOKE TESTS PASSED");

@@ -146,7 +146,8 @@ for (let i = 0; i < 8; i++) {
   stepUntilAllSettled();
 
   const before = { count: drops.length, litters: litters.length, money: me().money };
-  const target = snap().debris.find((d) => d.phase === "settled");
+  // den only: the lobby's seeded litter is settled too, but out of reach
+  const target = snap().debris.find((d) => d.room === "den" && d.phase === "settled");
   assert(target !== undefined, "settled litter available to scavenge");
   sim.applyIntent(ME, { type: "pickup", itemId: target!.id });
   sim.step();

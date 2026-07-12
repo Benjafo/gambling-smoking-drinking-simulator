@@ -111,7 +111,7 @@ const winner = player(P1);
 const corpse = player(P2);
 assert(winner.alive, "the ritual-keeper survived");
 assert(!corpse.alive && corpse.causeOfDeath !== null, "the idle player died of sobriety");
-assert(snap.winnerId === P1, "last degenerate standing is the winner");
+assert(snap.winnerId === P1, "last gambler standing is the winner");
 assert(winner.stats.cigarsSmoked + winner.stats.beersDrunk > 0, "winner consumed vices");
 assert(winner.score > corpse.score, "vices + litter outrank a corpse on the leaderboard");
 

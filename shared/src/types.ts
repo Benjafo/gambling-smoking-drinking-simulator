@@ -2,6 +2,11 @@ import type { Card, ResultKind } from "./blackjack";
 import type { V3 } from "./constants";
 
 export type ViceKind = "cigar" | "beer";
+/* everything that can lie on a floor, be picked up, and be flung: the vice
+   empties plus the waiting room's toys. Only vices go through dispensers,
+   rituals, and the shop — the toys exist solely as seeded lobby debris. */
+export type PropKind = ViceKind | "plunger" | "stick";
+export const isVice = (k: PropKind): k is ViceKind => k === "cigar" || k === "beer";
 export type RoomPhase = "lobby" | "betting" | "dealing" | "acting" | "dealer" | "settle" | "over";
 export type DebrisPhase = "flying" | "settled";
 /* which space a piece of litter lives in: the table den, or the waiting
@@ -48,7 +53,7 @@ export interface PlayerSnap {
   ritual: { kind: ViceKind; progress: number } | null;
   /* pos is set while the owner is dragging the empty (wind-up before a
      fling) — remote clients mirror it so the throw telegraphs */
-  held: { id: number; kind: ViceKind; pos: V3 | null } | null;
+  held: { id: number; kind: PropKind; pos: V3 | null } | null;
   /* where this player's camera is pointed, relative to facing the table
      center — drives the avatar's head on everyone else's screen */
   look: { yaw: number; pitch: number };
@@ -70,7 +75,7 @@ export interface PlayerSnap {
 
 export interface DebrisSnap {
   id: number;
-  kind: ViceKind;
+  kind: PropKind;
   phase: DebrisPhase;
   room: DebrisRoom;
   /* room-local coordinates (lobby debris is NOT in table space) */

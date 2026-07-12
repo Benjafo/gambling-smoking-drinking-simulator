@@ -4,7 +4,7 @@
 import RAPIER from "@dimforge/rapier3d-compat";
 import { CARD_H, CARD_W, DEN_ROOM, TABLE, type V3 } from "./constants";
 import { LOBBY_OBSTACLES, LOBBY_ROOM } from "./lobbyRoom";
-import type { Quat, ViceKind } from "./types";
+import type { PropKind, Quat } from "./types";
 
 /* The waiting room's physics lives in the SAME world as the table, parked
   100m away so nothing ever collides across rooms. The sim adds/strips this
@@ -19,9 +19,15 @@ export function initPhysics(): Promise<void> {
 }
 export { RAPIER };
 
-export const DEBRIS_SHAPE: Record<ViceKind, { halfHeight: number; radius: number; density: number }> = {
-  beer: { halfHeight: 0.09, radius: 0.035, density: 400 },
-  cigar: { halfHeight: 0.055, radius: 0.012, density: 300 },
+export const DEBRIS_SHAPE: Record<
+  PropKind,
+  { halfHeight: number; radius: number; density: number; restitution: number }
+> = {
+  beer: { halfHeight: 0.09, radius: 0.035, density: 400, restitution: 0.35 },
+  cigar: { halfHeight: 0.055, radius: 0.012, density: 300, restitution: 0.15 },
+  /* the toys: a rubber cup bounces, a wooden cue mostly doesn't */
+  plunger: { halfHeight: 0.175, radius: 0.07, density: 250, restitution: 0.45 },
+  stick: { halfHeight: 0.43, radius: 0.018, density: 500, restitution: 0.25 },
 };
 
 /* capsules have no rolling resistance and would roll forever; damping
@@ -185,7 +191,7 @@ export function cardColliderDesc(pos: V3, rot: Quat, scale: number): RAPIER.Coll
 
 export function spawnDebrisBody(
   world: RAPIER.World,
-  kind: ViceKind,
+  kind: PropKind,
   origin: V3,
   vel: V3,
   angVel: V3,
@@ -205,7 +211,7 @@ export function spawnDebrisBody(
     RAPIER.ColliderDesc.capsule(shape.halfHeight, shape.radius)
       .setDensity(shape.density)
       .setFriction(0.7)
-      .setRestitution(kind === "beer" ? 0.35 : 0.15)
+      .setRestitution(shape.restitution)
       .setActiveEvents(RAPIER.ActiveEvents.COLLISION_EVENTS),
     body
   );

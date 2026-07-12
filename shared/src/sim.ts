@@ -78,7 +78,9 @@ import {
   LOBBY_EYE_HEIGHT,
   LOBBY_JUMP_SPEED,
   LOBBY_REACH,
+  LOBBY_SCATTER,
   LOBBY_SPAWNS,
+  LOBBY_TOYS,
   stepLobbyMove,
 } from "./lobbyRoom";
 import {
@@ -88,18 +90,21 @@ import {
   CARD_STICK_ANG_DAMPING,
   DEBRIS_LIN_DAMPING,
   DEBRIS_ANG_DAMPING,
+  DEBRIS_SHAPE,
   cardColliderDesc,
   createWorld,
   spawnDebrisBody,
   initPhysics,
   LOBBY_WORLD_OFFSET,
 } from "./physics";
+import { isVice } from "./types";
 import type {
   Intent,
   PlayerSnap,
   PlayerStats,
   DebrisRoom,
   DebrisSnap,
+  PropKind,
   SimEvent,
   Snapshot,
   RoomPhase,
@@ -108,6 +113,15 @@ import type {
 } from "./types";
 
 const msTicks = (ms: number) => Math.round((ms / 1000) * TICK_RATE);
+
+/* a capsule tipped onto its side (90° about X) then spun to a heading about
+   world Y — the resting pose of every seeded bottle, butt, and cue stick */
+function lyingQuat(yaw: number): Quat {
+  const sy = Math.sin(yaw / 2);
+  const cy = Math.cos(yaw / 2);
+  const h = Math.SQRT1_2; // sin/cos of 45°: the half-angle of the 90° tip
+  return { x: cy * h, y: sy * h, z: -sy * h, w: cy * h };
+}
 
 const freshStats = (): PlayerStats => ({
   handsPlayed: 0,
@@ -148,7 +162,16 @@ interface Player {
   /* earned: minted by finishing a ritual, not scavenged off the floor —
      only earned empties are eligible for the settle-time money drop.
      pos mirrors the owner's drag (wind-up), clamped to arm's reach. */
-  held: { id: number; kind: ViceKind; sinceTick: number; earned: boolean; pos: V3 | null } | null;
+  /* seeded rides along so provenance survives a pickup: what came with the
+     room goes back to being permanent when it lands again */
+  held: {
+    id: number;
+    kind: PropKind;
+    sinceTick: number;
+    earned: boolean;
+    seeded: boolean;
+    pos: V3 | null;
+  } | null;
   /* camera direction relative to facing the table center, client-reported */
   lookYaw: number;
   lookPitch: number;
@@ -176,7 +199,7 @@ interface Player {
 
 interface Debris {
   id: number;
-  kind: ViceKind;
+  kind: PropKind;
   phase: "flying" | "settled";
   /* which space it lives in — pos is room-local; the body's world transform
      carries LOBBY_WORLD_OFFSET for lobby debris */
@@ -190,6 +213,10 @@ interface Debris {
      from a ritual). Consumed by the one roll at settle time. */
   owner: string | null;
   earned: boolean;
+  /* came with the room (the pre-strewn dump and the toys): permanent — the
+     janitor's clear-litter and the debris cap both pass it over, and the
+     flag survives pickup→refling */
+  seeded: boolean;
   /* litter points arm on the FIRST contact with anything and pay out a beat
      later (mid-clatter); `touched` makes the arming one-shot */
   touched: boolean;
@@ -248,11 +275,72 @@ export class Simulation {
     this.world = createWorld();
     this.eventQueue = new RAPIER.EventQueue(true);
     this.shoe = buildShoe(DECKS, this.rng);
+    this.seedLobby();
   }
 
   static async create(seed: number): Promise<Simulation> {
     await initPhysics();
     return new Simulation(seed);
+  }
+
+  /* the waiting room starts furnished: the scattered bottles and butts are
+     settled debris from tick zero (pick them up, fling them), and the toys —
+     the plunger and the cue sticks — lean where they always lean. This is
+     the ONLY source of toys; nothing dispenses or spawns them later. */
+  private seedLobby(): void {
+    for (const s of LOBBY_SCATTER) {
+      if (s.kind === "paper") continue; // paper stays client-side decoration
+      const r = DEBRIS_SHAPE[s.kind].radius;
+      this.seedSettled(s.kind, { x: s.x, y: r + 0.002, z: s.z }, lyingQuat(s.roll));
+    }
+    for (const t of LOBBY_TOYS) {
+      const shape = DEBRIS_SHAPE[t.kind];
+      const halfLen = shape.halfHeight + shape.radius;
+      this.seedSettled(
+        t.kind,
+        { x: t.x, y: t.upright ? halfLen : shape.radius + 0.002, z: t.z },
+        t.upright
+          ? { x: 0, y: Math.sin(t.yaw / 2), z: 0, w: Math.cos(t.yaw / 2) }
+          : lyingQuat(t.yaw)
+      );
+    }
+  }
+
+  /* a debris entry born already at rest: fixed body, settled phase — the
+     same frozen-scenery state a flung empty ends in */
+  private seedSettled(kind: PropKind, pos: V3, rot: Quat): void {
+    const id = this.nextDebrisId++;
+    const body = spawnDebrisBody(
+      this.world,
+      kind,
+      {
+        x: pos.x + LOBBY_WORLD_OFFSET.x,
+        y: pos.y + LOBBY_WORLD_OFFSET.y,
+        z: pos.z + LOBBY_WORLD_OFFSET.z,
+      },
+      { x: 0, y: 0, z: 0 },
+      { x: 0, y: 0, z: 0 },
+      rot
+    );
+    body.setBodyType(RAPIER.RigidBodyType.Fixed, false);
+    this.colliderDebris.set(body.collider(0).handle, id);
+    this.debris.set(id, {
+      id,
+      kind,
+      phase: "settled",
+      room: "lobby",
+      body,
+      pos: { ...pos },
+      rot,
+      bornTick: 0,
+      stillTicks: 0,
+      owner: null,
+      earned: false,
+      seeded: true,
+      touched: true,
+      litterAt: null,
+      hitPlayer: true,
+    });
   }
 
   /* ---------------- intents ---------------- */
@@ -355,7 +443,7 @@ export class Simulation {
     this.seatTaken[seat] = playerId;
     this.players.set(playerId, {
       id: playerId,
-      name: name.slice(0, 24) || "DEGENERATE",
+      name: name.slice(0, 24) || "GAMBLER",
       seat,
       money: START_MONEY,
       pendingBet: 0,
@@ -404,6 +492,9 @@ export class Simulation {
   private beginRun(): void {
     this.startAtTick = null;
     for (const q of this.players.values()) {
+      // the lobby's toys stay in the lobby: pockets get emptied at the door
+      // (the phase is still "lobby" here, so the drop lands in the room)
+      if (q.held && !isVice(q.held.kind)) this.autoDrop(q);
       q.waiting = false;
       q.sittingOut = false; // a fresh run deals everyone in until they say otherwise
       q.moveDir = { x: 0, z: 0 }; // everyone stops mid-stride and takes a seat
@@ -735,14 +826,23 @@ export class Simulation {
     if (this.phase !== "lobby" || !p.alive || p.ritual || p.held) return;
     const d = LOBBY_DISPENSERS.find((s) => s.kind === kind);
     if (!d || Math.hypot(p.pos.x - d.x, p.pos.z - d.z) > DISPENSE_RADIUS) return;
-    p.held = { id: this.nextDebrisId++, kind, sinceTick: this.tick, earned: false, pos: null };
+    p.held = {
+      id: this.nextDebrisId++,
+      kind,
+      sinceTick: this.tick,
+      earned: false,
+      seeded: false,
+      pos: null,
+    };
   }
 
-  /* leader-only janitor option, from the lobby: every empty vanishes — the
-     waiting room AND the den. Items still in hands stay in hands. */
+  /* leader-only janitor option, from the lobby: every empty the PLAYERS
+     spawned vanishes — the waiting room AND the den. Items still in hands
+     stay in hands, and what came with the room (the pre-strewn dump, the
+     plunger, the sticks) isn't the janitor's to take. */
   private clearLitter(p: Player): void {
     if (this.phase !== "lobby" || p.id !== this.leaderId) return;
-    for (const d of [...this.debris.values()]) this.removeDebris(d);
+    for (const d of [...this.debris.values()]) if (!d.seeded) this.removeDebris(d);
   }
 
   private consumeStart(p: Player, kind: ViceKind): void {
@@ -785,7 +885,14 @@ export class Simulation {
     p.score += SCORE_VICE;
     this.events.push({ t: "score", playerId: p.id, points: SCORE_VICE });
     // hands are guaranteed empty here: consumeStart refuses while holding
-    p.held = { id: this.nextDebrisId++, kind, sinceTick: this.tick, earned: true, pos: null };
+    p.held = {
+      id: this.nextDebrisId++,
+      kind,
+      sinceTick: this.tick,
+      earned: true,
+      seeded: false,
+      pos: null,
+    };
   }
 
   /* ---------------- debris & fling ---------------- */
@@ -804,6 +911,9 @@ export class Simulation {
 
   private fling(p: Player, itemId: number, origin: V3, vel: V3, angVel: V3): void {
     if (!p.held || p.held.id !== itemId) return;
+    // belt-and-braces: toys are lobby-only (beginRun empties pockets, so a
+    // held plunger should never exist outside it — refuse just in case)
+    if (!isVice(p.held.kind) && this.phase !== "lobby") return;
     const eye = this.eyeOf(p);
     // clamp origin to arm's length of the seat — no teleport-throws
     const dx = origin.x - eye.x,
@@ -823,7 +933,7 @@ export class Simulation {
       y: Math.max(-maxSpin, Math.min(maxSpin, angVel.y)),
       z: Math.max(-maxSpin, Math.min(maxSpin, angVel.z)),
     };
-    this.spawnDebris(p.held.kind, o, v, av, p.id, p.held.earned);
+    this.spawnDebris(p.held.kind, o, v, av, p.id, p.held.earned, p.held.seeded);
     this.events.push({ t: "fling", playerId: p.id, id: p.held.id, vel: { ...v } });
     p.held = null;
   }
@@ -842,18 +952,22 @@ export class Simulation {
         y: this.rng.range(0.3, 0.8),
         z: (toward.z / len) * this.rng.range(0.8, 1.6),
       },
-      { x: this.rng.range(-6, 6), y: this.rng.range(-6, 6), z: this.rng.range(-6, 6) }
+      { x: this.rng.range(-6, 6), y: this.rng.range(-6, 6), z: this.rng.range(-6, 6) },
+      null,
+      false,
+      p.held.seeded
     );
     p.held = null;
   }
 
   private spawnDebris(
-    kind: ViceKind,
+    kind: PropKind,
     origin: V3,
     vel: V3,
     angVel: V3,
     owner: string | null = null,
-    earned = false
+    earned = false,
+    seeded = false
   ): void {
     const id = this.nextDebrisId++;
     const room = this.currentRoom();
@@ -880,6 +994,7 @@ export class Simulation {
       stillTicks: 0,
       owner,
       earned,
+      seeded,
       touched: false,
       litterAt: null,
       hitPlayer: false,
@@ -891,13 +1006,14 @@ export class Simulation {
     if (this.debris.size <= MAX_DEBRIS) return;
     // prefer evicting settled scenery, but never exceed the cap: the renderer
     // draws at most MAX_DEBRIS instances, so overflow would be invisible yet
-    // still collidable
+    // still collidable. What came with the room is permanent — never its turn.
     let oldest: Debris | null = null;
     for (const d of this.debris.values())
-      if (d.phase === "settled" && (!oldest || d.bornTick < oldest.bornTick)) oldest = d;
+      if (!d.seeded && d.phase === "settled" && (!oldest || d.bornTick < oldest.bornTick))
+        oldest = d;
     if (!oldest)
       for (const d of this.debris.values())
-        if (!oldest || d.bornTick < oldest.bornTick) oldest = d;
+        if (!d.seeded && (!oldest || d.bornTick < oldest.bornTick)) oldest = d;
     if (oldest) this.removeDebris(oldest);
   }
 
@@ -919,8 +1035,16 @@ export class Simulation {
     const reach = this.phase === "lobby" ? LOBBY_REACH : REACH_RADIUS;
     if (Math.hypot(d.pos.x - eye.x, d.pos.y - eye.y, d.pos.z - eye.z) > reach) return;
     this.removeDebris(d);
-    // scavenged, not earned: re-flinging floor litter never pays
-    p.held = { id: this.nextDebrisId++, kind: d.kind, sinceTick: this.tick, earned: false, pos: null };
+    // scavenged, not earned: re-flinging floor litter never pays. seeded
+    // provenance rides along so the room's own filth stays permanent.
+    p.held = {
+      id: this.nextDebrisId++,
+      kind: d.kind,
+      sinceTick: this.tick,
+      earned: false,
+      seeded: d.seeded,
+      pos: null,
+    };
   }
 
   /* the owner is dragging the empty around (the wind-up before a fling) —
@@ -1029,7 +1153,7 @@ export class Simulation {
     if (this.turnPlayerId === p.id) this.advanceTurn();
   }
 
-  /* solo runs end when the lone degenerate dies; with 2+ participants the
+  /* solo runs end when the lone gambler dies; with 2+ participants the
      last one still breathing takes the crown. A dead heat (the final players
      falling on the same tick) goes to whoever had the better run — decided
      by the cascade, never by iteration order or chance. */

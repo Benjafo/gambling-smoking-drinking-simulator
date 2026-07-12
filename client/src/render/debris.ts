@@ -1,10 +1,12 @@
-/* Instanced rendering of dropped bottles / cigar butts.
+/* Instanced rendering of dropped bottles / cigar butts / lobby toys.
    Flying items interpolate toward 20 Hz snapshot transforms; settled items
-   pin exactly. Two draw calls total no matter how filthy the floor gets. */
+   pin exactly. One draw call per kind no matter how filthy the floor gets. */
 import * as THREE from "three";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import { MAX_DEBRIS, type V3 } from "@shared/constants";
-import type { DebrisSnap, Quat, ViceKind } from "@shared/types";
+import type { DebrisSnap, PropKind, Quat } from "@shared/types";
+
+const PROP_KINDS: PropKind[] = ["beer", "cigar", "plunger", "stick"];
 
 /* Paint a whole sub-geometry one color so merged parts can share a single
    vertex-colored material — keeps debris at one draw call per kind. */
@@ -47,8 +49,27 @@ function cigarGeometry(): THREE.BufferGeometry {
   return g;
 }
 
+/* Matches makePlungerMesh; capsule half-length 0.245, cup down. */
+function plungerGeometry(): THREE.BufferGeometry {
+  return mergeGeometries([
+    colored(new THREE.CylinderGeometry(0.045, 0.07, 0.11, 14), 0x7a2417, -0.19),
+    colored(new THREE.CylinderGeometry(0.016, 0.016, 0.38, 10), 0xb08a4a, 0.055),
+    colored(new THREE.CylinderGeometry(0.024, 0.024, 0.025, 10), 0xb08a4a, 0.235),
+  ])!;
+}
+
+/* Matches makeStickMesh; a bar-room cue, capsule half-length 0.448. */
+function stickGeometry(): THREE.BufferGeometry {
+  return mergeGeometries([
+    colored(new THREE.CylinderGeometry(0.012, 0.017, 0.87, 8), 0x9a7742, -0.005),
+    colored(new THREE.CylinderGeometry(0.0145, 0.017, 0.12, 8), 0x2a1c10, -0.38),
+    colored(new THREE.CylinderGeometry(0.0125, 0.0125, 0.03, 8), 0xd9c69a, 0.415),
+    colored(new THREE.CylinderGeometry(0.0115, 0.0125, 0.014, 8), 0x4a3d22, 0.437),
+  ])!;
+}
+
 interface Tracked {
-  kind: ViceKind;
+  kind: PropKind;
   phase: "flying" | "settled";
   pos: THREE.Vector3;
   rot: THREE.Quaternion;
@@ -62,48 +83,56 @@ const _plainColor = new THREE.Color(1, 1, 1);
 const _hotColor = new THREE.Color(1.9, 1.5, 0.9); // >1 brightens: amber glow
 
 export class DebrisView {
-  private bottles: THREE.InstancedMesh;
-  private cigars: THREE.InstancedMesh;
+  private meshes: Record<PropKind, THREE.InstancedMesh>;
+  /* instanceId -> debris id, per mesh, rebuilt every frame for pick-raycasts */
+  private ids: Record<PropKind, number[]> = { beer: [], cigar: [], plunger: [], stick: [] };
   private tracked = new Map<number, Tracked>();
   private highlighted: number | null = null;
-  /* instanceId -> debris id, per mesh, rebuilt every frame for pick-raycasts */
-  bottleIds: number[] = [];
-  cigarIds: number[] = [];
 
   constructor(scene: THREE.Scene) {
-    const bottleMat = new THREE.MeshStandardMaterial({
-      vertexColors: true,
-      roughness: 0.25,
-      metalness: 0.1,
-    });
-    this.bottles = new THREE.InstancedMesh(bottleGeometry(), bottleMat, MAX_DEBRIS);
-    this.bottles.castShadow = true;
-
-    const cigarMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.85 });
-    this.cigars = new THREE.InstancedMesh(cigarGeometry(), cigarMat, MAX_DEBRIS);
-    this.cigars.castShadow = true;
-
-    // instances scatter across the room but the geometry's bounding sphere
-    // sits at the origin — default culling makes debris blink out whenever
-    // the table center leaves the frustum
-    this.bottles.frustumCulled = false;
-    this.cigars.frustumCulled = false;
-
-    this.bottles.count = 0;
-    this.cigars.count = 0;
-    scene.add(this.bottles, this.cigars);
+    const make = (
+      geo: THREE.BufferGeometry,
+      mat: THREE.MeshStandardMaterial
+    ): THREE.InstancedMesh => {
+      const mesh = new THREE.InstancedMesh(geo, mat, MAX_DEBRIS);
+      mesh.castShadow = true;
+      // instances scatter across the room but the geometry's bounding sphere
+      // sits at the origin — default culling makes debris blink out whenever
+      // the table center leaves the frustum
+      mesh.frustumCulled = false;
+      mesh.count = 0;
+      scene.add(mesh);
+      return mesh;
+    };
+    this.meshes = {
+      beer: make(
+        bottleGeometry(),
+        new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.25, metalness: 0.1 })
+      ),
+      cigar: make(
+        cigarGeometry(),
+        new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.85 })
+      ),
+      plunger: make(
+        plungerGeometry(),
+        new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.75 })
+      ),
+      stick: make(
+        stickGeometry(),
+        new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.55 })
+      ),
+    };
   }
 
   get pickables(): THREE.Object3D[] {
-    return [this.bottles, this.cigars];
+    return PROP_KINDS.map((k) => this.meshes[k]);
   }
   debrisIdFor(mesh: THREE.Object3D, instanceId: number): number | null {
-    if (mesh === this.bottles) return this.bottleIds[instanceId] ?? null;
-    if (mesh === this.cigars) return this.cigarIds[instanceId] ?? null;
+    for (const k of PROP_KINDS) if (mesh === this.meshes[k]) return this.ids[k][instanceId] ?? null;
     return null;
   }
 
-  info(id: number): { id: number; kind: ViceKind; phase: string; pos: THREE.Vector3 } | null {
+  info(id: number): { id: number; kind: PropKind; phase: string; pos: THREE.Vector3 } | null {
     const t = this.tracked.get(id);
     return t ? { id, kind: t.kind, phase: t.phase, pos: t.pos.clone() } : null;
   }
@@ -114,8 +143,8 @@ export class DebrisView {
   nearestToRay(
     ray: THREE.Ray,
     threshold: number
-  ): { id: number; kind: ViceKind; pos: THREE.Vector3 } | null {
-    let best: { id: number; kind: ViceKind; pos: THREE.Vector3 } | null = null;
+  ): { id: number; kind: PropKind; pos: THREE.Vector3 } | null {
+    let best: { id: number; kind: PropKind; pos: THREE.Vector3 } | null = null;
     let bestD = threshold;
     for (const [id, t] of this.tracked) {
       const d = ray.distanceToPoint(t.pos);
@@ -158,10 +187,7 @@ export class DebrisView {
 
   frame(dt: number): void {
     const k = 1 - Math.exp(-dt * 14);
-    let bi = 0,
-      ci = 0;
-    this.bottleIds.length = 0;
-    this.cigarIds.length = 0;
+    for (const kind of PROP_KINDS) this.ids[kind].length = 0;
     for (const [id, t] of this.tracked) {
       if (t.phase === "flying") {
         t.pos.lerp(t.targetPos, k);
@@ -170,26 +196,20 @@ export class DebrisView {
         t.pos.copy(t.targetPos);
         t.rot.copy(t.targetRot);
       }
+      const ids = this.ids[t.kind];
+      if (ids.length >= MAX_DEBRIS) continue;
       _m.compose(t.pos, t.rot, _s);
-      const hot = id === this.highlighted;
-      if (t.kind === "beer") {
-        if (bi < MAX_DEBRIS) {
-          this.bottles.setMatrixAt(bi, _m);
-          this.bottles.setColorAt(bi, hot ? _hotColor : _plainColor);
-          this.bottleIds[bi++] = id;
-        }
-      } else if (ci < MAX_DEBRIS) {
-        this.cigars.setMatrixAt(ci, _m);
-        this.cigars.setColorAt(ci, hot ? _hotColor : _plainColor);
-        this.cigarIds[ci++] = id;
-      }
+      const mesh = this.meshes[t.kind];
+      mesh.setMatrixAt(ids.length, _m);
+      mesh.setColorAt(ids.length, id === this.highlighted ? _hotColor : _plainColor);
+      ids.push(id);
     }
-    this.bottles.count = bi;
-    this.cigars.count = ci;
-    this.bottles.instanceMatrix.needsUpdate = true;
-    this.cigars.instanceMatrix.needsUpdate = true;
-    if (this.bottles.instanceColor) this.bottles.instanceColor.needsUpdate = true;
-    if (this.cigars.instanceColor) this.cigars.instanceColor.needsUpdate = true;
+    for (const kind of PROP_KINDS) {
+      const mesh = this.meshes[kind];
+      mesh.count = this.ids[kind].length;
+      mesh.instanceMatrix.needsUpdate = true;
+      if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+    }
   }
 }
 

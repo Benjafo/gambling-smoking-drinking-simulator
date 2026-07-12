@@ -3,7 +3,7 @@
    release speed and direction are the player's. */
 import * as THREE from "three";
 import { MAX_FLING_SPEED, type V3 } from "@shared/constants";
-import type { Intent, PlayerSnap, ViceKind } from "@shared/types";
+import type { Intent, PlayerSnap, PropKind } from "@shared/types";
 import { pickupSound } from "./effects";
 
 export function makeBottleMesh(): THREE.Group {
@@ -59,6 +59,66 @@ export function makeCigarMesh(spent: boolean): THREE.Group {
   return g;
 }
 
+/* the lobby's toys, matching the DEBRIS_SHAPE capsules and the instanced
+   debris geometry. A plunger: rubber cup down, worn wooden handle. */
+export function makePlungerMesh(): THREE.Group {
+  const g = new THREE.Group();
+  const wood = new THREE.MeshStandardMaterial({ color: 0xb08a4a, roughness: 0.6 });
+  const cup = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.045, 0.07, 0.11, 14),
+    new THREE.MeshStandardMaterial({ color: 0x7a2417, roughness: 0.8 })
+  );
+  cup.position.y = -0.19;
+  const handle = new THREE.Mesh(new THREE.CylinderGeometry(0.016, 0.016, 0.38, 10), wood);
+  handle.position.y = 0.055;
+  const knob = new THREE.Mesh(new THREE.CylinderGeometry(0.024, 0.024, 0.025, 10), wood);
+  knob.position.y = 0.235;
+  g.add(cup, handle, knob);
+  return g;
+}
+
+/* a bar-room cue stick: tapered shaft, wrapped butt, ferrule and worn tip */
+export function makeStickMesh(): THREE.Group {
+  const g = new THREE.Group();
+  const shaft = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.012, 0.017, 0.87, 8),
+    new THREE.MeshStandardMaterial({ color: 0x9a7742, roughness: 0.55 })
+  );
+  shaft.position.y = -0.005;
+  const wrap = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.0145, 0.017, 0.12, 8),
+    new THREE.MeshStandardMaterial({ color: 0x2a1c10, roughness: 0.85 })
+  );
+  wrap.position.y = -0.38;
+  const ferrule = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.0125, 0.0125, 0.03, 8),
+    new THREE.MeshStandardMaterial({ color: 0xd9c69a, roughness: 0.5 })
+  );
+  ferrule.position.y = 0.415;
+  const tip = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.0115, 0.0125, 0.014, 8),
+    new THREE.MeshStandardMaterial({ color: 0x4a3d22, roughness: 0.95 })
+  );
+  tip.position.y = 0.437;
+  g.add(shaft, wrap, ferrule, tip);
+  return g;
+}
+
+/* the mesh for anything that can sit in a hand — spent cigars only; the lit
+   ritual cigar is built directly where the ritual renders */
+export function makeHeldMesh(kind: PropKind): THREE.Group {
+  switch (kind) {
+    case "beer":
+      return makeBottleMesh();
+    case "cigar":
+      return makeCigarMesh(true);
+    case "plunger":
+      return makePlungerMesh();
+    case "stick":
+      return makeStickMesh();
+  }
+}
+
 const HAND_OFFSET = new THREE.Vector3(0.3, -0.26, -0.72);
 
 export class HeldItemControl {
@@ -69,7 +129,7 @@ export class HeldItemControl {
   private samples: { p: THREE.Vector3; t: number }[] = [];
   private raycaster = new THREE.Raycaster();
   /* optimistic floor-grab: mesh exists before the sim confirms the pickup */
-  private pendingKind: ViceKind | null = null;
+  private pendingKind: PropKind | null = null;
   private pendingTtl = 0;
   /* how the current grab started — a ritual-finish release drops in place
      instead of tucking back to the hand */
@@ -130,7 +190,7 @@ export class HeldItemControl {
       }
       this.dropMesh();
       this.heldId = held.id;
-      this.mesh = held.kind === "beer" ? makeBottleMesh() : makeCigarMesh(true);
+      this.mesh = makeHeldMesh(held.kind);
       this.mesh.add(hitProxy());
       this.scene.add(this.mesh);
     } else if (!held && this.heldId !== null) {
@@ -143,11 +203,11 @@ export class HeldItemControl {
 
   /* pointerdown landed on settled debris: enter the drag state immediately;
      the pickup intent is in flight and apply() reconciles the answer */
-  beginFloorGrab(kind: ViceKind, worldPos: THREE.Vector3): void {
+  beginFloorGrab(kind: PropKind, worldPos: THREE.Vector3): void {
     this.dropMesh();
     this.pendingKind = kind;
     this.pendingTtl = 20; // snapshots (~1s) before we give up on the sim
-    this.mesh = kind === "beer" ? makeBottleMesh() : makeCigarMesh(true);
+    this.mesh = makeHeldMesh(kind);
     this.mesh.add(hitProxy());
     this.mesh.position.copy(worldPos);
     this.scene.add(this.mesh);

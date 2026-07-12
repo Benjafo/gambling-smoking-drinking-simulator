@@ -34,9 +34,11 @@ export const LOBBY_MAX_FEET_Y = LOBBY_ROOM.height - 1.7;
 /* circle colliders for the furniture the client builds at these spots.
    `h` is the collider height flung debris bounces off; `stand` is where a
    jumping player's feet rest, when that differs (the couch blocks at
-   backrest height but you stand on the cushions). Small clutter (bottles,
-   butts, papers) is client-only decoration and deliberately absent — you
-   wade through trash, you don't trip on it. */
+   backrest height but you stand on the cushions). Small clutter is
+   deliberately absent from the WALKING model — you wade through trash, you
+   don't trip on it. (The bottles and butts ARE seeded as settled debris
+   bodies — see LOBBY_SCATTER — but players are kinematic and never consult
+   Rapier, so only flung litter clatters against them.) */
 export interface LobbyObstacle {
   x: number;
   z: number;
@@ -76,6 +78,59 @@ export const DOOR_RADIUS = 1.2;
 /* on your feet you can walk to litter — no need for the table's room-wide
    seated reach */
 export const LOBBY_REACH = 2.2;
+
+/* the floor's pre-strewn filth, scattered deterministically (the same dump
+   every visit), kept off the spawn clearing and out of the furniture. The
+   bottles and butts are REAL: the sim seeds them as settled debris, so they
+   can be picked up and flung like anything else — but they came with the
+   room, so the janitor's clear-litter never touches them (only litter the
+   players spawned gets swept). Paper stays client-only decoration. The
+   generator mirrors the client's old buildTrash() LCG so the room looks
+   exactly like it always did. */
+export type LobbyScatterKind = ViceKind | "paper";
+export interface LobbyScatterItem {
+  kind: LobbyScatterKind;
+  x: number;
+  z: number;
+  /* the lie's heading — how far it rolled before it stopped */
+  roll: number;
+}
+export const LOBBY_SCATTER: LobbyScatterItem[] = (() => {
+  let s = 0xdeadbeef >>> 0;
+  const rnd = () => ((s = (s * 1664525 + 1013904223) >>> 0), s / 0xffffffff);
+  const items: LobbyScatterItem[] = [];
+  while (items.length < 22) {
+    const x = (rnd() * 2 - 1) * (LOBBY_ROOM.halfW - 0.45);
+    const z = (rnd() * 2 - 1) * (LOBBY_ROOM.halfD - 0.45);
+    if (Math.hypot(x, z) < 1.15) continue; // keep the spawn clearing walkable-looking
+    if (LOBBY_OBSTACLES.some((o) => Math.hypot(x - o.x, z - o.z) < o.r + 0.15)) continue;
+    const k = rnd();
+    items.push({
+      kind: k < 0.4 ? "beer" : k < 0.7 ? "cigar" : "paper",
+      x,
+      z,
+      roll: rnd() * Math.PI * 2,
+    });
+  }
+  return items;
+})();
+
+/* the waiting room's toys: a plunger standing in the far corner and a pair
+   of cue sticks dropped under the dartboard. Seeded once as settled debris —
+   grab and fling them like any empty — but never dispensed, never spawned
+   anywhere else, and the janitor's clear-litter spares them. */
+export interface LobbyToy {
+  kind: "plunger" | "stick";
+  x: number;
+  z: number;
+  yaw: number;
+  upright?: boolean;
+}
+export const LOBBY_TOYS: LobbyToy[] = [
+  { kind: "plunger", x: 3.7, z: -2.75, yaw: 0.4, upright: true },
+  { kind: "stick", x: -3.8, z: -1.15, yaw: 0.15 },
+  { kind: "stick", x: -3.68, z: -1.5, yaw: -0.35 },
+];
 
 /* where joiners appear (indexed by seat, so re-seats reuse spots), facing
    the door on the +Z wall. yaw convention matches seatAngle: 0 faces +Z,
