@@ -68,6 +68,11 @@ export const LOBBY_DISPENSERS: { kind: ViceKind; x: number; z: number }[] = [
   { kind: "beer", x: -3.75, z: 0.0 },
 ];
 export const DISPENSE_RADIUS = 1.35;
+/* the door back to the table, +Z wall — the leader starts the game from
+   here: stand within DOOR_RADIUS and press E. Purely a client-side
+   interaction anchor; the sim gates startGame on leadership, not position. */
+export const LOBBY_DOOR = { x: 0.6, z: LOBBY_ROOM.halfD };
+export const DOOR_RADIUS = 1.2;
 /* on your feet you can walk to litter — no need for the table's room-wide
    seated reach */
 export const LOBBY_REACH = 2.2;

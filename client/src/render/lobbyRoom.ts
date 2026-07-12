@@ -13,7 +13,9 @@
 import * as THREE from "three";
 import {
   DISPENSE_RADIUS,
+  DOOR_RADIUS,
   LOBBY_DISPENSERS,
+  LOBBY_DOOR,
   LOBBY_EYE_HEIGHT,
   LOBBY_JUMP_SPEED,
   LOBBY_OBSTACLES,
@@ -155,7 +157,13 @@ export class LobbyRoomView {
       if (!this.active || (e.target as HTMLElement)?.tagName === "INPUT") return;
       if (e.code === "KeyE") {
         this.captureLook(); // any gameplay key re-arms mouse-look (Esc can't)
-        this.tryDispense();
+        if (this.nearDoor()) this.tryStartAtDoor();
+        else this.tryDispense();
+        return;
+      }
+      if (e.code === "KeyC") {
+        // the janitor key — leader-only, same intent as the lobby button
+        if (this.latest?.leaderId === this.myId) this.send({ type: "clearLitter" });
         return;
       }
       if (e.code === "Space") {
@@ -285,8 +293,9 @@ export class LobbyRoomView {
     hangBulb(-1.4, -0.9, true);
     hangBulb(1.8, 1.0, false);
 
-    // the door back to the table, +Z wall — where everyone's headed anyway
-    const doorX = 0.6;
+    // the door back to the table, +Z wall — where everyone's headed anyway.
+    // Its position is shared geometry now: E within DOOR_RADIUS starts the game
+    const doorX = LOBBY_DOOR.x;
     const frameMat = new THREE.MeshStandardMaterial({ color: 0x1c150c, roughness: 0.8 });
     const door = new THREE.Mesh(
       new THREE.BoxGeometry(0.95, 2.1, 0.06),
@@ -857,6 +866,12 @@ export class LobbyRoomView {
       this.beginVirtualCursor(e);
       return;
     }
+    if (this.locked && this.held.grabHeld()) {
+      // locked, holding, crosshair on nothing: the click means the empty
+      // in your hand — the wind-up starts from the center
+      this.beginVirtualCursor(e);
+      return;
+    }
     this.looking = true; // drag fallback: touch, or the lock was refused
     this.lastPointer = { x: e.clientX, y: e.clientY };
   }
@@ -973,6 +988,20 @@ export class LobbyRoomView {
     );
   }
 
+  private nearDoor(): boolean {
+    return (
+      this.posInit &&
+      Math.hypot(this.myPos.x - LOBBY_DOOR.x, this.myPos.z - LOBBY_DOOR.z) <= DOOR_RADIUS
+    );
+  }
+
+  /* the door IS the start button: the leader stands at it and presses E;
+     anyone else knocking gets the deny buzz (the hint says why) */
+  private tryStartAtDoor(): void {
+    if (this.latest?.leaderId === this.myId) this.send({ type: "startGame" });
+    else denySound();
+  }
+
   /* predict the hop immediately; the sim keeps its own grounded record, so
      the intent is a request, not a command */
   private tryJump(): void {
@@ -998,13 +1027,21 @@ export class LobbyRoomView {
   private updateDispenseHint(): void {
     const el = this.dispenseHint;
     if (!el) return;
+    if (this.nearDoor()) {
+      el.textContent =
+        this.latest?.leaderId === this.myId
+          ? "PRESS E — START THE GAME"
+          : "THE LEADER OPENS THIS DOOR";
+      el.classList.add("show");
+      return;
+    }
     const d = this.nearDispenser();
     if (!d) {
       el.classList.remove("show");
       return;
     }
     el.textContent = this.held.hasHeld
-      ? "HANDS FULL — FLING IT FIRST"
+      ? "HANDS FULL — PRESS F TO FLING IT"
       : d.kind === "beer"
         ? "PRESS E — GRAB A BEER"
         : "PRESS E — GRAB A SMOKE";

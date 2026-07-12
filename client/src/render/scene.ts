@@ -1081,6 +1081,13 @@ export class SceneView {
         capture(e);
         return;
       }
+      if (this.tableLocked && this.held.grabHeld()) {
+        // locked, holding, crosshair on nothing: the click means the empty
+        // in your hand — the wind-up starts from the center
+        this.beginVirtualCursor(e);
+        capture(e);
+        return;
+      }
       this.looking = true; // drag fallback: touch, or the lock was refused
       this.lastPointer = { x: e.clientX, y: e.clientY };
       capture(e);
@@ -1148,6 +1155,21 @@ export class SceneView {
     // crosshair for lobby mode before this one takes over for the table
     document.addEventListener("pointerlockchange", () => {
       if (this.mode === "table") this.syncTableLockUi();
+    });
+    // F flings the held empty along the gaze — the keyboard path that works
+    // wherever the cursor doesn't (pointer lock has no cursor to aim with)
+    addEventListener("keydown", (e) => {
+      if (e.code !== "KeyF" || e.repeat) return;
+      if ((e.target as HTMLElement)?.tagName === "INPUT") return;
+      if (!this.latest) return;
+      if (
+        this.titleScreenEl.classList.contains("active") ||
+        this.menuScreenEl.classList.contains("active") ||
+        this.optionsScreenEl.classList.contains("active")
+      )
+        return;
+      const held = this.mode === "lobby" ? this.lobbyRoom.held : this.held;
+      held.quickFling();
     });
   }
 
