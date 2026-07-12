@@ -150,8 +150,9 @@ export type Intent =
   | { type: "pickup"; itemId: number }
   | { type: "look"; yaw: number; pitch: number }
   /* lobby-room walking: a held input direction (world-space, unit or less)
-     plus facing; the sim integrates it every tick until it changes */
-  | { type: "move"; dirX: number; dirZ: number; yaw: number }
+     plus facing; the sim integrates it every tick until it changes. `run`
+     (SHIFT held) picks the faster of two fixed speeds — never a free scalar */
+  | { type: "move"; dirX: number; dirZ: number; yaw: number; run?: boolean }
   /* lobby-room hop: an impulse, honored only with feet on something */
   | { type: "jump" }
   | { type: "restart" };

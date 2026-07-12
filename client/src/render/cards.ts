@@ -115,7 +115,7 @@ function faceMaterial(tex: THREE.CanvasTexture): THREE.MeshStandardMaterial {
     roughness: 0.55,
     emissive: 0xffffff,
     emissiveMap: tex,
-    emissiveIntensity: 0.55,
+    emissiveIntensity: 0.35,
   });
 }
 

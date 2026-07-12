@@ -41,13 +41,15 @@ export class RitualControl {
     this.bindKeys();
   }
 
-  /* hold-to-do-it keys: 1 lights the cigar, 2 pours the beer — the path
+  /* hold-to-do-it keys: C lights the cigar, B pours the beer — the path
      for pointer-locked play, where there's no cursor to drag the item
-     with. Keydown starts the ritual engaged (the sim runs the clock);
+     with. Letters, not digits: the chip rack owns 1-4 while betting is
+     open, so digit vice keys were dead exactly when the nerves hit.
+     Keydown starts the ritual engaged (the sim runs the clock);
      releasing before it finishes spills the attempt, exactly like
      dropping the drag gesture. */
   private bindKeys(): void {
-    const kinds: Record<string, ViceKind> = { Digit1: "cigar", Digit2: "beer" };
+    const kinds: Record<string, ViceKind> = { KeyC: "cigar", KeyB: "beer" };
     addEventListener("keydown", (e) => {
       const kind = kinds[e.code];
       if (!kind || e.repeat || this.active) return;
@@ -55,13 +57,10 @@ export class RitualControl {
       // table chrome only: no HUD (menu) or waiting room (nothing to smoke)
       if (!$("hud").classList.contains("active")) return;
       if (document.body.classList.contains("lobby-room")) return;
-      // while the bet panel is up the digits stack chips (ui/hud.ts) —
-      // commit the bet first, then 1/2 light and pour again
-      if ($("betPanel").style.display !== "none") return;
       if (this.items[kind].classList.contains("disabled")) return;
       this.holdKey = kind;
       this.start(kind, 0, 0, true);
-      $("targetLabel").textContent = kind === "cigar" ? "KEEP HOLDING 1…" : "KEEP HOLDING 2…";
+      $("targetLabel").textContent = kind === "cigar" ? "KEEP HOLDING C…" : "KEEP HOLDING B…";
     });
     addEventListener("keyup", (e) => {
       const kind = kinds[e.code];

@@ -116,6 +116,7 @@ export class LobbyRoomView {
   private crosshairEl = document.getElementById("crosshair");
   private keys = new Set<string>();
   private lastSentDir = { x: 0, z: 0 };
+  private lastSentRun = false;
   private lastSentYaw = 0;
   private lastMoveSent = 0;
 
@@ -162,9 +163,9 @@ export class LobbyRoomView {
         else this.tryDispense();
         return;
       }
-      if (e.code === "KeyO" || e.code === "KeyC") {
-        // the janitor key (O, with C as a legacy alias) — leader-only,
-        // same intent as the lobby button
+      if (e.code === "KeyO") {
+        // the janitor key — leader-only, same intent as the lobby button.
+        // (C used to be an alias; it's the cigar hold-key at the table now)
         if (this.latest?.leaderId === this.myId) this.send({ type: "clearLitter" });
         return;
       }
@@ -179,6 +180,9 @@ export class LobbyRoomView {
         this.keys.add(e.code);
         e.preventDefault();
       }
+      // SHIFT is the run gear — tracked like a direction key so keyup/blur
+      // clear it the same way
+      if (e.code === "ShiftLeft" || e.code === "ShiftRight") this.keys.add(e.code);
     });
     addEventListener("keyup", (e) => this.keys.delete(e.code));
     // alt-tabbing away with W held would walk you into a wall forever
@@ -1085,10 +1089,12 @@ export class LobbyRoomView {
       dirZ = 0;
     }
 
+    const run = this.keys.has("ShiftLeft") || this.keys.has("ShiftRight");
+
     if (this.posInit) {
       // prediction: exactly the sim's step, at render rate — every frame,
       // gravity and landings don't wait for key input
-      stepLobbyMove(this.motion, dirX, dirZ, dt);
+      stepLobbyMove(this.motion, dirX, dirZ, dt, run);
       // fold in the server's opinion of where I am
       if (this.correction.lengthSq() > 1e-8) {
         const k = Math.min(1, dt * 4);
@@ -1107,10 +1113,13 @@ export class LobbyRoomView {
       // tell the sim about held input: direction changes go out immediately,
       // facing drift goes out on a slow beat
       const dirChanged =
-        Math.abs(dirX - this.lastSentDir.x) > 1e-3 || Math.abs(dirZ - this.lastSentDir.z) > 1e-3;
+        Math.abs(dirX - this.lastSentDir.x) > 1e-3 ||
+        Math.abs(dirZ - this.lastSentDir.z) > 1e-3 ||
+        run !== this.lastSentRun;
       const yawChanged = Math.abs(wrapAngle(this.yaw - this.lastSentYaw)) > 0.05;
       if (this.active && (dirChanged || (yawChanged && now - this.lastMoveSent > 150))) {
         this.lastSentDir = { x: dirX, z: dirZ };
+        this.lastSentRun = run;
         this.lastSentYaw = this.yaw;
         this.lastMoveSent = now;
         this.send({
@@ -1118,6 +1127,7 @@ export class LobbyRoomView {
           dirX: Math.round(dirX * 1000) / 1000,
           dirZ: Math.round(dirZ * 1000) / 1000,
           yaw: Math.round(this.yaw * 100) / 100,
+          run,
         });
       }
     }

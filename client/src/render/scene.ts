@@ -238,6 +238,11 @@ export class SceneView {
   private neonLight!: THREE.PointLight;
   /* the hanging lamp's parts, so the title screen can make its wiring act up */
   private tableSpot!: THREE.SpotLight;
+  /* the lamp's base brightness — frame() re-applies it through the title-
+     screen flicker every frame, so tune THIS, not a literal on the light.
+     20 keeps the pool of light but stops the card faces (and the felt)
+     from clipping to white under ACES — at 70 the pips washed to pastel */
+  private spotIntensity = 20;
   /* lamplight bounced off the felt onto the dealer — rides the same wiring */
   private dealerFill!: THREE.PointLight;
   private lampBulbMat!: THREE.MeshBasicMaterial;
@@ -315,7 +320,7 @@ export class SceneView {
     this.scene.add(new THREE.HemisphereLight(0x564a33, 0x120d08, 1.0));
     // the spot hangs from the lamp over the table; high penumbra melts the
     // pool's edge into the ambient murk instead of stamping a hard circle
-    const spot = new THREE.SpotLight(0xffdca8, 70, 12, Math.PI / 3.1, 0.8, 1.5);
+    const spot = new THREE.SpotLight(0xffdca8, this.spotIntensity, 12, Math.PI / 3.1, 0.8, 1.5);
     spot.position.set(0, 2.65, 0);
     spot.target.position.set(0, TABLE.height, 0);
     spot.castShadow = true;
@@ -1935,7 +1940,7 @@ export class SceneView {
       else if (t > 9220 && t < 9280) lampF = 0.5;
       else if (t > 12960 && t < 13010) lampF = 0.25;
     }
-    this.tableSpot.intensity = 70 * lampF;
+    this.tableSpot.intensity = this.spotIntensity * lampF;
     this.dealerFill.intensity = 2 * lampF; // felt bounce dies with the lamp
     this.lampBulbMat.color.setHex(0xfff2cf).multiplyScalar(lampF);
     this.lampInnerMat.color.setHex(0xffe2ae).multiplyScalar(lampF);
