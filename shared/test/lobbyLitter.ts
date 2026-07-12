@@ -140,19 +140,17 @@ sim.applyIntent(P1, {
 for (let i = 0; i < TICK_RATE; i++) sim.step();
 assert(fresh(sim.snapshot()).length === 1, "reflung empty is back on the floor");
 
-/* ---- clear litter: leader-only, lobby-only, and the toys survive ---- */
+/* ---- clear litter: leader-only, lobby-only, and only what the players
+   spawned — the room's own dump and its toys aren't the janitor's ---- */
 const seededCount = sim.snapshot().debris.length - 1; // everything but the refling
 sim.applyIntent(P2, { type: "clearLitter" });
 assert(sim.snapshot().debris.length === seededCount + 1, "a non-leader can't clear the litter");
 sim.applyIntent(P1, { type: "clearLitter" });
 s = sim.snapshot();
+assert(fresh(s).length === 0, "the leader's clear-litter sweeps the machine litter");
 assert(
-  s.debris.every((d) => d.kind === "plunger" || d.kind === "stick"),
-  "the leader's clear-litter sweeps every empty"
-);
-assert(
-  s.debris.length > 0 && fresh(s).length === 0,
-  "the toys aren't litter: the plunger and sticks survive the sweep"
+  s.debris.length === seededCount,
+  "the pre-existing dump and the toys survive the sweep"
 );
 
 /* ---- none of it leaks into the game ---- */

@@ -32,7 +32,10 @@ import { HeldItemControl, makeBottleMesh, makeCigarMesh } from "./held";
 import { denySound, pickupSound } from "./effects";
 import { makeFigure, poseArm } from "./figure";
 
-const PITCH_MIN = -0.55;
+/* you must be able to look at your own feet: pickup reach is 2.2m, and at
+   the old -0.55 clamp the crosshair could only touch floor 2.38m+ away —
+   every piece of litter close enough to grab sat below the screen edge */
+const PITCH_MIN = -1.25;
 const PITCH_MAX = 0.7;
 /* rad per px of captured mouse travel — the table's free look imports this
    so both rooms turn at exactly the same rate */

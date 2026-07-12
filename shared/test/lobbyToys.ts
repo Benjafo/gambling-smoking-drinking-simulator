@@ -95,6 +95,33 @@ assert(flungPlunger?.phase === "settled", "the plunger settles like any empty");
 assert(flungPlunger!.room === "lobby", "and stays lobby debris");
 assert(!scored && me().score === 0, "toy flings score nothing and pay nothing");
 
+/* ---- clear-litter can't take what came with the room ----
+   even the re-flung plunger keeps its seeded provenance, while a
+   machine-dispensed bottle sweeps like the litter it is */
+const census = snap().debris.length;
+sim.applyIntent(P1, { type: "clearLitter" });
+assert(
+  snap().debris.length === census,
+  "clear-litter sweeps nothing — everything here came with the room"
+);
+standNear(-3.0, 0); // at the beer fridge
+sim.applyIntent(P1, { type: "dispense", kind: "beer" });
+assert(me().held?.kind === "beer", "fridge handed over a bottle");
+sim.applyIntent(P1, {
+  type: "fling",
+  itemId: me().held!.id,
+  origin: { x: -3.0, y: 1.4, z: 0 },
+  vel: { x: 2, y: 2, z: 1 },
+  angVel: { x: 3, y: 1, z: 2 },
+});
+sim.step();
+assert(snap().debris.length === census + 1, "the dispensed bottle joined the floor");
+sim.applyIntent(P1, { type: "clearLitter" });
+assert(
+  snap().debris.length === census,
+  "clear-litter takes ONLY the machine-spawned bottle"
+);
+
 /* ---- a held toy never reaches the den: pockets empty at the door ---- */
 const stick = snap().debris.find((d) => d.kind === "stick")!;
 standNear(stick.pos.x + 0.5, stick.pos.z - 0.15);

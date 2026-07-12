@@ -82,9 +82,11 @@ export const LOBBY_REACH = 2.2;
 /* the floor's pre-strewn filth, scattered deterministically (the same dump
    every visit), kept off the spawn clearing and out of the furniture. The
    bottles and butts are REAL: the sim seeds them as settled debris, so they
-   can be picked up and flung like anything else. Paper stays client-only
-   decoration. The generator mirrors the client's old buildTrash() LCG so
-   the room looks exactly like it always did. */
+   can be picked up and flung like anything else — but they came with the
+   room, so the janitor's clear-litter never touches them (only litter the
+   players spawned gets swept). Paper stays client-only decoration. The
+   generator mirrors the client's old buildTrash() LCG so the room looks
+   exactly like it always did. */
 export type LobbyScatterKind = ViceKind | "paper";
 export interface LobbyScatterItem {
   kind: LobbyScatterKind;

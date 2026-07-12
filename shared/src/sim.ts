@@ -162,7 +162,16 @@ interface Player {
   /* earned: minted by finishing a ritual, not scavenged off the floor —
      only earned empties are eligible for the settle-time money drop.
      pos mirrors the owner's drag (wind-up), clamped to arm's reach. */
-  held: { id: number; kind: PropKind; sinceTick: number; earned: boolean; pos: V3 | null } | null;
+  /* seeded rides along so provenance survives a pickup: what came with the
+     room goes back to being permanent when it lands again */
+  held: {
+    id: number;
+    kind: PropKind;
+    sinceTick: number;
+    earned: boolean;
+    seeded: boolean;
+    pos: V3 | null;
+  } | null;
   /* camera direction relative to facing the table center, client-reported */
   lookYaw: number;
   lookPitch: number;
@@ -204,6 +213,10 @@ interface Debris {
      from a ritual). Consumed by the one roll at settle time. */
   owner: string | null;
   earned: boolean;
+  /* came with the room (the pre-strewn dump and the toys): permanent — the
+     janitor's clear-litter and the debris cap both pass it over, and the
+     flag survives pickup→refling */
+  seeded: boolean;
   /* litter points arm on the FIRST contact with anything and pay out a beat
      later (mid-clatter); `touched` makes the arming one-shot */
   touched: boolean;
@@ -323,6 +336,7 @@ export class Simulation {
       stillTicks: 0,
       owner: null,
       earned: false,
+      seeded: true,
       touched: true,
       litterAt: null,
       hitPlayer: true,
@@ -812,15 +826,23 @@ export class Simulation {
     if (this.phase !== "lobby" || !p.alive || p.ritual || p.held) return;
     const d = LOBBY_DISPENSERS.find((s) => s.kind === kind);
     if (!d || Math.hypot(p.pos.x - d.x, p.pos.z - d.z) > DISPENSE_RADIUS) return;
-    p.held = { id: this.nextDebrisId++, kind, sinceTick: this.tick, earned: false, pos: null };
+    p.held = {
+      id: this.nextDebrisId++,
+      kind,
+      sinceTick: this.tick,
+      earned: false,
+      seeded: false,
+      pos: null,
+    };
   }
 
-  /* leader-only janitor option, from the lobby: every empty vanishes — the
-     waiting room AND the den. Items still in hands stay in hands, and the
-     toys aren't litter: the plunger and the sticks survive the sweep. */
+  /* leader-only janitor option, from the lobby: every empty the PLAYERS
+     spawned vanishes — the waiting room AND the den. Items still in hands
+     stay in hands, and what came with the room (the pre-strewn dump, the
+     plunger, the sticks) isn't the janitor's to take. */
   private clearLitter(p: Player): void {
     if (this.phase !== "lobby" || p.id !== this.leaderId) return;
-    for (const d of [...this.debris.values()]) if (isVice(d.kind)) this.removeDebris(d);
+    for (const d of [...this.debris.values()]) if (!d.seeded) this.removeDebris(d);
   }
 
   private consumeStart(p: Player, kind: ViceKind): void {
@@ -863,7 +885,14 @@ export class Simulation {
     p.score += SCORE_VICE;
     this.events.push({ t: "score", playerId: p.id, points: SCORE_VICE });
     // hands are guaranteed empty here: consumeStart refuses while holding
-    p.held = { id: this.nextDebrisId++, kind, sinceTick: this.tick, earned: true, pos: null };
+    p.held = {
+      id: this.nextDebrisId++,
+      kind,
+      sinceTick: this.tick,
+      earned: true,
+      seeded: false,
+      pos: null,
+    };
   }
 
   /* ---------------- debris & fling ---------------- */
@@ -904,7 +933,7 @@ export class Simulation {
       y: Math.max(-maxSpin, Math.min(maxSpin, angVel.y)),
       z: Math.max(-maxSpin, Math.min(maxSpin, angVel.z)),
     };
-    this.spawnDebris(p.held.kind, o, v, av, p.id, p.held.earned);
+    this.spawnDebris(p.held.kind, o, v, av, p.id, p.held.earned, p.held.seeded);
     this.events.push({ t: "fling", playerId: p.id, id: p.held.id, vel: { ...v } });
     p.held = null;
   }
@@ -923,7 +952,10 @@ export class Simulation {
         y: this.rng.range(0.3, 0.8),
         z: (toward.z / len) * this.rng.range(0.8, 1.6),
       },
-      { x: this.rng.range(-6, 6), y: this.rng.range(-6, 6), z: this.rng.range(-6, 6) }
+      { x: this.rng.range(-6, 6), y: this.rng.range(-6, 6), z: this.rng.range(-6, 6) },
+      null,
+      false,
+      p.held.seeded
     );
     p.held = null;
   }
@@ -934,7 +966,8 @@ export class Simulation {
     vel: V3,
     angVel: V3,
     owner: string | null = null,
-    earned = false
+    earned = false,
+    seeded = false
   ): void {
     const id = this.nextDebrisId++;
     const room = this.currentRoom();
@@ -961,6 +994,7 @@ export class Simulation {
       stillTicks: 0,
       owner,
       earned,
+      seeded,
       touched: false,
       litterAt: null,
       hitPlayer: false,
@@ -972,14 +1006,14 @@ export class Simulation {
     if (this.debris.size <= MAX_DEBRIS) return;
     // prefer evicting settled scenery, but never exceed the cap: the renderer
     // draws at most MAX_DEBRIS instances, so overflow would be invisible yet
-    // still collidable. The toys are unique and irreplaceable — never theirs.
+    // still collidable. What came with the room is permanent — never its turn.
     let oldest: Debris | null = null;
     for (const d of this.debris.values())
-      if (isVice(d.kind) && d.phase === "settled" && (!oldest || d.bornTick < oldest.bornTick))
+      if (!d.seeded && d.phase === "settled" && (!oldest || d.bornTick < oldest.bornTick))
         oldest = d;
     if (!oldest)
       for (const d of this.debris.values())
-        if (isVice(d.kind) && (!oldest || d.bornTick < oldest.bornTick)) oldest = d;
+        if (!d.seeded && (!oldest || d.bornTick < oldest.bornTick)) oldest = d;
     if (oldest) this.removeDebris(oldest);
   }
 
@@ -1001,8 +1035,16 @@ export class Simulation {
     const reach = this.phase === "lobby" ? LOBBY_REACH : REACH_RADIUS;
     if (Math.hypot(d.pos.x - eye.x, d.pos.y - eye.y, d.pos.z - eye.z) > reach) return;
     this.removeDebris(d);
-    // scavenged, not earned: re-flinging floor litter never pays
-    p.held = { id: this.nextDebrisId++, kind: d.kind, sinceTick: this.tick, earned: false, pos: null };
+    // scavenged, not earned: re-flinging floor litter never pays. seeded
+    // provenance rides along so the room's own filth stays permanent.
+    p.held = {
+      id: this.nextDebrisId++,
+      kind: d.kind,
+      sinceTick: this.tick,
+      earned: false,
+      seeded: d.seeded,
+      pos: null,
+    };
   }
 
   /* the owner is dragging the empty around (the wind-up before a fling) —
