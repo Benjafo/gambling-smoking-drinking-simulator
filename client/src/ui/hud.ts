@@ -97,6 +97,9 @@ export class Hud {
       this.send({ type: "setBet", amount: this.localPending });
       this.send({ type: "commitBet" });
     });
+    // sticky: skips every betting round until DEAL ME IN (or a new run)
+    $("sitOutBtn").addEventListener("click", () => this.send({ type: "sitOut", on: true }));
+    $("dealMeInBtn").addEventListener("click", () => this.send({ type: "sitOut", on: false }));
     $("hitBtn").addEventListener("click", () => this.send({ type: "hit" }));
     $("standBtn").addEventListener("click", () => this.send({ type: "stand" }));
     $("doubleBtn").addEventListener("click", () => this.send({ type: "double" }));
@@ -277,7 +280,11 @@ export class Hud {
       case "lobby":
         return "LOBBY";
       case "betting":
-        return me.committed ? "WAITING FOR THE TABLE" : "PLACE YOUR BET";
+        return me.committed
+          ? "WAITING FOR THE TABLE"
+          : me.sittingOut
+            ? "SITTING OUT"
+            : "PLACE YOUR BET";
       case "dealing":
         return "DEALING";
       case "acting":
@@ -295,22 +302,33 @@ export class Hud {
     const snap = this.snap;
     const me = this.me;
     if (!snap || !me) return;
-    const betting =
-      snap.phase === "betting" && me.alive && !me.waiting && !me.committed && me.money > 0;
+    const inRound = me.alive && !me.waiting && !me.committed;
+    const betting = snap.phase === "betting" && inRound && !me.sittingOut && me.money > 0;
+    // the DEAL ME IN panel stays up through the whole round they're skipping
+    const sittingOut =
+      me.sittingOut && inRound && snap.phase !== "lobby" && snap.phase !== "over";
     const myTurn = snap.phase === "acting" && snap.turnPlayerId === this.myId;
 
     $("betPanel").style.display = betting ? "" : "none";
+    $("sitOutPanel").style.display = sittingOut ? "" : "none";
     $("playPanel").style.display = myTurn ? "" : "none";
     $("betDisplay").textContent = fmtMoney(this.localPending);
 
+    // the closing window only matters once someone has anted — before that
+    // an expiry just re-arms, so counting it down would be noise
+    const anteed = snap.players.some((p) => p.committed);
+    const closing =
+      betting && anteed && snap.bettingEndsIn !== null
+        ? ` Cards fly in ${Math.max(1, Math.ceil(snap.bettingEndsIn))}s.`
+        : "";
     const hint = me.waiting
       ? "Game in progress. You're dealt in when the next one starts."
       : !me.alive
         ? "You are a cautionary tale now."
-        : me.money <= 0 && !me.committed
+        : me.money <= 0 && !me.committed && !me.sittingOut
           ? "No money. No bets. Only vices remain."
           : betting
-            ? "Chips stack. Min bet $10. The meters don't wait."
+            ? "Chips stack. Min bet $10. The meters don't wait." + closing
             : "";
     $("dockHint").textContent = hint;
 
