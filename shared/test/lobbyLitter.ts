@@ -145,6 +145,7 @@ assert(sim.snapshot().debris.length === 0, "the leader's clear-litter sweeps the
 sim.applyIntent(P1, { type: "dispense", kind: "beer" });
 assert(player(P1).held !== null, "one more in hand before the game starts");
 sim.applyIntent(P1, { type: "startGame" });
+for (let i = 0; i < TICK_RATE * 11 && sim.snapshot().phase === "lobby"; i++) sim.step(); // ride out the start countdown
 assert(sim.snapshot().phase === "betting", "leader started the game");
 sim.applyIntent(P1, { type: "dispense", kind: "beer" });
 sim.applyIntent(P1, { type: "clearLitter" });

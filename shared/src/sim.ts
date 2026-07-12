@@ -35,6 +35,7 @@ import {
   DEALER_DRAW_MS,
   RESULT_PAUSE_MS,
   BETTING_WINDOW_MS,
+  GAME_START_COUNTDOWN_MS,
   ACT_TIMEOUT_MS,
   MAX_DEBRIS,
   MAX_FLING_SPEED,
@@ -224,6 +225,8 @@ export class Simulation {
   beerPrice = BEER_PRICE_0;
   handsPlayed = 0;
   runStartTick = 0;
+  /* lobby countdown: the tick the run begins, null when no start is queued */
+  private startAtTick: number | null = null;
 
   debris = new Map<number, Debris>();
   private colliderDebris = new Map<number, number>(); // collider handle → debris id
@@ -383,8 +386,16 @@ export class Simulation {
     if (this.leaderId === null) this.leaderId = playerId;
   }
 
+  /* the leader's start doesn't seat anyone yet — it queues a countdown so
+     the whole room gets a banner's worth of warning; beginRun() fires when
+     it expires. A second press while it's running is a no-op. */
   private startGame(p: Player): void {
-    if (this.phase !== "lobby" || p.id !== this.leaderId) return;
+    if (this.phase !== "lobby" || p.id !== this.leaderId || this.startAtTick !== null) return;
+    this.startAtTick = this.tick + msTicks(GAME_START_COUNTDOWN_MS);
+  }
+
+  private beginRun(): void {
+    this.startAtTick = null;
     for (const q of this.players.values()) {
       q.waiting = false;
       q.moveDir = { x: 0, z: 0 }; // everyone stops mid-stride and takes a seat
@@ -407,6 +418,7 @@ export class Simulation {
     if (this.players.size === 0) {
       this.phase = "lobby";
       this.schedule = [];
+      this.startAtTick = null;
       return;
     }
     // a rage-quit counts as an elimination for the last-alive check
@@ -897,13 +909,19 @@ export class Simulation {
   step(): void {
     this.tick++;
     if (this.phase === "lobby") {
-      // the waiting room: integrate everyone's held walk input, and keep
-      // the physics running — pre-game litter flies for real. Everyone
-      // steps every tick: gravity doesn't wait for key input.
-      for (const p of this.players.values())
-        stepLobbyMove(p, p.moveDir.x, p.moveDir.z, TICK_DT);
-      this.stepPhysics();
-      return;
+      if (this.startAtTick !== null && this.tick >= this.startAtTick) {
+        // countdown expired: seat everyone and fall through into the round
+        // machinery below — betting opens this very tick
+        this.beginRun();
+      } else {
+        // the waiting room: integrate everyone's held walk input, and keep
+        // the physics running — pre-game litter flies for real. Everyone
+        // steps every tick: gravity doesn't wait for key input.
+        for (const p of this.players.values())
+          stepLobbyMove(p, p.moveDir.x, p.moveDir.z, TICK_DT);
+        this.stepPhysics();
+        return;
+      }
     }
 
     // scheduled round actions
@@ -1335,6 +1353,10 @@ export class Simulation {
       beerPrice: this.beerPrice,
       handsPlayed: this.handsPlayed,
       elapsed: (this.tick - this.runStartTick) / TICK_RATE,
+      startsIn:
+        this.startAtTick === null
+          ? null
+          : Math.round(Math.max(0, (this.startAtTick - this.tick) / TICK_RATE) * 100) / 100,
       players,
       debris,
       events,

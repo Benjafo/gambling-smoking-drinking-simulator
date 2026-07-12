@@ -484,34 +484,6 @@ body.lobby-room #sidebar,body.lobby-room #actionDock{display:none}
 #swipeHint .arrow{font-size:30px;animation:arrowUp 1s steps(4) infinite}
 @keyframes arrowUp{0%,100%{transform:translateY(6px);opacity:.5}50%{transform:translateY(-6px);opacity:1}}
 
-#lighterGfx{position:fixed;display:none;z-index:69;pointer-events:none !important;width:64px;height:106px}
-#lighterGfx.show{display:block;animation:lighterUp .3s ease-out both}
-@keyframes lighterUp{from{transform:translateY(46px) rotate(6deg);opacity:0}to{transform:translateY(0) rotate(0);opacity:1}}
-#lighterGfx .body{
-  position:absolute;bottom:0;left:10px;width:44px;height:62px;border-radius:8px;
-  background:linear-gradient(100deg,#8f1f1f,#d24848 30%,#e86a6a 44%,#a02525 70%,#5e1212);
-  border:1px solid #3a0c0c;
-  box-shadow:inset 0 2px 3px rgba(255,255,255,.35), inset 0 -4px 6px rgba(0,0,0,.35), 0 5px 10px rgba(0,0,0,.55);
-}
-#lighterGfx .hood{
-  position:absolute;bottom:58px;left:10px;width:44px;height:15px;border-radius:5px 5px 2px 2px;
-  background:linear-gradient(#efeade,#b3ada0 55%,#8f8a7d);border:1px solid #4a463d;
-}
-#lighterGfx .wheel{
-  position:absolute;bottom:62px;left:19px;width:26px;height:11px;border-radius:5px;z-index:2;
-  background:repeating-linear-gradient(90deg,#6b665c 0 3px,#a29c8f 3px 6px);border:1px solid #3a362e;
-}
-#lighterGfx .flame{
-  position:absolute;bottom:73px;left:23px;width:18px;height:36px;z-index:3;
-  border-radius:50% 50% 50% 50%/62% 62% 38% 38%;
-  background:radial-gradient(circle at 50% 85%,#fff6cf 0%,#ffc14d 40%,#ff7a30 70%,#d23a12 92%,transparent 100%);
-  transform-origin:50% 100%;
-  animation:ignite .22s .18s both, flameFlicker .16s .45s infinite alternate;
-  filter:drop-shadow(0 0 14px rgba(255,180,77,.95));
-}
-@keyframes ignite{from{transform:scaleY(0)}to{transform:scaleY(1)}}
-@keyframes flameFlicker{from{transform:scaleY(.95) skewX(-3deg)}to{transform:scaleY(1.2) skewX(4deg)}}
-
 /* beer spilling "onto" the user: droplets fly at the screen */
 .spill-drop{
   position:fixed;z-index:71;pointer-events:none;width:15px;height:19px;
@@ -599,6 +571,27 @@ body.lobby-room #sidebar,body.lobby-room #actionDock{display:none}
   text-shadow:3px 3px 0 var(--ink)}
 #banner.push{color:var(--paper);background:#181d18;box-shadow:inset 0 0 0 2px var(--smoke),6px 6px 0 rgba(0,0,0,.5)}
 @keyframes bannerPop{from{transform:translate(-50%,-50%) scale(.7);opacity:0}to{transform:translate(-50%,-50%) scale(1);opacity:1}}
+
+/* game-start countdown: top-center, over the lobby overlay (screens sit at
+   z-100) but under the options sheet (z-120) */
+#startBanner{
+  position:fixed;left:50%;top:14px;transform:translateX(-50%);z-index:115;
+  display:none;align-items:center;gap:16px;padding:10px 24px;
+  pointer-events:none;white-space:nowrap;
+  color:var(--bulb);background:#231d06;border:3px solid var(--ink);
+  box-shadow:inset 0 0 0 2px var(--bulb),6px 6px 0 rgba(0,0,0,.5);
+}
+#startBanner.show{display:flex;animation:startPulse 1s steps(2) infinite}
+#startBanner .sb-label{
+  font-family:var(--tiny);font-size:10px;letter-spacing:.2em;
+  color:var(--neon);text-shadow:2px 2px 0 var(--ink);
+}
+#startBanner .sb-text{
+  font-family:var(--px);font-weight:700;font-size:22px;letter-spacing:.03em;
+  text-shadow:3px 3px 0 var(--ink);
+}
+#startBanner .sb-text b{font-size:28px;color:var(--paper)}
+@keyframes startPulse{50%{box-shadow:inset 0 0 0 2px var(--bulb-deep),6px 6px 0 rgba(0,0,0,.5)}}
 
 #flingHint{
   position:absolute;left:50%;bottom:230px;transform:translateX(-50%);display:none;

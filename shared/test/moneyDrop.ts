@@ -39,6 +39,7 @@ function snap(): Snapshot {
 
 sim.applyIntent(ME, { type: "join", name: "LITTERBUG" });
 sim.applyIntent(ME, { type: "startGame" });
+for (let i = 0; i < 60 * 11 && sim.snapshot().phase === "lobby"; i++) sim.step(); // ride out the start countdown
 
 let spent = 0;
 function me() {

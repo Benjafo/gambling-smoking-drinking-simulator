@@ -34,11 +34,21 @@ assert(snap.phase === "lobby", "joins accumulate in the lobby, no auto-start");
 assert(snap.leaderId === P1, "first joiner is the leader");
 
 sim.applyIntent(P2, { type: "startGame" });
-assert(sim.snapshot().phase === "lobby", "non-leader cannot start the game");
+snap = sim.snapshot();
+assert(snap.phase === "lobby", "non-leader cannot start the game");
+assert(snap.startsIn === null, "non-leader cannot queue the countdown either");
 
+/* ---- leader's start queues a countdown, not an instant start ---- */
 sim.applyIntent(P1, { type: "startGame" });
 snap = sim.snapshot();
-assert(snap.phase === "betting", "leader starts the game for everyone");
+assert(snap.phase === "lobby" && snap.startsIn !== null, "leader's start opens the countdown");
+assert(Math.ceil(snap.startsIn!) === 10, "countdown opens at 10 seconds");
+sim.applyIntent(P1, { type: "startGame" });
+assert(Math.ceil(sim.snapshot().startsIn!) === 10, "a second press doesn't reset the clock");
+for (let i = 0; i < 60 * 11 && sim.snapshot().phase === "lobby"; i++) sim.step();
+snap = sim.snapshot();
+assert(snap.phase === "betting", "countdown expires and the game starts for everyone");
+assert(snap.startsIn === null, "countdown clears once the run begins");
 assert(snap.players.every((p) => !p.waiting), "all lobby players are dealt in");
 
 /* ---- one full hand: both bet, both stand; scores accrue ---- */

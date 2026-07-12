@@ -99,6 +99,10 @@ export interface Snapshot {
   beerPrice: number;
   handsPlayed: number;
   elapsed: number; // seconds since run start
+  /* lobby countdown: seconds until the run begins, null when no start is
+     queued. Set the moment the leader starts the game; the phase stays
+     "lobby" until it hits zero. */
+  startsIn: number | null;
   players: PlayerSnap[];
   debris: DebrisSnap[];
   events: SimEvent[];

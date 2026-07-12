@@ -118,6 +118,79 @@ export function hurtSound(): void {
   osc.stop(ac.currentTime + 0.2);
 }
 
+/* the zippo lid: a tick of noise ringing two thin metallic partials —
+   fires on flip-open and again when the lid snaps shut */
+export function zippoClinkSound(): void {
+  const ac = audio();
+  if (!ac) return;
+  const dur = 0.014;
+  const buf = ac.createBuffer(1, Math.ceil(ac.sampleRate * dur), ac.sampleRate);
+  const data = buf.getChannelData(0);
+  for (let i = 0; i < data.length; i++)
+    data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / data.length, 2);
+  const src = ac.createBufferSource();
+  src.buffer = buf;
+  const filter = ac.createBiquadFilter();
+  filter.type = "highpass";
+  filter.frequency.value = 3800;
+  const click = ac.createGain();
+  click.gain.value = 0.06;
+  src.connect(filter).connect(click).connect(master!);
+  src.start();
+  for (const [freq, dec, vol] of [
+    [3150, 0.07, 0.035],
+    [5230, 0.045, 0.02],
+    [1080, 0.1, 0.022],
+  ] as const) {
+    const osc = ac.createOscillator();
+    osc.type = "sine";
+    osc.frequency.value = freq;
+    const gain = ac.createGain();
+    gain.gain.setValueAtTime(vol, ac.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ac.currentTime + dec);
+    osc.connect(gain).connect(master!);
+    osc.start();
+    osc.stop(ac.currentTime + dec + 0.02);
+  }
+}
+
+/* thumb over the flint wheel: a gritty rasp, then the soft whoomp of the
+   wick taking the spark */
+export function zippoStrikeSound(): void {
+  const ac = audio();
+  if (!ac) return;
+  const raspDur = 0.07;
+  const rasp = ac.createBuffer(1, Math.ceil(ac.sampleRate * raspDur), ac.sampleRate);
+  const rd = rasp.getChannelData(0);
+  for (let i = 0; i < rd.length; i++)
+    rd[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / rd.length, 1.4);
+  const raspSrc = ac.createBufferSource();
+  raspSrc.buffer = rasp;
+  const hp = ac.createBiquadFilter();
+  hp.type = "highpass";
+  hp.frequency.value = 2600;
+  const raspGain = ac.createGain();
+  raspGain.gain.value = 0.09;
+  raspSrc.connect(hp).connect(raspGain).connect(master!);
+  raspSrc.start();
+
+  const poofDur = 0.25;
+  const poof = ac.createBuffer(1, Math.ceil(ac.sampleRate * poofDur), ac.sampleRate);
+  const pd = poof.getChannelData(0);
+  for (let i = 0; i < pd.length; i++) pd[i] = Math.random() * 2 - 1;
+  const poofSrc = ac.createBufferSource();
+  poofSrc.buffer = poof;
+  const lp = ac.createBiquadFilter();
+  lp.type = "lowpass";
+  lp.frequency.value = 520;
+  const poofGain = ac.createGain();
+  poofGain.gain.setValueAtTime(0.0001, ac.currentTime);
+  poofGain.gain.exponentialRampToValueAtTime(0.09, ac.currentTime + 0.06);
+  poofGain.gain.exponentialRampToValueAtTime(0.001, ac.currentTime + poofDur);
+  poofSrc.connect(lp).connect(poofGain).connect(master!);
+  poofSrc.start();
+}
+
 export function pickupSound(): void {
   const ac = audio();
   if (!ac) return;

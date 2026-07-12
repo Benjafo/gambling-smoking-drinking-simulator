@@ -25,6 +25,7 @@ const ME = "p1";
 
 sim.applyIntent(ME, { type: "join", name: "LUSH" });
 sim.applyIntent(ME, { type: "startGame" });
+for (let i = 0; i < 60 * 11 && sim.snapshot().phase === "lobby"; i++) sim.step(); // ride out the start countdown
 
 const me = () => sim.snapshot().players[0];
 const raw = () => sim.players.get(ME)!;

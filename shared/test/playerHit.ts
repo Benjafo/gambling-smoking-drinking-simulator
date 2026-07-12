@@ -39,6 +39,7 @@ function snap(): Snapshot {
 sim.applyIntent(FLINGER, { type: "join", name: "PITCHER" });
 sim.applyIntent(VICTIM, { type: "join", name: "TARGET" });
 sim.applyIntent(FLINGER, { type: "startGame" });
+for (let i = 0; i < 60 * 11 && sim.snapshot().phase === "lobby"; i++) sim.step(); // ride out the start countdown
 
 function me(): Snapshot["players"][number] {
   return snap().players.find((q) => q.id === FLINGER)!;

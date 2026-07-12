@@ -95,7 +95,9 @@ assert(!me.moving, "NaN input reads as standing still");
 /* ---- the game starts: everyone freezes, movement intents go dead ---- */
 sim.applyIntent(P1, { type: "move", dirX: 0, dirZ: 1, yaw: 0 });
 sim.applyIntent(P1, { type: "startGame" });
-assert(sim.snapshot().phase === "betting", "leader started the game");
+assert(sim.snapshot().phase === "lobby", "start queues a countdown; the room keeps walking");
+for (let i = 0; i < TICK_RATE * 11 && sim.snapshot().phase === "lobby"; i++) sim.step();
+assert(sim.snapshot().phase === "betting", "leader started the game (countdown expired)");
 me = player(P1);
 const frozen = { x: me.pos.x, z: me.pos.z };
 assert(!me.moving, "starting the game stops everyone mid-stride");

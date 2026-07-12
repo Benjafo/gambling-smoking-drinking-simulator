@@ -23,6 +23,7 @@ assert(snap.phase === "lobby", "room waits in the lobby");
 assert(snap.leaderId === ME, "first joiner leads the lobby");
 
 sim.applyIntent(ME, { type: "startGame" });
+for (let i = 0; i < 60 * 11 && sim.snapshot().phase === "lobby"; i++) sim.step(); // ride out the start countdown
 snap = sim.snapshot();
 assert(snap.phase === "betting", "leader start enters betting");
 

@@ -68,6 +68,7 @@ export class Hud {
   private bannerTimer: number | undefined;
   private lobbySig = "";
   private overSig = "";
+  private startSecs = -1;
 
   constructor(private send: (i: Intent) => void) {
     for (const id of ["cigarTol", "beerTol"])
@@ -159,6 +160,8 @@ export class Hud {
     $("lobbyScreen").classList.remove("active");
     $("overScreen").classList.remove("active");
     $("banner").className = "";
+    $("startBanner").classList.remove("show");
+    this.startSecs = -1;
     $("flingHint").classList.remove("show");
     document.body.classList.remove("panic");
     document.body.classList.remove("lobby-room");
@@ -189,6 +192,18 @@ export class Hud {
     else this.lobbySig = "";
     if (snap.phase === "over") this.renderOver(snap, me);
     else this.overSig = "";
+
+    // game-start countdown: the sim keeps the room in "lobby" while it runs;
+    // the banner just mirrors the authoritative seconds left
+    const counting = snap.phase === "lobby" && snap.startsIn !== null;
+    $("startBanner").classList.toggle("show", counting);
+    if (counting) {
+      const secs = Math.max(1, Math.ceil(snap.startsIn!));
+      if (secs !== this.startSecs) {
+        this.startSecs = secs;
+        $("startCount").textContent = String(secs);
+      }
+    } else this.startSecs = -1;
 
     // meters
     this.meter($("cigarFill"), me.cigarMeter);
@@ -391,9 +406,10 @@ export class Hud {
   private renderLobby(snap: Snapshot): void {
     const amLeader = snap.leaderId === this.myId;
     const hasLitter = snap.debris.length > 0;
+    const counting = snap.startsIn !== null;
     const sig =
       snap.players.map((p) => p.id + ":" + p.name).join() +
-      "|" + snap.leaderId + "|" + hasLitter;
+      "|" + snap.leaderId + "|" + hasLitter + "|" + counting;
     if (sig === this.lobbySig) return;
     this.lobbySig = sig;
 
@@ -408,17 +424,22 @@ export class Hud {
            </div>`
       )
       .join("");
-    ($("lobbyStartBtn") as HTMLButtonElement).style.display = amLeader ? "" : "none";
+    const startBtn = $("lobbyStartBtn") as HTMLButtonElement;
+    startBtn.style.display = amLeader ? "" : "none";
+    startBtn.disabled = counting;
+    startBtn.textContent = counting ? "STARTING…" : "START THE GAME";
     // the janitor option: leader-only, and only worth pressing when there's
     // actually filth on the floor (either room — the count covers both)
     const clearBtn = $("lobbyClearBtn") as HTMLButtonElement;
     clearBtn.style.display = amLeader ? "" : "none";
     clearBtn.disabled = !hasLitter;
-    $("lobbyHint").textContent = amLeader
-      ? snap.players.length === 1
-        ? "Drinking alone is still drinking. The door starts it — walk up and press E."
-        : `${snap.players.length} degenerates seated. Start at the door — walk up and press E.`
-      : "The leader starts the game at the door. Sit tight.";
+    $("lobbyHint").textContent = counting
+      ? "Last call. Finish your business — the table seats you when the count hits zero."
+      : amLeader
+        ? snap.players.length === 1
+          ? "Drinking alone is still drinking. The door starts it — walk up and press E."
+          : `${snap.players.length} degenerates seated. Start at the door — walk up and press E.`
+        : "The leader starts the game at the door. Sit tight.";
   }
 
   /* ranked leaderboard; re-renders only when standings/scores change (the
