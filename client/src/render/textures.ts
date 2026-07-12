@@ -2,6 +2,7 @@
    drawn at boot. Felt gets the classic printed blackjack layout; wood gets
    grain; the floor gets a tired carpet. */
 import * as THREE from "three";
+import { chipLabel, type ChipStyle } from "../chips";
 
 function canvas(size: number): [HTMLCanvasElement, CanvasRenderingContext2D] {
   const cv = document.createElement("canvas");
@@ -151,6 +152,66 @@ export function feltTexture(seatAngles: number[]): THREE.CanvasTexture {
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.anisotropy = 8;
   return tex;
+}
+
+/* chip paint, cached per denomination — every $25 chip in the room shares
+   one set of maps. CylinderGeometry material order: [rim, top, bottom]. */
+const chipMatCache = new Map<number, THREE.Material[]>();
+
+export function chipMaterials(s: ChipStyle): THREE.Material[] {
+  const hit = chipMatCache.get(s.value);
+  if (hit) return hit;
+
+  // face: body paint, the dashed ring the HUD rack also wears, value dead
+  // center. Both caps share it; the underside's mirrored print never shows.
+  const S = 128;
+  const [cv, ctx] = canvas(S);
+  ctx.fillStyle = s.color;
+  ctx.fillRect(0, 0, S, S);
+  ctx.strokeStyle = s.edge;
+  ctx.lineWidth = 10;
+  ctx.setLineDash([11, 10]);
+  ctx.beginPath();
+  ctx.arc(S / 2, S / 2, S * 0.43, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.globalAlpha = 0.45;
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.arc(S / 2, S / 2, S * 0.31, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.globalAlpha = 1;
+  const label = chipLabel(s.value);
+  ctx.fillStyle = s.ink;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.font = "700 34px 'Silkscreen','Courier New',monospace";
+  const w = ctx.measureText(label).width;
+  if (w > S * 0.52) ctx.font = `700 ${Math.floor((34 * S * 0.52) / w)}px 'Silkscreen','Courier New',monospace`;
+  ctx.fillText(label, S / 2, S / 2 + 2);
+  speckle(ctx, S, 260, 0.05); // table wear
+  const face = new THREE.CanvasTexture(cv);
+  face.colorSpace = THREE.SRGBColorSpace;
+  face.anisotropy = 4;
+
+  // rim: six edge stripes — what makes a stack read as denominations from
+  // across the table. The cylinder wall wraps this once around.
+  const rcv = document.createElement("canvas");
+  rcv.width = 240;
+  rcv.height = 32;
+  const rctx = rcv.getContext("2d")!;
+  rctx.fillStyle = s.color;
+  rctx.fillRect(0, 0, 240, 32);
+  rctx.fillStyle = s.edge;
+  for (let i = 0; i < 6; i++) rctx.fillRect(i * 40 + 13, 0, 14, 32);
+  const rim = new THREE.CanvasTexture(rcv);
+  rim.colorSpace = THREE.SRGBColorSpace;
+  rim.anisotropy = 4;
+
+  const capMat = new THREE.MeshStandardMaterial({ map: face, roughness: 0.55 });
+  const mats = [new THREE.MeshStandardMaterial({ map: rim, roughness: 0.55 }), capMat, capMat];
+  chipMatCache.set(s.value, mats);
+  return mats;
 }
 
 export function woodTexture(): THREE.CanvasTexture {

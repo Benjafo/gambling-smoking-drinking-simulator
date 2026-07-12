@@ -34,7 +34,9 @@ import {
   plasterTexture,
   floorboardTexture,
   ceilingTexture,
+  chipMaterials,
 } from "./textures";
+import { chipBreakdown } from "../chips";
 import { makeFigure, poseArm, type ArmRig } from "./figure";
 import { LobbyRoomView, LOOK_SENS } from "./lobbyRoom";
 import { CardZone } from "./cards";
@@ -61,6 +63,32 @@ const CENTER = new THREE.Vector3(0, TABLE.height + 0.05, 0);
 /* the crosshair's pick ray while the pointer is locked: dead center */
 const CENTER_NDC = new THREE.Vector2(0, 0);
 const SHOE_POS = new THREE.Vector3(0.72, TABLE.height + 0.09, -0.78);
+
+/* one chip mold for the whole room; the paint (materials) is per-denomination
+   and cached in textures.ts, so stacks are cheap to build and safe to drop
+   without disposing anything */
+const CHIP_R = 0.034;
+const CHIP_H = 0.0075;
+const CHIP_PITCH = 0.0085;
+const CHIP_GEO = new THREE.CylinderGeometry(CHIP_R, CHIP_R, CHIP_H, 24);
+
+/* an amount as actual currency: greedy change in house denominations, big
+   chips cut to the bottom the way a dealer stacks it */
+function makeChipStack(amount: number): THREE.Group {
+  const group = new THREE.Group();
+  chipBreakdown(amount).forEach((style, i) => {
+    const chip = new THREE.Mesh(CHIP_GEO, chipMaterials(style));
+    chip.position.set(
+      (Math.random() - 0.5) * 0.005,
+      CHIP_H / 2 + i * CHIP_PITCH,
+      (Math.random() - 0.5) * 0.005
+    );
+    chip.rotation.y = Math.random() * Math.PI * 2;
+    chip.castShadow = true;
+    group.add(chip);
+  });
+  return group;
+}
 
 const BASE_FOV = 62;
 /* the chair the camera sits in when no seat is assigned — boot AND every
@@ -1593,23 +1621,7 @@ export class SceneView {
      watch arrive beats a number ticking up */
   private payoutChips(seat: number, amount: number): void {
     chipRiffleSound();
-    const n = Math.min(14, Math.max(3, Math.round(Math.log2(amount / 5 + 1) * 2)));
-    const colors = [0x2c3c60, 0x6a1f1f, 0x24512f, 0x101010];
-    const group = new THREE.Group();
-    for (let i = 0; i < n; i++) {
-      const chip = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.035, 0.035, 0.008, 16),
-        new THREE.MeshStandardMaterial({ color: colors[i % 4], roughness: 0.4 })
-      );
-      chip.position.set(
-        (Math.random() - 0.5) * 0.006,
-        0.006 + i * 0.009,
-        (Math.random() - 0.5) * 0.006
-      );
-      chip.rotation.y = Math.random() * Math.PI;
-      chip.castShadow = true;
-      group.add(chip);
-    }
+    const group = makeChipStack(amount);
     group.position.set(0, TABLE.height, -0.25); // the dealer's bank
     this.scene.add(group);
 
@@ -1620,13 +1632,8 @@ export class SceneView {
       new THREE.Vector3(Math.cos(a), 0, -Math.sin(a)),
       -0.3
     );
-    const dispose = () => {
-      this.scene.remove(group);
-      for (const c of group.children as THREE.Mesh[]) {
-        c.geometry.dispose();
-        (c.material as THREE.Material).dispose();
-      }
-    };
+    // geometry and materials are shared per-denomination — nothing to dispose
+    const dispose = () => this.scene.remove(group);
     tween({
       duration: 700,
       ease: easeInOut,
@@ -1662,18 +1669,7 @@ export class SceneView {
     entry.bet = bet;
     entry.group.clear();
     if (bet <= 0) return;
-    const n = Math.min(14, Math.max(1, Math.round(Math.log2(bet / 5 + 1) * 2)));
-    const colors = [0x2c3c60, 0x6a1f1f, 0x24512f, 0x101010];
-    for (let i = 0; i < n; i++) {
-      const chip = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.035, 0.035, 0.008, 16),
-        new THREE.MeshStandardMaterial({ color: colors[i % 4], roughness: 0.4 })
-      );
-      chip.position.set((Math.random() - 0.5) * 0.006, 0.006 + i * 0.009, (Math.random() - 0.5) * 0.006);
-      chip.rotation.y = Math.random() * Math.PI;
-      chip.castShadow = true;
-      entry.group.add(chip);
-    }
+    entry.group.add(makeChipStack(bet));
   }
 
   private reconcileAvatar(p: PlayerSnap): void {

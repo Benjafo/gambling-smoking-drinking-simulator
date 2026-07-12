@@ -2,21 +2,32 @@
    client-side. */
 import * as THREE from "three";
 
-/* every sound routes through one master gain so the OPTIONS screen can turn
-   the whole bar up or down; slider value is squared into gain so the low end
+/* every sound routes through a per-category bus (music, effects) into one
+   master gain so the OPTIONS screen can filter each category or turn the
+   whole bar up or down; slider values are squared into gain so the low end
    of the range is actually usable */
-const VOL_KEY = "degen-sfx-vol";
+const VOL_KEYS = {
+  master: "degen-master-vol",
+  music: "degen-music-vol",
+  effects: "degen-sfx-vol",
+} as const;
+export type AudioChannel = keyof typeof VOL_KEYS;
 const MUTE_KEY = "degen-sfx-mute";
-let sfxVolume = (() => {
-  const v = Number(localStorage.getItem(VOL_KEY));
-  return Number.isFinite(v) && localStorage.getItem(VOL_KEY) !== null
-    ? Math.min(1, Math.max(0, v))
-    : 1;
-})();
-let sfxMuted = localStorage.getItem(MUTE_KEY) === "1";
+
+function storedVolume(ch: AudioChannel): number {
+  const raw = localStorage.getItem(VOL_KEYS[ch]);
+  const v = Number(raw);
+  return raw !== null && Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : 1;
+}
+const volumes: Record<AudioChannel, number> = {
+  master: storedVolume("master"),
+  music: storedVolume("music"),
+  effects: storedVolume("effects"),
+};
+let muted = localStorage.getItem(MUTE_KEY) === "1";
 
 let ctx: AudioContext | null = null;
-let master: GainNode | null = null;
+let buses: Record<AudioChannel, GainNode> | null = null;
 function audio(): AudioContext | null {
   if (!ctx) {
     try {
@@ -24,33 +35,47 @@ function audio(): AudioContext | null {
     } catch {
       return null;
     }
-    master = ctx.createGain();
-    master.gain.value = effectiveGain();
+    const master = ctx.createGain();
     master.connect(ctx.destination);
+    const music = ctx.createGain();
+    music.connect(master);
+    const effects = ctx.createGain();
+    effects.connect(master);
+    buses = { master, music, effects };
+    applyGains();
   }
   if (ctx.state === "suspended") void ctx.resume();
   return ctx;
 }
 
-function effectiveGain(): number {
-  return sfxMuted ? 0 : sfxVolume * sfxVolume;
+function applyGains(): void {
+  if (!buses) return;
+  buses.master.gain.value = muted ? 0 : volumes.master * volumes.master;
+  buses.music.gain.value = volumes.music * volumes.music;
+  buses.effects.gain.value = volumes.effects * volumes.effects;
 }
 
-export function getSfxVolume(): number {
-  return sfxVolume;
+export function getVolume(ch: AudioChannel): number {
+  return volumes[ch];
 }
-export function setSfxVolume(v: number): void {
-  sfxVolume = Math.min(1, Math.max(0, v));
-  localStorage.setItem(VOL_KEY, String(sfxVolume));
-  if (master) master.gain.value = effectiveGain();
+export function setVolume(ch: AudioChannel, v: number): void {
+  volumes[ch] = Math.min(1, Math.max(0, v));
+  localStorage.setItem(VOL_KEYS[ch], String(volumes[ch]));
+  applyGains();
 }
-export function getSfxMuted(): boolean {
-  return sfxMuted;
+export function getMuted(): boolean {
+  return muted;
 }
-export function setSfxMuted(m: boolean): void {
-  sfxMuted = m;
+export function setMuted(m: boolean): void {
+  muted = m;
   localStorage.setItem(MUTE_KEY, m ? "1" : "0");
-  if (master) master.gain.value = effectiveGain();
+  applyGains();
+}
+
+/* background music, when it arrives, connects here instead of the effects
+   bus so the MUSIC slider owns it */
+export function musicBus(): GainNode | null {
+  return audio() ? buses!.music : null;
 }
 
 export function impactSound(speed: number): void {
@@ -68,7 +93,7 @@ export function impactSound(speed: number): void {
   filter.frequency.value = 900 + speed * 260;
   const gain = ac.createGain();
   gain.gain.value = Math.min(0.5, 0.05 + speed / 22);
-  src.connect(filter).connect(gain).connect(master!);
+  src.connect(filter).connect(gain).connect(buses!.effects);
   src.start();
 }
 
@@ -82,7 +107,7 @@ export function denySound(): void {
   const gain = ac.createGain();
   gain.gain.setValueAtTime(0.05, ac.currentTime);
   gain.gain.exponentialRampToValueAtTime(0.001, ac.currentTime + 0.14);
-  osc.connect(gain).connect(master!);
+  osc.connect(gain).connect(buses!.effects);
   osc.start();
   osc.stop(ac.currentTime + 0.15);
 }
@@ -103,7 +128,7 @@ export function hurtSound(): void {
   filter.frequency.value = 500;
   const thud = ac.createGain();
   thud.gain.value = 0.3;
-  src.connect(filter).connect(thud).connect(master!);
+  src.connect(filter).connect(thud).connect(buses!.effects);
   src.start();
   // ...plus a short descending groan
   const osc = ac.createOscillator();
@@ -113,7 +138,7 @@ export function hurtSound(): void {
   const gain = ac.createGain();
   gain.gain.setValueAtTime(0.12, ac.currentTime);
   gain.gain.exponentialRampToValueAtTime(0.001, ac.currentTime + 0.18);
-  osc.connect(gain).connect(master!);
+  osc.connect(gain).connect(buses!.effects);
   osc.start();
   osc.stop(ac.currentTime + 0.2);
 }
@@ -135,7 +160,7 @@ export function zippoClinkSound(): void {
   filter.frequency.value = 3800;
   const click = ac.createGain();
   click.gain.value = 0.06;
-  src.connect(filter).connect(click).connect(master!);
+  src.connect(filter).connect(click).connect(buses!.effects);
   src.start();
   for (const [freq, dec, vol] of [
     [3150, 0.07, 0.035],
@@ -148,7 +173,7 @@ export function zippoClinkSound(): void {
     const gain = ac.createGain();
     gain.gain.setValueAtTime(vol, ac.currentTime);
     gain.gain.exponentialRampToValueAtTime(0.001, ac.currentTime + dec);
-    osc.connect(gain).connect(master!);
+    osc.connect(gain).connect(buses!.effects);
     osc.start();
     osc.stop(ac.currentTime + dec + 0.02);
   }
@@ -171,7 +196,7 @@ export function zippoStrikeSound(): void {
   hp.frequency.value = 2600;
   const raspGain = ac.createGain();
   raspGain.gain.value = 0.09;
-  raspSrc.connect(hp).connect(raspGain).connect(master!);
+  raspSrc.connect(hp).connect(raspGain).connect(buses!.effects);
   raspSrc.start();
 
   const poofDur = 0.25;
@@ -187,7 +212,7 @@ export function zippoStrikeSound(): void {
   poofGain.gain.setValueAtTime(0.0001, ac.currentTime);
   poofGain.gain.exponentialRampToValueAtTime(0.09, ac.currentTime + 0.06);
   poofGain.gain.exponentialRampToValueAtTime(0.001, ac.currentTime + poofDur);
-  poofSrc.connect(lp).connect(poofGain).connect(master!);
+  poofSrc.connect(lp).connect(poofGain).connect(buses!.effects);
   poofSrc.start();
 }
 
@@ -201,7 +226,7 @@ export function pickupSound(): void {
   const gain = ac.createGain();
   gain.gain.setValueAtTime(0.08, ac.currentTime);
   gain.gain.exponentialRampToValueAtTime(0.001, ac.currentTime + 0.09);
-  osc.connect(gain).connect(master!);
+  osc.connect(gain).connect(buses!.effects);
   osc.start();
   osc.stop(ac.currentTime + 0.1);
 }
@@ -225,7 +250,7 @@ export function whooshSound(): void {
   filter.frequency.exponentialRampToValueAtTime(1600, ac.currentTime + dur);
   const gain = ac.createGain();
   gain.gain.value = 0.1;
-  src.connect(filter).connect(gain).connect(master!);
+  src.connect(filter).connect(gain).connect(buses!.effects);
   src.start();
 }
 
@@ -247,7 +272,7 @@ export function chipRiffleSound(): void {
     filter.frequency.value = 2200;
     const gain = ac.createGain();
     gain.gain.value = 0.05 + Math.random() * 0.03;
-    src.connect(filter).connect(gain).connect(master!);
+    src.connect(filter).connect(gain).connect(buses!.effects);
     src.start(at);
   }
 }
@@ -268,7 +293,7 @@ export function pointsSound(): void {
     gain.gain.setValueAtTime(0.0001, ac.currentTime + at);
     gain.gain.exponentialRampToValueAtTime(0.06, ac.currentTime + at + 0.012);
     gain.gain.exponentialRampToValueAtTime(0.001, ac.currentTime + at + 0.22);
-    osc.connect(gain).connect(master!);
+    osc.connect(gain).connect(buses!.effects);
     osc.start(ac.currentTime + at);
     osc.stop(ac.currentTime + at + 0.25);
   }
@@ -289,7 +314,7 @@ export function cashSound(): void {
     gain.gain.setValueAtTime(0.0001, ac.currentTime + at);
     gain.gain.exponentialRampToValueAtTime(0.09, ac.currentTime + at + 0.015);
     gain.gain.exponentialRampToValueAtTime(0.001, ac.currentTime + at + 0.35);
-    osc.connect(gain).connect(master!);
+    osc.connect(gain).connect(buses!.effects);
     osc.start(ac.currentTime + at);
     osc.stop(ac.currentTime + at + 0.4);
   }
@@ -304,7 +329,7 @@ export function dealSound(): void {
   const gain = ac.createGain();
   gain.gain.setValueAtTime(0.06, ac.currentTime);
   gain.gain.exponentialRampToValueAtTime(0.001, ac.currentTime + 0.07);
-  osc.connect(gain).connect(master!);
+  osc.connect(gain).connect(buses!.effects);
   osc.start();
   osc.stop(ac.currentTime + 0.08);
 }

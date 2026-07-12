@@ -1,11 +1,11 @@
 import type { Intent } from "@shared/types";
 import type { Session } from "./transport";
 import {
-  getSfxMuted,
-  getSfxVolume,
+  getMuted,
+  getVolume,
   pickupSound,
-  setSfxMuted,
-  setSfxVolume,
+  setMuted,
+  setVolume,
 } from "./render/effects";
 import { SceneView } from "./render/scene";
 import { Hud } from "./ui/hud";
@@ -91,9 +91,13 @@ $("leaveBtn").addEventListener("click", () => session?.leave()); // onEnd does t
    the pointer is locked, Esc only exits the lock (the keydown never
    reaches us), so a lock loss over the lobby IS the menu request */
 let lastLockExit = 0;
+let lastEscClose = 0;
 document.addEventListener("pointerlockchange", () => {
   if (document.pointerLockElement) return;
   lastLockExit = performance.now();
+  // the lock exit rode the same Esc press that just closed the menu — a
+  // close must stay a close, not bounce the menu straight back open
+  if (performance.now() - lastEscClose < 350) return;
   if (session && scene.inLobby && !optionsOpen()) toggleOptions(true);
 });
 addEventListener("keydown", (e) => {
@@ -103,27 +107,39 @@ addEventListener("keydown", (e) => {
   if (session) {
     const opening = !optionsOpen();
     toggleOptions(opening);
-    if (!opening) scene.capturePointer(); // best effort — Esc grants no gesture
+    if (!opening) {
+      lastEscClose = performance.now();
+      scene.capturePointer(); // best effort — Esc grants no gesture
+    }
   } else if (optionsOpen()) toggleOptions(false);
 });
 
-/* audio: master SFX volume + mute, persisted by effects.ts */
-const volInput = $("sfxVolInput") as HTMLInputElement;
+/* audio: per-category volume (master / music / effects) + mute, persisted
+   by effects.ts */
+for (const [inputId, valId, channel] of [
+  ["masterVolInput", "masterVolVal", "master"],
+  ["musicVolInput", "musicVolVal", "music"],
+  ["sfxVolInput", "sfxVolVal", "effects"],
+] as const) {
+  const input = $(inputId) as HTMLInputElement;
+  const val = $(valId);
+  input.value = String(Math.round(getVolume(channel) * 100));
+  val.textContent = input.value + "%";
+  input.addEventListener("input", () => {
+    setVolume(channel, Number(input.value) / 100);
+    val.textContent = input.value + "%";
+  });
+  // preview blip on release so you hear where you landed — not for MUSIC,
+  // whose bus a blip effect wouldn't pass through
+  if (channel !== "music")
+    input.addEventListener("change", () => {
+      if (!getMuted()) pickupSound();
+    });
+}
 const muteChk = $("sfxMuteChk") as HTMLInputElement;
-const volVal = $("sfxVolVal");
-volInput.value = String(Math.round(getSfxVolume() * 100));
-volVal.textContent = volInput.value + "%";
-muteChk.checked = getSfxMuted();
-volInput.addEventListener("input", () => {
-  setSfxVolume(Number(volInput.value) / 100);
-  volVal.textContent = volInput.value + "%";
-});
-// preview blip on release so you hear where you landed
-volInput.addEventListener("change", () => {
-  if (!getSfxMuted()) pickupSound();
-});
+muteChk.checked = getMuted();
 muteChk.addEventListener("change", () => {
-  setSfxMuted(muteChk.checked);
+  setMuted(muteChk.checked);
   if (!muteChk.checked) pickupSound();
 });
 

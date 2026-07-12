@@ -153,6 +153,9 @@ export class LobbyRoomView {
 
     addEventListener("keydown", (e) => {
       if (!this.active || (e.target as HTMLElement)?.tagName === "INPUT") return;
+      // gameplay keys re-arm mouse-look — behind an open menu that locks the
+      // cursor away and turns the next Esc into a close-then-reopen bounce
+      if (document.getElementById("optionsScreen")?.classList.contains("active")) return;
       if (e.code === "KeyE") {
         this.captureLook(); // any gameplay key re-arms mouse-look (Esc can't)
         if (this.nearDoor()) this.tryStartAtDoor();

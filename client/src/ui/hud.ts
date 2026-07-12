@@ -3,6 +3,7 @@
 import { MIN_BET, TOLERANCE_MAX, TOLERANCE_PER_USE } from "@shared/constants";
 import { handValue } from "@shared/blackjack";
 import type { Intent, PlayerSnap, Snapshot } from "@shared/types";
+import { chipLabel, chipStyle } from "../chips";
 
 const $ = (id: string): HTMLElement => document.getElementById(id)!;
 
@@ -22,9 +23,6 @@ function chipDenoms(money: number): number[] {
     }
   }
   return CHIP_LADDER.slice(hi - 3, hi + 1);
-}
-function chipLabel(n: number): string {
-  return n >= 1000 ? n / 1000 + "K" : "$" + n;
 }
 function fmtMoney(n: number): string {
   return "$" + Math.round(n).toLocaleString("en-US");
@@ -426,15 +424,15 @@ export class Hud {
       if (sig !== this.chipSig) {
         this.chipSig = sig;
         $("chipRack").innerHTML = denoms
-          .map(
-            (v, i) =>
-              `<div class="chip-stepper">
+          .map((v, i) => {
+            const s = chipStyle(v);
+            return `<div class="chip-stepper">
                  <button class="chip-step plus" data-denom="${v}" aria-label="Add ${chipLabel(v)}">＋</button>
-                 <div class="chip-face c${i}">${chipLabel(v)}</div>
+                 <div class="chip-face" style="background:${s.color};border-color:${s.edge};color:${s.ink}">${chipLabel(v)}</div>
                  <button class="chip-step minus" data-denom="${v}" aria-label="Remove ${chipLabel(v)}">−</button>
                  <kbd class="chip-key">${i + 1}</kbd>
-               </div>`
-          )
+               </div>`;
+          })
           .join("");
       }
       document.querySelectorAll<HTMLButtonElement>("#chipRack .plus").forEach(
