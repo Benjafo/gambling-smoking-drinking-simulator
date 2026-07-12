@@ -210,6 +210,8 @@ export class SceneView {
   private neonLight!: THREE.PointLight;
   /* the hanging lamp's parts, so the title screen can make its wiring act up */
   private tableSpot!: THREE.SpotLight;
+  /* lamplight bounced off the felt onto the dealer — rides the same wiring */
+  private dealerFill!: THREE.PointLight;
   private lampBulbMat!: THREE.MeshBasicMaterial;
   private lampInnerMat!: THREE.MeshBasicMaterial;
   private lampHazeMat!: THREE.MeshBasicMaterial;
@@ -302,6 +304,13 @@ export class SceneView {
     const ring = new THREE.PointLight(0xffd9a0, 9, 7.5, 1.8);
     ring.position.set(0, 2.35, 0.5);
     this.scene.add(ring);
+
+    // the dealer stands past the spot's penumbra and the ring's reach, so
+    // without this he's a backlit silhouette: a short felt-bounce fill,
+    // hovering over the back rim, that only touches him and the far edge
+    this.dealerFill = new THREE.PointLight(0xffd9a0, 2, 1.8, 2);
+    this.dealerFill.position.set(0, 1.4, -1.4);
+    this.scene.add(this.dealerFill);
 
     // camera-attached fill so held items / ritual ghosts aren't silhouettes
     this.scene.add(this.camera);
@@ -1927,6 +1936,7 @@ export class SceneView {
       else if (t > 12960 && t < 13010) lampF = 0.25;
     }
     this.tableSpot.intensity = 70 * lampF;
+    this.dealerFill.intensity = 2 * lampF; // felt bounce dies with the lamp
     this.lampBulbMat.color.setHex(0xfff2cf).multiplyScalar(lampF);
     this.lampInnerMat.color.setHex(0xffe2ae).multiplyScalar(lampF);
     this.lampHazeMat.opacity = 0.055 * lampF;
