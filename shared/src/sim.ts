@@ -182,6 +182,7 @@ interface Player {
   vy: number;
   grounded: boolean;
   moveDir: { x: number; z: number };
+  moveRun: boolean;
   moveYaw: number;
   alive: boolean;
   /* joined mid-run: seated but spectating until the next game starts */
@@ -418,6 +419,7 @@ export class Simulation {
         // re-clamped inside stepLobbyMove so this can't speed-hack
         p.moveDir.x = Number.isFinite(intent.dirX) ? Math.max(-1, Math.min(1, intent.dirX)) : 0;
         p.moveDir.z = Number.isFinite(intent.dirZ) ? Math.max(-1, Math.min(1, intent.dirZ)) : 0;
+        p.moveRun = intent.run === true;
         if (Number.isFinite(intent.yaw)) p.moveYaw = Math.max(-Math.PI, Math.min(Math.PI, intent.yaw));
         break;
       case "jump":
@@ -469,6 +471,7 @@ export class Simulation {
       vy: 0,
       grounded: true,
       moveDir: { x: 0, z: 0 },
+      moveRun: false,
       moveYaw: LOBBY_SPAWNS[seat].yaw,
       alive: true,
       waiting: this.phase !== "lobby",
@@ -498,6 +501,7 @@ export class Simulation {
       q.waiting = false;
       q.sittingOut = false; // a fresh run deals everyone in until they say otherwise
       q.moveDir = { x: 0, z: 0 }; // everyone stops mid-stride and takes a seat
+      q.moveRun = false;
       q.vy = 0; // even the one who was mid-hop
       q.grounded = true;
     }
@@ -788,6 +792,7 @@ export class Simulation {
       q.vy = 0;
       q.grounded = true;
       q.moveDir = { x: 0, z: 0 };
+      q.moveRun = false;
       q.moveYaw = LOBBY_SPAWNS[q.seat].yaw;
     }
     this.cigarPrice = CIGAR_PRICE_0;
@@ -1077,7 +1082,7 @@ export class Simulation {
         // the physics running — pre-game litter flies for real. Everyone
         // steps every tick: gravity doesn't wait for key input.
         for (const p of this.players.values())
-          stepLobbyMove(p, p.moveDir.x, p.moveDir.z, TICK_DT);
+          stepLobbyMove(p, p.moveDir.x, p.moveDir.z, TICK_DT, p.moveRun);
         this.stepPhysics();
         return;
       }

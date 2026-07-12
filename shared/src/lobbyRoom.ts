@@ -13,6 +13,7 @@ import type { V3 } from "./constants";
 import type { ViceKind } from "./types";
 
 export const LOBBY_WALK_SPEED = 2.1; // m/s — a saunter, not a sprint
+export const LOBBY_RUN_SPEED = 3.4; // m/s — SHIFT held: hustling, not sprinting
 export const LOBBY_PLAYER_R = 0.28;
 export const LOBBY_EYE_HEIGHT = 1.5; // matches the table's seated eye
 /* inner walkable half-extents (walls sit just outside) */
@@ -156,12 +157,19 @@ export interface LobbyMotion {
    then integrate gravity and land on whatever is underfoot. dir is a
    world-space input direction (client already rotated keys by camera yaw);
    anything over unit length is normalized down so a doctored client can't
-   speed-hack. Mutates m. */
-export function stepLobbyMove(m: LobbyMotion, dirX: number, dirZ: number, dt: number): void {
+   speed-hack — `run` is the only legal boost, and it's a fixed gear, not a
+   multiplier the client picks. Mutates m. */
+export function stepLobbyMove(
+  m: LobbyMotion,
+  dirX: number,
+  dirZ: number,
+  dt: number,
+  run = false
+): void {
   const pos = m.pos;
   const len = Math.hypot(dirX, dirZ);
   if (len > 1e-6) {
-    const s = (len > 1 ? 1 / len : 1) * LOBBY_WALK_SPEED * dt;
+    const s = (len > 1 ? 1 / len : 1) * (run ? LOBBY_RUN_SPEED : LOBBY_WALK_SPEED) * dt;
     pos.x += dirX * s;
     pos.z += dirZ * s;
   }
