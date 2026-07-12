@@ -27,6 +27,11 @@ const P2 = "p2";
 const snap = (): Snapshot => sim.snapshot();
 const player = (id: string): PlayerSnap => snap().players.find((p) => p.id === id)!;
 
+/* the lobby comes pre-seeded with litter and toys; this suite tracks the
+   debris IT creates by excluding the ids that existed at boot */
+const seededIds = new Set(snap().debris.map((d) => d.id));
+const fresh = (s: Snapshot) => s.debris.filter((d) => !seededIds.has(d.id));
+
 sim.applyIntent(P1, { type: "join", name: "LEADER" });
 sim.applyIntent(P2, { type: "join", name: "TAGALONG" });
 
@@ -76,7 +81,7 @@ sim.applyIntent(P1, {
 me = player(P1);
 assert(me.held === null, "the fling emptied the hand");
 let s = snap();
-assert(s.debris.length === 1 && s.debris[0].room === "lobby", "the empty is lobby debris");
+assert(fresh(s).length === 1 && fresh(s)[0].room === "lobby", "the empty is lobby debris");
 
 let sawLitterEvent = false;
 let sawMoneyEvent = false;
@@ -88,11 +93,11 @@ while (guard++ < TICK_RATE * 12) {
     if (ev.t === "litter") sawLitterEvent = true;
     if (ev.t === "moneyDrop") sawMoneyEvent = true;
   }
-  if (s.debris.length && s.debris[0].phase === "settled") break;
+  if (fresh(s).length && fresh(s)[0].phase === "settled") break;
 }
-assert(s.debris.length === 1, "the empty survived its flight (didn't fall out of the world)");
-assert(s.debris[0].phase === "settled", "lobby debris settles like den debris");
-const rest = s.debris[0].pos;
+assert(fresh(s).length === 1, "the empty survived its flight (didn't fall out of the world)");
+assert(fresh(s)[0].phase === "settled", "lobby debris settles like den debris");
+const rest = fresh(s)[0].pos;
 assert(
   Math.abs(rest.x) < LOBBY_ROOM.halfW + 0.4 &&
     Math.abs(rest.z) < LOBBY_ROOM.halfD + 0.4 &&
@@ -105,7 +110,7 @@ assert(player(P1).score === 0, "score untouched by lobby littering");
 assert(player(P1).stats.litters === 0, "litter stat untouched too");
 
 /* ---- pickup respects walking reach ---- */
-const debrisId = s.debris[0].id;
+const debrisId = fresh(s)[0].id;
 const p2 = player(P2);
 const p2Dist = Math.hypot(rest.x - p2.pos.x, rest.z - p2.pos.z);
 assert(p2Dist > LOBBY_REACH, `sanity: P2 stands ${p2Dist.toFixed(1)}m from the empty`);
@@ -122,7 +127,7 @@ while (guard++ < TICK_RATE * 20) {
 sim.applyIntent(P1, { type: "move", dirX: 0, dirZ: 0, yaw: 0 });
 sim.applyIntent(P1, { type: "pickup", itemId: debrisId });
 assert(player(P1).held !== null, "walk up to the empty and it's grabbable again");
-assert(sim.snapshot().debris.length === 0, "picked-up litter leaves the floor");
+assert(fresh(sim.snapshot()).length === 0, "picked-up litter leaves the floor");
 
 /* refling and leave a second piece via the cigar machine for the clear test */
 sim.applyIntent(P1, {
@@ -133,13 +138,22 @@ sim.applyIntent(P1, {
   angVel: { x: 2, y: 2, z: 2 },
 });
 for (let i = 0; i < TICK_RATE; i++) sim.step();
-assert(sim.snapshot().debris.length === 1, "reflung empty is back on the floor");
+assert(fresh(sim.snapshot()).length === 1, "reflung empty is back on the floor");
 
-/* ---- clear litter: leader-only, lobby-only ---- */
+/* ---- clear litter: leader-only, lobby-only, and the toys survive ---- */
+const seededCount = sim.snapshot().debris.length - 1; // everything but the refling
 sim.applyIntent(P2, { type: "clearLitter" });
-assert(sim.snapshot().debris.length === 1, "a non-leader can't clear the litter");
+assert(sim.snapshot().debris.length === seededCount + 1, "a non-leader can't clear the litter");
 sim.applyIntent(P1, { type: "clearLitter" });
-assert(sim.snapshot().debris.length === 0, "the leader's clear-litter sweeps the room");
+s = sim.snapshot();
+assert(
+  s.debris.every((d) => d.kind === "plunger" || d.kind === "stick"),
+  "the leader's clear-litter sweeps every empty"
+);
+assert(
+  s.debris.length > 0 && fresh(s).length === 0,
+  "the toys aren't litter: the plunger and sticks survive the sweep"
+);
 
 /* ---- none of it leaks into the game ---- */
 sim.applyIntent(P1, { type: "dispense", kind: "beer" });
@@ -165,7 +179,7 @@ for (let i = 0; i < TICK_RATE * 8; i++) {
   if (st.events.some((e) => e.t === "litter" || e.t === "moneyDrop")) denScored = true;
   if (st.debris.length && st.debris.every((d) => d.phase === "settled")) break;
 }
-const carried = sim.snapshot().debris;
+const carried = fresh(sim.snapshot());
 assert(carried.length === 1 && carried[0].room === "den", "the carried empty landed in the den");
 assert(!denScored, "a dispensed (unearned) empty never scores, even at the table");
 

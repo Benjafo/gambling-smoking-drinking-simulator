@@ -24,7 +24,7 @@ import {
   seatTablePoint,
 } from "@shared/constants";
 import type { Intent, PlayerSnap, Snapshot } from "@shared/types";
-import type { ViceKind } from "@shared/types";
+import type { PropKind, ViceKind } from "@shared/types";
 import { handValue } from "@shared/blackjack";
 import {
   feltTexture,
@@ -39,7 +39,7 @@ import { makeFigure, poseArm, type ArmRig } from "./figure";
 import { LobbyRoomView, LOOK_SENS } from "./lobbyRoom";
 import { CardZone } from "./cards";
 import { DebrisView } from "./debris";
-import { HeldItemControl, makeBottleMesh, makeCigarMesh } from "./held";
+import { HeldItemControl, makeBottleMesh, makeCigarMesh, makeHeldMesh } from "./held";
 import { ZippoLighter } from "./zippo";
 import {
   SmokeSystem,
@@ -299,7 +299,7 @@ export class SceneView {
     this.neonLight.position.set(-3.5, 2.0, -1.6);
     this.scene.add(this.neonLight);
 
-    // warm den glow hung over the seat ring: the other degenerates are
+    // warm den glow hung over the seat ring: the other gamblers are
     // meant to be SEEN — the fog still swallows the room beyond the table
     const ring = new THREE.PointLight(0xffd9a0, 9, 7.5, 1.8);
     ring.position.set(0, 2.35, 0.5);
@@ -1264,7 +1264,7 @@ export class SceneView {
      then a fat-pick fallback: nearest item (settled or mid-tumble) within
      ~25cm of the pointer ray — clicking near a cigar counts, and a rolling
      bottle can be snatched out of the air. */
-  private findDebrisAt(ndc: THREE.Vector2): { id: number; kind: ViceKind; pos: THREE.Vector3 } | null {
+  private findDebrisAt(ndc: THREE.Vector2): { id: number; kind: PropKind; pos: THREE.Vector3 } | null {
     this.raycaster.setFromCamera(ndc, this.camera);
     const hits = this.raycaster.intersectObjects(this.debrisView.pickables, false);
     for (const h of hits) {
@@ -1717,7 +1717,11 @@ export class SceneView {
         // swap meshes in place: complete→held keeps the pose and lowers
         const from = av.prop ? av.prop.position.clone() : HAND_R.clone();
         if (av.prop) av.group.remove(av.prop);
-        av.prop = key.endsWith("beer") ? makeBottleMesh() : makeCigarMesh(key.startsWith("held"));
+        av.prop = p.ritual
+          ? p.ritual.kind === "beer"
+            ? makeBottleMesh()
+            : makeCigarMesh(false) // lit: the ritual's cigar still burns
+          : makeHeldMesh(p.held!.kind);
         av.prop.position.copy(from);
         av.group.add(av.prop);
         av.propKey = key;

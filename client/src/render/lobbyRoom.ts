@@ -21,10 +21,11 @@ import {
   LOBBY_OBSTACLES,
   LOBBY_REACH,
   LOBBY_ROOM,
+  LOBBY_SCATTER,
   stepLobbyMove,
   type LobbyMotion,
 } from "@shared/lobbyRoom";
-import type { Intent, PlayerSnap, Snapshot, ViceKind } from "@shared/types";
+import type { Intent, PlayerSnap, PropKind, Snapshot, ViceKind } from "@shared/types";
 import { carpetTexture, leatherTexture, woodTexture } from "./textures";
 import { DebrisView } from "./debris";
 import { HeldItemControl, makeBottleMesh, makeCigarMesh } from "./held";
@@ -40,12 +41,6 @@ const WALK_ANIM_HZ = 7.5; // leg-swing speed, phase cycles per second-ish
 
 /* the crosshair's pick ray: dead center */
 const CENTER = new THREE.Vector2(0, 0);
-
-/* deterministic scatter for the trash — same filth every visit */
-function lcg(seed: number): () => number {
-  let s = seed >>> 0;
-  return () => ((s = (s * 1664525 + 1013904223) >>> 0), s / 0xffffffff);
-}
 
 /* wrap to (-π, π] */
 function wrapAngle(a: number): number {
@@ -721,42 +716,23 @@ export class LobbyRoomView {
     this.scene.add(ashPole, ashBowl);
   }
 
-  /* the floor is part of the décor: bottles, butts, and crumpled paper,
-     scattered deterministically (same dump every visit), kept off the
-     spawn spots and out of the furniture */
+  /* the floor is part of the décor — but only the paper is décor now. The
+     scattered bottles and butts (and the plunger and cue sticks) are real
+     debris the sim seeds from the same LOBBY_SCATTER list, arriving through
+     snapshots like any flung empty, so they can be picked up and thrown. */
   private buildTrash(): void {
-    const rnd = lcg(0xdeadbeef);
     const paperMat = new THREE.MeshStandardMaterial({
       color: 0xcfc3a4,
       roughness: 0.95,
       flatShading: true,
     });
-    let placed = 0;
-    while (placed < 22) {
-      const x = (rnd() * 2 - 1) * (LOBBY_ROOM.halfW - 0.45);
-      const z = (rnd() * 2 - 1) * (LOBBY_ROOM.halfD - 0.45);
-      if (Math.hypot(x, z) < 1.15) continue; // keep the spawn clearing walkable-looking
-      if (LOBBY_OBSTACLES.some((o) => Math.hypot(x - o.x, z - o.z) < o.r + 0.15)) continue;
-      const kind = rnd();
-      if (kind < 0.4) {
-        const b = makeBottleMesh();
-        b.position.set(x, 0.037, z);
-        b.rotation.set(Math.PI / 2, 0, rnd() * Math.PI * 2); // all of them lying down
-        this.scene.add(b);
-      } else if (kind < 0.7) {
-        const c = makeCigarMesh(true);
-        c.scale.setScalar(0.8);
-        c.position.set(x, 0.012, z);
-        c.rotation.set(Math.PI / 2, 0, rnd() * Math.PI * 2);
-        this.scene.add(c);
-      } else {
-        const p = new THREE.Mesh(new THREE.IcosahedronGeometry(0.045, 0), paperMat);
-        p.scale.y = 0.7;
-        p.position.set(x, 0.03, z);
-        p.rotation.y = rnd() * Math.PI * 2;
-        this.scene.add(p);
-      }
-      placed++;
+    for (const s of LOBBY_SCATTER) {
+      if (s.kind !== "paper") continue;
+      const p = new THREE.Mesh(new THREE.IcosahedronGeometry(0.045, 0), paperMat);
+      p.scale.y = 0.7;
+      p.position.set(s.x, 0.03, s.z);
+      p.rotation.y = s.roll;
+      this.scene.add(p);
     }
   }
 
@@ -975,7 +951,7 @@ export class LobbyRoomView {
      the fat-pick fallback, both bounded by walking-reach from the eye */
   private findDebrisAt(
     ndc: THREE.Vector2
-  ): { id: number; kind: ViceKind; pos: THREE.Vector3 } | null {
+  ): { id: number; kind: PropKind; pos: THREE.Vector3 } | null {
     this.raycaster.setFromCamera(ndc, this.camera);
     const hits = this.raycaster.intersectObjects(this.debris.pickables, false);
     for (const h of hits) {
