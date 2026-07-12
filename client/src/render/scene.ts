@@ -145,6 +145,16 @@ export class SceneView {
   private playerZones = new Map<string, CardZone>();
   private chipStacks = new Map<string, { group: THREE.Group; bet: number }>();
   private avatars = new Map<number, AvatarView>();
+  /* the dealer's idle rig: head glances, breathing sway, rare gestures */
+  private dealer!: {
+    head: THREE.Group;
+    armR: ArmRig;
+    armL: ArmRig;
+    yawT: number; // where the current glance wants the head
+    nextGlance: number;
+    gesture: { rig: ArmRig; kind: "scratch" | "wipe"; start: number; end: number } | null;
+    nextGesture: number;
+  };
   private debrisView: DebrisView;
   private smoke: SmokeSystem;
   private cash: CashBurst;
@@ -855,13 +865,87 @@ export class SceneView {
   }
 
   private buildDealer(): void {
-    const { group } = makeFigure(0xd9d2c0, 0x17130d, { seated: false, hat: 0x1e3a28 });
+    const { group, head, armR, armL } = makeFigure(0xd9d2c0, 0x17130d, {
+      seated: false,
+      hat: 0x1e3a28,
+    });
     group.position.set(DEALER_POS.x, 0, DEALER_POS.z);
     // yaw-only: figures stand upright. A 3D lookAt would tip the body back
     // and slide the rendered head off the seat axis — where the player's
     // camera actually is — breaking "aim at the body = look at them"
     group.lookAt(0, 0, 0);
     this.scene.add(group);
+    const now = performance.now();
+    this.dealer = {
+      head,
+      armR,
+      armL,
+      yawT: 0,
+      nextGlance: now + 2500,
+      gesture: null,
+      nextGesture: now + 12000 + Math.random() * 15000,
+    };
+  }
+
+  /* The dealer works the room even when nobody's playing: breathes, glances
+     off across the den and back to the felt, and every long while scratches
+     under the hat or wipes the brow. Everything is group-local, so it all
+     survives the body's lookAt yaw. */
+  private updateDealer(now: number, dt: number): void {
+    const d = this.dealer;
+
+    // glances: mostly back to the cards, sometimes off at a player or the door
+    if (!d.gesture && now >= d.nextGlance) {
+      d.yawT = Math.random() < 0.45 ? 0 : (Math.random() - 0.5) * 1.1;
+      d.nextGlance = now + 2600 + Math.random() * 6000;
+    }
+    d.head.rotation.y += (d.yawT - d.head.rotation.y) * Math.min(1, dt * 2.5);
+    // breathing reads in the head: a slow bob plus a tiny pitch wander,
+    // incommensurate periods so it never settles into a metronome
+    d.head.position.y = 1.26 + 0.008 * Math.sin(now * 0.00093);
+    d.head.rotation.x = 0.035 * Math.sin(now * 0.00061);
+
+    if (!d.gesture && now >= d.nextGesture) {
+      const kind = Math.random() < 0.5 ? ("scratch" as const) : ("wipe" as const);
+      d.gesture = {
+        rig: Math.random() < 0.7 ? d.armR : d.armL,
+        kind,
+        start: now,
+        end: now + (kind === "scratch" ? 2000 : 1500),
+      };
+      d.nextGesture = now + 25000 + Math.random() * 25000;
+    }
+    if (d.gesture && now >= d.gesture.end) d.gesture = null; // hand drifts home below
+
+    for (const rig of [d.armR, d.armL]) {
+      const s = rig === d.armR ? 1 : -1;
+      if (d.gesture?.rig === rig) {
+        const g = d.gesture;
+        if (g.kind === "scratch") {
+          // fingers working at the skull just under the brim
+          _from.set(
+            s * (0.125 + 0.014 * Math.sin(now * 0.028)),
+            1.3 + 0.012 * Math.sin(now * 0.019),
+            0.07
+          );
+        } else {
+          // one slow pass across the brow
+          const t = Math.min(1, (now - g.start) / (g.end - g.start));
+          _from.set(s * 0.09 - s * 0.15 * easeInOut(t), 1.33, 0.14);
+        }
+        // the head may be mid-glance: swing the touch point with the yaw so
+        // the hand lands on the head, not where the head used to be (the
+        // neck pivot sits on the group's y-axis, so a plain yaw rotation works)
+        _from.applyAxisAngle(UP, d.head.rotation.y);
+        poseArm(rig, _grip.copy(rig.hand.position).lerp(_from, Math.min(1, dt * 7)));
+      } else {
+        // at rest the hands still drift — slow sway, phase-offset per arm
+        _from.copy(rig.rest);
+        _from.y += 0.009 * Math.sin(now * 0.0011 + s * 1.7);
+        _from.x += 0.005 * Math.sin(now * 0.00073 + s * 0.9);
+        poseArm(rig, _grip.copy(rig.hand.position).lerp(_from, Math.min(1, dt * 4)));
+      }
+    }
   }
 
   private makeAvatar(seat: number): AvatarView {
@@ -1533,6 +1617,8 @@ export class SceneView {
       requestAnimationFrame(() => this.frame());
       return;
     }
+
+    this.updateDealer(now, dt);
 
     // heads ease toward their owner's actual camera ray — reproduced in
     // world space, so the avatar frame's lean can't skew the gaze
