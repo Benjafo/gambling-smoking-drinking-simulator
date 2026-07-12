@@ -538,16 +538,14 @@ body.lobby-room #sidebar,body.lobby-room #actionDock{display:none}
   line-height:1;background:#232b24;color:var(--paper);border:2px solid var(--ink);
 }
 .chip-step:not(:disabled):hover{background:#2f3a30}
+/* paint (background/border/color) comes inline from the house chip standard
+   in chips.ts — same denomination, same color as the stacks on the felt */
 .chip-face{
   width:50px;height:50px;border-radius:50%;display:flex;align-items:center;justify-content:center;
   font-family:var(--tiny);font-weight:700;font-size:9px;color:var(--paper);
   border:4px dashed rgba(238,240,220,.8);
   box-shadow:0 3px 0 var(--ink), inset 0 0 0 3px rgba(0,0,0,.35);
 }
-.chip-face.c0{background:#31517e}
-.chip-face.c1{background:#8e3231}
-.chip-face.c2{background:#37704a}
-.chip-face.c3{background:#1c1c1c;border-color:var(--bulb)}
 .preset-btn{
   font-family:var(--tiny);font-size:8px;letter-spacing:.06em;color:var(--paper);
   background:#232b24;border:2px solid var(--ink);box-shadow:0 2px 0 var(--ink);padding:7px 11px;

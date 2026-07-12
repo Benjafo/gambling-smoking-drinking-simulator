@@ -205,9 +205,21 @@
   <div class="menu-panel controls-panel">
     <h3>AUDIO</h3>
     <div class="audio-row">
-      <label class="key" for="sfxVolInput">SOUND</label>
+      <label class="key" for="masterVolInput">MASTER</label>
+      <input type="range" id="masterVolInput" min="0" max="100" step="1"
+             aria-label="Master volume">
+      <span class="vol-val" id="masterVolVal">100%</span>
+    </div>
+    <div class="audio-row">
+      <label class="key" for="musicVolInput">MUSIC</label>
+      <input type="range" id="musicVolInput" min="0" max="100" step="1"
+             aria-label="Music volume">
+      <span class="vol-val" id="musicVolVal">100%</span>
+    </div>
+    <div class="audio-row">
+      <label class="key" for="sfxVolInput">EFFECTS</label>
       <input type="range" id="sfxVolInput" min="0" max="100" step="1"
-             aria-label="Sound volume">
+             aria-label="Sound effects volume">
       <span class="vol-val" id="sfxVolVal">100%</span>
     </div>
     <div class="audio-row">
@@ -219,11 +231,8 @@
     <h3>HOUSE CONTROLS</h3>
     <div class="ctl-row"><span class="key">HOLD 1 / 2</span><span>smoke a cigar / drink a beer — let go early and it spills</span></div>
     <div class="ctl-row"><span class="key">F</span><span>fling the empty where you're looking</span></div>
-    <div class="ctl-row"><span class="key">DRAG A VICE</span><span>the mouse ritual: pull it to the table target — hold to smoke or drink</span></div>
-    <div class="ctl-row"><span class="key">DRAG &amp; RELEASE</span><span>wind up and fling the empty by hand — a click grabs the one you're holding</span></div>
     <div class="ctl-row"><span class="key">ENTER</span><span>hands-free smoke or drink from a focused vice</span></div>
     <div class="ctl-row"><span class="key">WASD</span><span>wander the waiting room</span></div>
-    <div class="ctl-row"><span class="key">MOUSE</span><span>free look, at the table and in the waiting room — Esc frees the cursor, a click on the scene takes it back</span></div>
     <div class="ctl-row"><span class="key">SPACE</span><span>hop — the stools are a staircase if you believe hard enough</span></div>
     <div class="ctl-row"><span class="key">E</span><span>work a machine in the waiting room — at the door it starts the game (leader only)</span></div>
     <div class="ctl-row"><span class="key">C</span><span>sweep the litter away while waiting (leader only)</span></div>
