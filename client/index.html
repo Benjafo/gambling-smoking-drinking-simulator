@@ -32,24 +32,24 @@
            title="TOLERANCE — every cigar you finish fills less and burns off faster"></span><span class="inv" id="cigarInv">×3</span></div>
       <div class="meter cigar"><div class="fill ok" id="cigarFill"></div></div>
       <div class="vice-item" id="cigarItem" role="button" tabindex="0"
-           aria-label="Smoke a cigar: drag to the table target and hold still, or press Enter">
+           aria-label="Smoke a cigar: hold the 1 key, drag to the table target and hold still, or press Enter">
         <div class="cigar-gfx">
           <div class="ash"></div><div class="ember"></div>
           <div class="wrap"></div><div class="band"></div><div class="cap-end"></div>
         </div>
-        <span>DRAG TO SMOKE</span>
+        <span>HOLD 1 TO SMOKE</span>
       </div>
       <div style="height:12px"></div>
       <div class="vice-head"><span>BEER</span><span class="tol" id="beerTol"
            title="TOLERANCE — every beer you finish fills less and wears off faster"></span><span class="inv" id="beerInv">×3</span></div>
       <div class="meter beer"><div class="fill ok" id="beerFill"></div></div>
       <div class="vice-item" id="beerItem" role="button" tabindex="0"
-           aria-label="Drink a beer: drag to the table target, then swipe up and hold, or press Enter">
+           aria-label="Drink a beer: hold the 2 key, drag to the table target then swipe up and hold, or press Enter">
         <div class="bottle-gfx">
           <div class="body"><div class="liquid"></div><div class="label">LAGER</div><div class="shine"></div></div>
           <div class="cap"></div>
         </div>
-        <span>DRAG TO DRINK</span>
+        <span>HOLD 2 TO DRINK</span>
       </div>
     </div>
     <div class="panel">
@@ -99,7 +99,7 @@
   </div>
 
   <div id="banner"></div>
-  <div id="flingHint">DRAG THE EMPTY &amp; RELEASE TO FLING IT — OR LET IT DROP</div>
+  <div id="flingHint">PRESS F TO FLING THE EMPTY — OR DRAG &amp; RELEASE TO AIM IT</div>
   <div id="dispenseHint"></div>
   <div id="crosshair"></div>
   <div id="flavorBar">The dealer doesn't blink.</div>
@@ -174,12 +174,15 @@
   <div id="lobbyList" class="lobby-list"></div>
   <p class="tagline" id="lobbyHint"></p>
   <button class="big-btn" id="lobbyStartBtn">START THE GAME</button>
-  <button class="big-btn secondary" id="lobbyClearBtn" style="display:none">CLEAR THE LITTER</button>
+  <button class="big-btn secondary" id="lobbyClearBtn" style="display:none">CLEAR THE LITTER (C)</button>
   <p class="lobby-controls">
     <span>WASD — WANDER</span>
     <span>MOUSE — LOOK</span>
     <span>SPACE — HOP</span>
     <span>E AT A MACHINE — FREE LITTER</span>
+    <span>E AT THE DOOR — START (LEADER)</span>
+    <span>F — FLING YOUR EMPTY</span>
+    <span>C — CLEAR LITTER (LEADER)</span>
     <span>ESC — MENU</span>
   </p>
 </div>
@@ -203,13 +206,16 @@
   </div>
   <div class="menu-panel controls-panel">
     <h3>HOUSE CONTROLS</h3>
-    <div class="ctl-row"><span class="key">DRAG A VICE</span><span>pull it to the table target — hold to smoke or drink</span></div>
-    <div class="ctl-row"><span class="key">DRAG &amp; RELEASE</span><span>fling the empty bottle wherever you like</span></div>
+    <div class="ctl-row"><span class="key">HOLD 1 / 2</span><span>smoke a cigar / drink a beer — let go early and it spills</span></div>
+    <div class="ctl-row"><span class="key">F</span><span>fling the empty where you're looking</span></div>
+    <div class="ctl-row"><span class="key">DRAG A VICE</span><span>the mouse ritual: pull it to the table target — hold to smoke or drink</span></div>
+    <div class="ctl-row"><span class="key">DRAG &amp; RELEASE</span><span>wind up and fling the empty by hand — a click grabs the one you're holding</span></div>
     <div class="ctl-row"><span class="key">ENTER</span><span>hands-free smoke or drink from a focused vice</span></div>
     <div class="ctl-row"><span class="key">WASD</span><span>wander the waiting room</span></div>
     <div class="ctl-row"><span class="key">MOUSE</span><span>free look, at the table and in the waiting room — Esc frees the cursor, a click on the scene takes it back</span></div>
     <div class="ctl-row"><span class="key">SPACE</span><span>hop — the stools are a staircase if you believe hard enough</span></div>
-    <div class="ctl-row"><span class="key">E</span><span>work a machine in the waiting room</span></div>
+    <div class="ctl-row"><span class="key">E</span><span>work a machine in the waiting room — at the door it starts the game (leader only)</span></div>
+    <div class="ctl-row"><span class="key">C</span><span>sweep the litter away while waiting (leader only)</span></div>
     <div class="ctl-row"><span class="key">ESC</span><span>open or close this screen</span></div>
   </div>
   <button class="big-btn" id="resumeBtn">BACK TO THE TABLE</button>

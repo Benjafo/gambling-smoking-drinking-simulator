@@ -27,6 +27,8 @@ export class RitualControl {
   private spillTimer: number | undefined;
   private items: Record<ViceKind, HTMLElement>;
   private ringFg: SVGCircleElement;
+  /* which vice key is currently held down — the pointer-lock ritual path */
+  private holdKey: ViceKind | null = null;
 
   constructor(
     private send: (i: Intent) => void,
@@ -36,6 +38,39 @@ export class RitualControl {
     this.ringFg = document.querySelector("#dropTarget .ring-fg") as SVGCircleElement;
     this.bind("cigar");
     this.bind("beer");
+    this.bindKeys();
+  }
+
+  /* hold-to-do-it keys: 1 lights the cigar, 2 pours the beer — the path
+     for pointer-locked play, where there's no cursor to drag the item
+     with. Keydown starts the ritual engaged (the sim runs the clock);
+     releasing before it finishes spills the attempt, exactly like
+     dropping the drag gesture. */
+  private bindKeys(): void {
+    const kinds: Record<string, ViceKind> = { Digit1: "cigar", Digit2: "beer" };
+    addEventListener("keydown", (e) => {
+      const kind = kinds[e.code];
+      if (!kind || e.repeat || this.active) return;
+      if ((e.target as HTMLElement)?.tagName === "INPUT") return;
+      // table chrome only: no HUD (menu) or waiting room (nothing to smoke)
+      if (!$("hud").classList.contains("active")) return;
+      if (document.body.classList.contains("lobby-room")) return;
+      if (this.items[kind].classList.contains("disabled")) return;
+      this.holdKey = kind;
+      this.start(kind, 0, 0, true);
+      $("targetLabel").textContent = kind === "cigar" ? "KEEP HOLDING 1…" : "KEEP HOLDING 2…";
+    });
+    addEventListener("keyup", (e) => {
+      const kind = kinds[e.code];
+      if (!kind || this.holdKey !== kind) return;
+      this.holdKey = null;
+      if (this.active === kind) this.cancel(); // let go early: it spills
+    });
+    // alt-tabbing away mustn't leave a drink pouring itself forever
+    addEventListener("blur", () => {
+      if (this.holdKey && this.active === this.holdKey) this.cancel();
+      this.holdKey = null;
+    });
   }
 
   private targetCenter(): { x: number; y: number } {

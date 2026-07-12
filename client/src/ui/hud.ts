@@ -416,9 +416,9 @@ export class Hud {
     clearBtn.disabled = !hasLitter;
     $("lobbyHint").textContent = amLeader
       ? snap.players.length === 1
-        ? "Drinking alone is still drinking. Start whenever — or wait for company."
-        : `${snap.players.length} degenerates seated. Start when ready.`
-      : "The lobby leader starts the game. Sit tight.";
+        ? "Drinking alone is still drinking. The door starts it — walk up and press E."
+        : `${snap.players.length} degenerates seated. Start at the door — walk up and press E.`
+      : "The leader starts the game at the door. Sit tight.";
   }
 
   /* ranked leaderboard; re-renders only when standings/scores change (the

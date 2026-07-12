@@ -172,6 +172,17 @@ export class HeldItemControl {
     return true;
   }
 
+  /* the pointer-locked entry to the wind-up: the crosshair can never point
+     at your own hand (the empty rides the camera, always off-center), so a
+     click while holding grabs it sight unseen */
+  grabHeld(): boolean {
+    if (!this.mesh || this.heldId === null || this.grabbing) return false;
+    this.grabbing = true;
+    this.grabSource = "hand";
+    this.samples = [];
+    return true;
+  }
+
   pointerMove(ndc: THREE.Vector2): void {
     if (!this.grabbing || !this.mesh) return;
     this.raycaster.setFromCamera(ndc, this.camera);
@@ -236,6 +247,40 @@ export class HeldItemControl {
     });
     // optimistic: hand empties now; the sim's debris body appears next snapshot
     this.dropMesh();
+  }
+
+  /* keyboard fling: the empty sails along the gaze — aimed with the
+     crosshair, no wind-up. Same intent the whip release sends, so the sim
+     can't tell the difference. */
+  quickFling(): boolean {
+    if (!this.mesh || (this.heldId === null && this.pendingKind === null)) return false;
+    this.grabbing = false;
+    const fwd = new THREE.Vector3();
+    this.camera.getWorldDirection(fwd);
+    const vel = fwd.multiplyScalar(MAX_FLING_SPEED * 0.75);
+    vel.y += 1.2; // a touch of arc — a throw, not a laser
+    if (vel.length() > MAX_FLING_SPEED) vel.setLength(MAX_FLING_SPEED);
+    const speed = vel.length();
+    const angVel = new THREE.Vector3(
+      (Math.random() - 0.5) * speed * 3,
+      (Math.random() - 0.5) * speed * 1.5,
+      (Math.random() - 0.5) * speed * 3
+    );
+    const origin = this.mesh.position.clone();
+    if (this.heldId === null) {
+      // floor-grab not confirmed yet: queue the throw, apply() fires it
+      this.pendingFling = { origin, vel, angVel };
+      return true;
+    }
+    this.send({
+      type: "fling",
+      itemId: this.heldId,
+      origin: v3(origin),
+      vel: v3(vel),
+      angVel: v3(angVel),
+    });
+    this.dropMesh();
+    return true;
   }
 
   /* session teardown: retire the mesh, confirmed or optimistic alike */
