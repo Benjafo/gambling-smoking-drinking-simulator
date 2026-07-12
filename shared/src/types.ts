@@ -60,6 +60,9 @@ export interface PlayerSnap {
   alive: boolean;
   /* joined mid-run: spectates until the next game starts */
   waiting: boolean;
+  /* opted out of betting rounds: still at the table (meters run, vices and
+     littering live), just never waited on for the deal */
+  sittingOut: boolean;
   causeOfDeath: string | null;
   score: number;
   stats: PlayerStats;
@@ -103,6 +106,9 @@ export interface Snapshot {
      queued. Set the moment the leader starts the game; the phase stays
      "lobby" until it hits zero. */
   startsIn: number | null;
+  /* seconds until the betting window closes and the cards fly without the
+     stragglers, null outside the betting phase */
+  bettingEndsIn: number | null;
   players: PlayerSnap[];
   debris: DebrisSnap[];
   events: SimEvent[];
@@ -117,6 +123,9 @@ export type Intent =
   | { type: "startGame" }
   | { type: "setBet"; amount: number }
   | { type: "commitBet" }
+  /* skip betting rounds without holding up the table: on sticks until the
+     player opts back in (or the next run starts) */
+  | { type: "sitOut"; on: boolean }
   | { type: "hit" }
   | { type: "stand" }
   | { type: "double" }

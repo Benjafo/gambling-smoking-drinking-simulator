@@ -163,6 +163,9 @@ interface Player {
   alive: boolean;
   /* joined mid-run: seated but spectating until the next game starts */
   waiting: boolean;
+  /* opted out of betting rounds: the deal never waits on them. Sticky until
+     they opt back in (commitBet counts) or a new run/restart resets it. */
+  sittingOut: boolean;
   causeOfDeath: string | null;
   /* when they died this run — feeds the standings cascade and identifies
      dead-heat ties (everyone who fell on the same tick) */
@@ -276,6 +279,9 @@ export class Simulation {
       case "commitBet":
         this.commitBet(p);
         break;
+      case "sitOut":
+        this.sitOut(p, intent.on);
+        break;
       case "hit":
         this.hit(p);
         break;
@@ -378,6 +384,7 @@ export class Simulation {
       moveYaw: LOBBY_SPAWNS[seat].yaw,
       alive: true,
       waiting: this.phase !== "lobby",
+      sittingOut: false,
       causeOfDeath: null,
       diedTick: null,
       score: 0,
@@ -398,6 +405,7 @@ export class Simulation {
     this.startAtTick = null;
     for (const q of this.players.values()) {
       q.waiting = false;
+      q.sittingOut = false; // a fresh run deals everyone in until they say otherwise
       q.moveDir = { x: 0, z: 0 }; // everyone stops mid-stride and takes a seat
       q.vy = 0; // even the one who was mid-hop
       q.grounded = true;
@@ -405,7 +413,7 @@ export class Simulation {
     this.runPlayerCount = this.players.size;
     this.winnerId = null;
     this.runStartTick = this.tick;
-    this.phase = "betting";
+    this.openBetting();
   }
 
   private removePlayer(p: Player): void {
@@ -439,17 +447,43 @@ export class Simulation {
     p.lastBet = p.bet;
     this.setMoney(p, p.money - p.bet);
     p.committed = true;
+    p.sittingOut = false; // anteing up IS opting back in
     p.doubled = false;
     p.stood = false;
     p.hand = [];
 
+    // the first ante refreshes the window: everyone still deciding gets a
+    // full BETTING_WINDOW_MS to answer it before the cards fly without them
     if (this.bettors().length === 1)
       this.bettingDeadline = this.tick + msTicks(BETTING_WINDOW_MS);
 
-    const canStillJoin = [...this.players.values()].some(
-      (q) => q.alive && !q.committed && q.money > 0
+    this.maybeDeal();
+  }
+
+  /* opting out of the round is an answer too — it can be the last thing the
+     deal was waiting on. Sitting out mid-hand only affects the next round
+     (committed players stay in the one being played). */
+  private sitOut(p: Player, on: boolean): void {
+    if (!p.alive || p.sittingOut === on) return;
+    p.sittingOut = on;
+    if (on) this.maybeDeal();
+  }
+
+  /* deal the moment nobody is left deciding: every alive, seated-for-real
+     player with money has either anted or sat out. Spectators (waiting) are
+     never waited on. Zero bettors means nothing to deal — betting stays open
+     and the deadline in step() keeps watch. */
+  private maybeDeal(): void {
+    if (this.phase !== "betting") return;
+    const undecided = [...this.players.values()].some(
+      (q) => q.alive && !q.waiting && !q.committed && !q.sittingOut && q.money > 0
     );
-    if (!canStillJoin) this.startDealing();
+    if (!undecided && this.bettors().length > 0) this.startDealing();
+  }
+
+  private openBetting(): void {
+    this.phase = "betting";
+    this.bettingDeadline = this.tick + msTicks(BETTING_WINDOW_MS);
   }
 
   private startDealing(): void {
@@ -625,7 +659,7 @@ export class Simulation {
         this.eliminate(p, "BANKRUPT. THE HOUSE ALWAYS WINS.");
     }
     if (this.phase === "over") return; // eliminations above may end the run
-    this.phase = "betting";
+    this.openBetting();
     this.dealerHand = [];
     this.holeHidden = true;
   }
@@ -653,6 +687,7 @@ export class Simulation {
       q.ritual = null;
       q.alive = true;
       q.waiting = false;
+      q.sittingOut = false;
       q.causeOfDeath = null;
       q.diedTick = null;
       q.score = 0;
@@ -931,9 +966,12 @@ export class Simulation {
       for (const a of due) a.run();
     }
 
-    // betting window: once someone commits, stragglers eventually sit out
-    if (this.phase === "betting" && this.bettingDeadline && this.tick >= this.bettingDeadline)
-      this.startDealing();
+    // betting window: when it closes the stragglers are left out of the hand.
+    // With nobody anted there's nothing to deal — re-arm and keep watch.
+    if (this.phase === "betting" && this.bettingDeadline && this.tick >= this.bettingDeadline) {
+      if (this.bettors().length > 0) this.startDealing();
+      else this.bettingDeadline = this.tick + msTicks(BETTING_WINDOW_MS);
+    }
 
     // AFK turn timeout
     if (this.phase === "acting" && this.turnPlayerId && this.tick >= this.turnDeadline) {
@@ -1322,6 +1360,7 @@ export class Simulation {
       moving: p.moveDir.x !== 0 || p.moveDir.z !== 0,
       alive: p.alive,
       waiting: p.waiting,
+      sittingOut: p.sittingOut,
       causeOfDeath: p.causeOfDeath,
       score: Math.round(p.score),
       stats: { ...p.stats },
@@ -1357,6 +1396,10 @@ export class Simulation {
         this.startAtTick === null
           ? null
           : Math.round(Math.max(0, (this.startAtTick - this.tick) / TICK_RATE) * 100) / 100,
+      bettingEndsIn:
+        this.phase === "betting" && this.bettingDeadline
+          ? Math.round(Math.max(0, (this.bettingDeadline - this.tick) / TICK_RATE) * 100) / 100
+          : null,
       players,
       debris,
       events,
