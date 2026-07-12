@@ -893,7 +893,7 @@ export class SceneView {
 
   private buildDealer(): void {
     const { group, head, armR, armL } = makeFigure(0xd9d2c0, 0x17130d, {
-      seated: false,
+      standing: true,
       hat: 0x1e3a28,
     });
     group.position.set(DEALER_POS.x, 0, DEALER_POS.z);

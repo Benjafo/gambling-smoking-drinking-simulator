@@ -101,7 +101,8 @@ export const SEAT_RADIUS = 2.2;
 /* eye sits high enough to look DOWN at the felt — flat cards at a grazing
    angle are unreadable */
 export const EYE_HEIGHT = 1.5;
-export const DEALER_POS = { x: 0, y: 0, z: -1.35 };
+/* clear of the tabletop (radius 1.5) so the standing body doesn't clip it */
+export const DEALER_POS = { x: 0, y: 0, z: -1.85 };
 
 export interface V3 {
   x: number;
