@@ -554,6 +554,19 @@ body.lobby-room #sidebar,body.lobby-room #actionDock{display:none}
 }
 .preset-btn:not(:disabled):hover{background:#2f3a30}
 .preset-btn:not(:disabled):active{transform:translateY(2px);box-shadow:none}
+/* keyboard hints on the dock buttons — in-game the cursor is locked away,
+   so the keys are the primary path and the buttons wear the legend */
+.act-btn kbd{font-family:var(--tiny);font-weight:700;font-size:9px;opacity:.7;
+  border:1px solid currentColor;padding:1px 4px;margin-left:5px;vertical-align:middle}
+.preset-btn kbd{font:inherit;opacity:.6;border:1px solid currentColor;padding:0 3px;margin-left:3px}
+.chip-key{font-family:var(--tiny);font-weight:700;font-size:9px;color:var(--paper);opacity:.6;
+  border:1px solid rgba(238,240,220,.4);padding:0 4px;margin-top:1px}
+/* SHIFT held: the rack is in take-away mode — labels flip to -N and the
+   add-steppers stand down so the state is readable at a glance */
+.chip-key::before{content:"+"}
+#chipRack.shifted .chip-key::before{content:"-"}
+#chipRack.shifted .chip-key{color:#e8b4b0;border-color:rgba(232,180,176,.5);opacity:.9}
+#chipRack.shifted .chip-step.plus{opacity:.35}
 .hint{font-family:var(--crt);font-size:16px;color:rgba(238,240,220,.55);margin-top:8px;text-align:center}
 
 /* ---------- banner / hints / flavor ---------- */
