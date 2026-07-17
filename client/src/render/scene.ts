@@ -108,6 +108,9 @@ const AVATAR_CHEST_Y = 0.28 + 0.85 * AVATAR_SCALE;
    tracks where they're looking, and whatever vice is in their hand */
 interface AvatarView {
   seat: number;
+  /* JSON of the appearance this figure was built from — a lobby-phase
+     closet visit changes it and the figure rebuilds on the next snapshot */
+  lookKey: string;
   group: THREE.Group;
   head: THREE.Group;
   armR: ArmRig;
@@ -1038,6 +1041,7 @@ export class SceneView {
     this.scene.add(group);
     return {
       seat,
+      lookKey: JSON.stringify(snap.appearance),
       group,
       head,
       armR,
@@ -1697,6 +1701,12 @@ export class SceneView {
       return;
     }
     let av = existing;
+    // restyled in the waiting room since this figure was built: rebuild
+    if (av && av.lookKey !== JSON.stringify(p.appearance)) {
+      this.scene.remove(av.group);
+      this.avatars.delete(p.seat);
+      av = undefined;
+    }
     if (!av) {
       av = this.makeAvatar(p);
       this.avatars.set(p.seat, av);

@@ -86,4 +86,31 @@ assert(
   "a doctored look is clamped, not trusted"
 );
 
+/* ---- the closet: restyle mid-lobby, sanitized, refused once the run starts ---- */
+const restyle: Appearance = { skin: 0, shirt: 1, pants: 1, hat: 0, hatColor: 0, accessory: 2 };
+sim.applyIntent("p1", { type: "setAppearance", appearance: restyle });
+assert(
+  JSON.stringify(byName("DAPPER").appearance) === JSON.stringify(picked) &&
+    JSON.stringify(sim.snapshot().players.find((p) => p.name === "DAPPER")!.appearance) ===
+      JSON.stringify(restyle),
+  "a lobby restyle lands on the next snapshot"
+);
+sim.applyIntent("p1", {
+  type: "setAppearance",
+  appearance: { ...restyle, skin: 999 },
+});
+assert(
+  sim.snapshot().players.find((p) => p.name === "DAPPER")!.appearance.skin ===
+    SKIN_TONES.length - 1,
+  "a restyle is sanitized like a join"
+);
+sim.applyIntent("p1", { type: "startGame" });
+for (let i = 0; i < 60 * 11 && sim.snapshot().phase === "lobby"; i++) sim.step();
+sim.applyIntent("p1", { type: "setAppearance", appearance: picked });
+assert(
+  JSON.stringify(sim.snapshot().players.find((p) => p.name === "DAPPER")!.appearance) !==
+    JSON.stringify(picked),
+  "no restyling once the cards are in the air"
+);
+
 console.log("\nALL APPEARANCE TESTS PASSED");

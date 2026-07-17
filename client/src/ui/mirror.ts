@@ -1,9 +1,9 @@
-/* THE MIRROR: the bar restroom's character creator, off the title screen.
-   Edits an Appearance (palette indices — see shared/appearance.ts), shows
-   it on a live figure, and keeps it in localStorage; the menu reads it back
-   with loadAppearance() whenever a seat is taken. Purely front-of-house:
-   nothing here talks to a session, and the sim re-sanitizes whatever
-   eventually arrives in a join. */
+/* THE MIRROR: the character customizer, wearing two hats of its own.
+   From the title screen (CUSTOMIZE) it edits the localStorage look that
+   rides every join. From the waiting-room closet it edits the CURRENT
+   stay's look instead — each change goes out as a setAppearance intent and
+   localStorage is left alone, so the restyle lasts exactly until you leave
+   the table. Either way the sim re-sanitizes whatever arrives. */
 import {
   ACCESSORY_COUNT,
   HAT_BARE,
@@ -42,33 +42,74 @@ export class MirrorControl {
   private view: MirrorView | null = null;
   private syncs: (() => void)[] = [];
 
+  private spinOn = true;
+  /* "menu" edits localStorage; "lobby" streams setAppearance intents */
+  private mode: "menu" | "lobby" = "menu";
+  private applyCb: ((a: Appearance) => void) | null = null;
+  private closeCb: (() => void) | null = null;
+
   constructor() {
     this.buildRows();
     $("titleMirrorBtn").addEventListener("click", () => this.show());
     $("mirrorBackBtn").addEventListener("click", () => this.hide());
+    $("mirrorSpinBtn").addEventListener("click", () => {
+      this.spinOn = !this.spinOn;
+      if (this.view) this.view.spin = this.spinOn;
+      $("mirrorSpinBtn").textContent = this.spinOn ? "SPIN: ON" : "SPIN: OFF";
+    });
     addEventListener("keydown", (e) => {
-      if (e.key === "Escape" && $("mirrorScreen").classList.contains("active")) this.hide();
+      if (e.key === "Escape" && this.open()) {
+        this.hide();
+        // registered before main.ts's Esc handler: a close must stay a
+        // close, not become an options toggle on the same press
+        e.stopImmediatePropagation();
+      }
     });
   }
 
+  open(): boolean {
+    return $("mirrorScreen").classList.contains("active");
+  }
+
+  /* title-screen CUSTOMIZE: edit the saved look that rides future joins */
   private show(): void {
+    this.mode = "menu";
+    this.applyCb = this.closeCb = null;
+    this.look = loadAppearance(); // a lobby restyle must not bleed in here
     $("titleScreen").classList.remove("active");
+    this.openScreen();
+  }
+
+  /* waiting-room closet: edit this stay's look, live on everyone's screen */
+  showForLobby(current: Appearance, apply: (a: Appearance) => void, onClose: () => void): void {
+    this.mode = "lobby";
+    this.applyCb = apply;
+    this.closeCb = onClose;
+    this.look = sanitizeAppearance(current);
+    this.openScreen();
+  }
+
+  private openScreen(): void {
     $("mirrorScreen").classList.add("active");
     // the glass warms up on first open and stays for the app's lifetime
     if (!this.view) this.view = new MirrorView($("mirrorStage"));
+    this.view.spin = this.spinOn;
     this.view.setLook(this.look);
     this.view.start();
+    for (const s of this.syncs) s();
   }
 
   private hide(): void {
     this.view?.stop();
     $("mirrorScreen").classList.remove("active");
-    $("titleScreen").classList.add("active");
+    if (this.mode === "menu") $("titleScreen").classList.add("active");
+    else this.closeCb?.();
   }
 
   private set(field: Field, value: number): void {
     this.look = sanitizeAppearance({ ...this.look, [field]: value });
-    localStorage.setItem(STORE_KEY, JSON.stringify(this.look));
+    if (this.mode === "menu") localStorage.setItem(STORE_KEY, JSON.stringify(this.look));
+    else this.applyCb?.(this.look);
     this.view?.setLook(this.look);
     for (const s of this.syncs) s();
   }

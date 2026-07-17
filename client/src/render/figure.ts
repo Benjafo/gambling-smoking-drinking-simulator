@@ -79,6 +79,8 @@ function buildHat(style: number, mat: THREE.MeshStandardMaterial): THREE.Group {
     hat.add(m);
     return m;
   };
+  // hat bands stay cabinet-dark whatever the felt color
+  const darkBand = () => new THREE.MeshStandardMaterial({ color: 0x17130d, roughness: 0.8 });
   switch (style) {
     case HAT_FLATCAP: {
       // low dome hugging the skull, a stubby bill out front
@@ -90,18 +92,22 @@ function buildHat(style: number, mat: THREE.MeshStandardMaterial): THREE.Group {
       break;
     }
     case HAT_COWBOY: {
-      const brim = add(new THREE.Mesh(new THREE.CylinderGeometry(0.19, 0.19, 0.016, 18), mat));
-      brim.position.y = 0.07;
-      const crown = add(new THREE.Mesh(new THREE.CylinderGeometry(0.072, 0.092, 0.13, 14), mat));
+      // oval brim, longer front-to-back, with the signature rolled-up sides
+      const brim = add(new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.18, 0.014, 20), mat));
+      brim.scale.set(0.88, 1, 1.15);
+      brim.position.y = 0.075;
+      for (const s of [-1, 1]) {
+        const curl = add(new THREE.Mesh(new THREE.CylinderGeometry(0.028, 0.028, 0.3, 10), mat));
+        curl.rotation.x = Math.PI / 2;
+        curl.position.set(s * 0.15, 0.092, 0);
+      }
+      // tall crown with a cattleman's crease pinched down the middle
+      const crown = add(new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.098, 0.13, 14), mat));
       crown.position.y = 0.145;
-      // the band stays cabinet-dark whatever the felt color
-      const band = add(
-        new THREE.Mesh(
-          new THREE.CylinderGeometry(0.094, 0.096, 0.024, 14),
-          new THREE.MeshStandardMaterial({ color: 0x17130d, roughness: 0.8 })
-        )
-      );
-      band.position.y = 0.093;
+      const crease = add(new THREE.Mesh(new THREE.BoxGeometry(0.034, 0.024, 0.15), darkBand()));
+      crease.position.y = 0.208;
+      const band = add(new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.102, 0.026, 14), darkBand()));
+      band.position.y = 0.096;
       break;
     }
     case HAT_VISOR: {
@@ -114,11 +120,20 @@ function buildHat(style: number, mat: THREE.MeshStandardMaterial): THREE.Group {
       break;
     }
     default: {
-      // fedora: brim + tapered crown — the house style
-      const brim = add(new THREE.Mesh(new THREE.CylinderGeometry(0.155, 0.155, 0.014, 18), mat));
-      brim.position.y = 0.075;
-      const crown = add(new THREE.Mesh(new THREE.CylinderGeometry(0.078, 0.098, 0.1, 14), mat));
-      crown.position.y = 0.13;
+      // fedora: wide brim snapped down at the front, squat crown that fills
+      // out over the skull, grosgrain band — the house style
+      const brim = add(new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.16, 0.012, 20), mat));
+      brim.position.y = 0.072;
+      brim.rotation.x = 0.1; // front dipped, back kicked up
+      const crown = add(new THREE.Mesh(new THREE.CylinderGeometry(0.088, 0.106, 0.092, 16), mat));
+      crown.position.y = 0.122;
+      // pinched top: a barely-domed cap, narrower than the crown walls —
+      // any rounder and the whole thing reads bowler
+      const pinch = add(new THREE.Mesh(new THREE.SphereGeometry(0.082, 14, 8), mat));
+      pinch.scale.y = 0.24;
+      pinch.position.y = 0.165;
+      const band = add(new THREE.Mesh(new THREE.CylinderGeometry(0.108, 0.11, 0.03, 16), darkBand()));
+      band.position.y = 0.093;
     }
   }
   hat.position.y = 0.01;

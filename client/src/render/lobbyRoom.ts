@@ -12,8 +12,10 @@
    so the camera never fights the authority it's predicting. */
 import * as THREE from "three";
 import {
+  CLOSET_RADIUS,
   DISPENSE_RADIUS,
   DOOR_RADIUS,
+  LOBBY_CLOSET,
   LOBBY_DISPENSERS,
   LOBBY_DOOR,
   LOBBY_EYE_HEIGHT,
@@ -85,6 +87,9 @@ function nameSprite(name: string): THREE.Sprite {
 interface LobbyAvatar {
   group: THREE.Group;
   legs: [THREE.Group, THREE.Group];
+  /* JSON of the appearance this figure was built from — a mismatch against
+     the snapshot means a closet visit happened and the figure rebuilds */
+  lookKey: string;
   targetPos: THREE.Vector3;
   targetYaw: number;
   moving: boolean;
@@ -129,6 +134,8 @@ export class LobbyRoomView {
   private raycaster = new THREE.Raycaster();
   /* the canvas, for hover cursors — set by SceneView after construction */
   domElement: HTMLElement | null = null;
+  /* E at the closet: opens the customizer overlay — main.ts wires this */
+  onOpenCloset: (() => void) | null = null;
   private wasGrabbing = false;
   private lastHeldSent = 0;
   private dispenseHint = document.getElementById("dispenseHint");
@@ -148,6 +155,7 @@ export class LobbyRoomView {
     this.scene.fog = new THREE.Fog(0x0b0906, 7, 16);
     this.buildRoom();
     this.buildFurniture();
+    this.buildCloset();
     this.buildTrash();
     this.debris = new DebrisView(this.scene);
     this.held = new HeldItemControl(this.scene, this.camera, send);
@@ -157,7 +165,13 @@ export class LobbyRoomView {
       // gameplay keys re-arm mouse-look — behind an open menu that locks the
       // cursor away and turns the next Esc into a close-then-reopen bounce
       if (document.getElementById("optionsScreen")?.classList.contains("active")) return;
+      if (document.getElementById("mirrorScreen")?.classList.contains("active")) return;
       if (e.code === "KeyE") {
+        if (this.nearCloset()) {
+          // the customizer takes the screen — don't re-arm the lock under it
+          this.onOpenCloset?.();
+          return;
+        }
         this.captureLook(); // any gameplay key re-arms mouse-look (Esc can't)
         if (this.nearDoor()) this.tryStartAtDoor();
         else this.tryDispense();
@@ -746,6 +760,141 @@ export class LobbyRoomView {
     }
   }
 
+  /* ---------------- the closet (LOBBY_CLOSET): walk in, press E ----------------
+     an open wardrobe against the +X wall — mirror propped against the
+     shelf, a suit and top hat nobody ever claims, and THE MIRROR glowing
+     above it in marquee gold. Interacting opens the same customizer the
+     title screen's CUSTOMIZE does; main.ts wires onOpenCloset. */
+  private buildCloset(): void {
+    const cx = LOBBY_CLOSET.x;
+    const cz = LOBBY_CLOSET.z;
+    const woodMat = new THREE.MeshStandardMaterial({ map: woodTexture(), roughness: 0.75 });
+    const g = new THREE.Group();
+    const add = (mesh: THREE.Mesh, x: number, y: number, z: number): THREE.Mesh => {
+      mesh.position.set(x, y, z);
+      mesh.castShadow = true;
+      g.add(mesh);
+      return mesh;
+    };
+
+    // carcass: back against the drywall, opening toward the room (-X)
+    add(new THREE.Mesh(new THREE.BoxGeometry(0.06, 2.24, 1.56), woodMat), cx + 0.27, 1.12, cz);
+    for (const s of [-1, 1])
+      add(new THREE.Mesh(new THREE.BoxGeometry(0.72, 2.24, 0.06), woodMat), cx - 0.05, 1.12, cz + s * 0.75);
+    add(new THREE.Mesh(new THREE.BoxGeometry(0.78, 0.06, 1.62), woodMat), cx - 0.05, 2.27, cz);
+    add(new THREE.Mesh(new THREE.BoxGeometry(0.72, 0.09, 1.5), woodMat), cx - 0.05, 0.045, cz);
+
+    // one shelf on the far half; the top hat lives there
+    add(new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.04, 0.62), woodMat), cx + 0.02, 1.0, cz - 0.44);
+
+    // the mirror, propped against the shelf edge like someone meant to hang
+    // it years ago. The glass is a painted sheen, not real metalness — with
+    // no envmap a "true" mirror renders as a black hole in this dark room
+    const mirror = new THREE.Group();
+    const frame = new THREE.Mesh(
+      new THREE.BoxGeometry(0.05, 1.34, 0.64),
+      new THREE.MeshStandardMaterial({ color: 0x241a0f, roughness: 0.6 })
+    );
+    const glass = new THREE.Mesh(
+      new THREE.BoxGeometry(0.02, 1.2, 0.52),
+      new THREE.MeshBasicMaterial({
+        map: canvasTexture(128, 256, (ctx) => {
+          const grad = ctx.createLinearGradient(0, 256, 128, 0);
+          grad.addColorStop(0, "#3d4a4e");
+          grad.addColorStop(0.42, "#6d8288");
+          grad.addColorStop(0.5, "#a8bcc0");
+          grad.addColorStop(0.58, "#66797f");
+          grad.addColorStop(1, "#2e383c");
+          ctx.fillStyle = grad;
+          ctx.fillRect(0, 0, 128, 256);
+        }),
+      })
+    );
+    glass.position.x = -0.03;
+    frame.castShadow = true;
+    mirror.add(frame, glass);
+    mirror.position.set(cx - 0.02, 0.62, cz - 0.32);
+    mirror.rotation.z = -0.22; // leaned back onto the shelf
+    mirror.rotation.y = 0.45; // and knocked askew — nobody straightens it
+    g.add(mirror);
+
+    // hanging rod, brass like every other fixture in the house
+    const rod = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.015, 0.015, 1.44, 8),
+      new THREE.MeshStandardMaterial({ color: 0xe8c469, metalness: 0.8, roughness: 0.35 })
+    );
+    rod.rotation.x = Math.PI / 2;
+    rod.position.set(cx - 0.08, 1.92, cz);
+    g.add(rod);
+
+    // the suit on its hanger: jacket, a sliver of shirt, a tie going nowhere
+    const suit = new THREE.Group();
+    const charcoal = new THREE.MeshStandardMaterial({ color: 0x1d1d24, roughness: 0.85 });
+    const hangerWire = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.008, 0.008, 0.1, 6),
+      new THREE.MeshStandardMaterial({ color: 0x8f8f8f, metalness: 0.7, roughness: 0.4 })
+    );
+    hangerWire.position.y = 0.38;
+    const shoulders = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.05, 0.46), charcoal);
+    shoulders.position.y = 0.3;
+    const jacket = new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.62, 0.44), charcoal);
+    const shirt = new THREE.Mesh(
+      new THREE.BoxGeometry(0.02, 0.34, 0.1),
+      new THREE.MeshStandardMaterial({ color: 0xd8d4c4, roughness: 0.9 })
+    );
+    shirt.position.set(-0.055, 0.12, 0);
+    const tie = new THREE.Mesh(
+      new THREE.BoxGeometry(0.015, 0.28, 0.045),
+      new THREE.MeshStandardMaterial({ color: 0x5c2020, roughness: 0.8 })
+    );
+    tie.position.set(-0.065, 0.1, 0);
+    for (const m of [shoulders, jacket]) m.castShadow = true;
+    suit.add(hangerWire, shoulders, jacket, shirt, tie);
+    suit.position.set(cx - 0.08, 1.52, cz + 0.32);
+    suit.rotation.x = 0.04; // hangs a little off true, like everything here
+    g.add(suit);
+
+    // the top hat on the shelf, tipped like it was set down in a hurry
+    const topHat = new THREE.Group();
+    const hatMat = new THREE.MeshStandardMaterial({ color: 0x0d0d12, roughness: 0.45 });
+    const hatBrim = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.13, 0.012, 18), hatMat);
+    const hatCrown = new THREE.Mesh(new THREE.CylinderGeometry(0.085, 0.09, 0.22, 16), hatMat);
+    hatCrown.position.y = 0.11;
+    hatBrim.castShadow = hatCrown.castShadow = true;
+    topHat.add(hatBrim, hatCrown);
+    topHat.position.set(cx + 0.02, 1.03, cz - 0.42);
+    topHat.rotation.set(0.1, 0.7, -0.06);
+    g.add(topHat);
+
+    this.scene.add(g);
+
+    // THE MIRROR, glowing marquee-gold over the opening (same treatment as
+    // the door's TO THE TABLE sign) + a warm spill so the alcove reads
+    const sign = new THREE.Mesh(
+      new THREE.PlaneGeometry(1.15, 0.26),
+      new THREE.MeshBasicMaterial({
+        map: canvasTexture(512, 112, (ctx) => {
+          ctx.fillStyle = "#1a1206";
+          ctx.fillRect(0, 0, 512, 112);
+          ctx.font = "700 52px 'Pixelify Sans',sans-serif";
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+          ctx.shadowColor = "#ffc832";
+          ctx.shadowBlur = 22;
+          ctx.fillStyle = "#ffdf8a";
+          ctx.fillText("THE MIRROR", 256, 58);
+        }),
+      })
+    );
+    sign.position.set(cx - 0.48, 2.42, cz);
+    sign.rotation.y = -Math.PI / 2;
+    const signGlow = new THREE.PointLight(0xffc832, 1.5, 3.5, 2);
+    signGlow.position.set(cx - 0.6, 2.3, cz);
+    const closetGlow = new THREE.PointLight(0xffd9a0, 1.1, 2.6, 2);
+    closetGlow.position.set(cx - 0.1, 1.95, cz);
+    this.scene.add(sign, signGlow, closetGlow);
+  }
+
   /* ---------------- avatars ---------------- */
   private makeLobbyAvatar(p: PlayerSnap): LobbyAvatar {
     const { group, legs, armR, armL } = makeFigure(lookOf(p.appearance), {
@@ -762,6 +911,7 @@ export class LobbyRoomView {
     return {
       group,
       legs: legs!,
+      lookKey: JSON.stringify(p.appearance),
       targetPos: new THREE.Vector3(p.pos.x, p.pos.y, p.pos.z),
       targetYaw: p.moveYaw,
       moving: p.moving,
@@ -839,6 +989,14 @@ export class LobbyRoomView {
         continue;
       }
       let av = this.avatars.get(p.id);
+      // a closet visit rebuilds the whole figure — cheapest correct answer
+      // for a dozen primitives
+      const lookKey = JSON.stringify(p.appearance);
+      if (av && av.lookKey !== lookKey) {
+        this.scene.remove(av.group);
+        this.avatars.delete(p.id);
+        av = undefined;
+      }
       if (!av) {
         av = this.makeLobbyAvatar(p);
         this.avatars.set(p.id, av);
@@ -1007,6 +1165,13 @@ export class LobbyRoomView {
     );
   }
 
+  private nearCloset(): boolean {
+    return (
+      this.posInit &&
+      Math.hypot(this.myPos.x - LOBBY_CLOSET.x, this.myPos.z - LOBBY_CLOSET.z) <= CLOSET_RADIUS
+    );
+  }
+
   /* the door IS the start button: the leader stands at it and presses E;
      anyone else knocking gets the deny buzz (the hint says why) */
   private tryStartAtDoor(): void {
@@ -1044,6 +1209,11 @@ export class LobbyRoomView {
         this.latest?.leaderId === this.myId
           ? "PRESS E — START THE GAME"
           : "THE LEADER OPENS THIS DOOR";
+      el.classList.add("show");
+      return;
+    }
+    if (this.nearCloset()) {
+      el.textContent = "PRESS E — THE MIRROR";
       el.classList.add("show");
       return;
     }

@@ -76,6 +76,14 @@ export const DISPENSE_RADIUS = 1.35;
    interaction anchor; the sim gates startGame on leadership, not position. */
 export const LOBBY_DOOR = { x: 0.6, z: LOBBY_ROOM.halfD };
 export const DOOR_RADIUS = 1.2;
+/* the open wardrobe closet on the +X wall: step up to it and press E to
+   restyle at its leaning mirror (the setAppearance intent). Like the door,
+   a client-side interaction anchor — the sim gates the intent on phase, not
+   position. The closet is shallow and mostly air, so it deliberately has no
+   LOBBY_OBSTACLES entry: you wade through this room's furniture edges the
+   same way you wade through its trash. */
+export const LOBBY_CLOSET = { x: 3.9, z: -1.4 };
+export const CLOSET_RADIUS = 1.15;
 /* on your feet you can walk to litter — no need for the table's room-wide
    seated reach */
 export const LOBBY_REACH = 2.2;

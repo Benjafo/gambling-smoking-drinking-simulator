@@ -15,6 +15,8 @@ export class MirrorView {
   private figure: THREE.Group | null = null;
   /* face the glass first — the slow turn shows the back soon enough */
   private yaw = 0;
+  /* the idle turntable; the SPIN button parks it (drag still works) */
+  spin = true;
   private dragging = false;
   private raf = 0;
   private lastT = 0;
@@ -94,7 +96,7 @@ export class MirrorView {
       const dt = Math.min(0.1, (t - this.lastT) / 1000);
       this.lastT = t;
       this.resize();
-      if (!this.dragging) this.yaw += dt * 0.35;
+      if (this.spin && !this.dragging) this.yaw += dt * 0.35;
       if (this.figure) this.figure.rotation.y = this.yaw;
       this.renderer.render(this.scene, this.camera);
     };
