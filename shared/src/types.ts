@@ -1,3 +1,4 @@
+import type { Appearance } from "./appearance";
 import type { Card, ResultKind } from "./blackjack";
 import type { V3 } from "./constants";
 
@@ -33,6 +34,8 @@ export interface PlayerStats {
 export interface PlayerSnap {
   id: string;
   name: string;
+  /* mirror-picked look, sanitized at join — palette indices, see appearance.ts */
+  appearance: Appearance;
   seat: number;
   money: number;
   pendingBet: number;
@@ -123,7 +126,7 @@ export interface Snapshot {
 }
 
 export type Intent =
-  | { type: "join"; name: string }
+  | { type: "join"; name: string; appearance?: Appearance }
   | { type: "leave" }
   | { type: "startGame" }
   | { type: "setBet"; amount: number }
@@ -172,8 +175,20 @@ export interface LobbyInfo {
    the local worker is its own private table) */
 export type ClientMsg =
   | { type: "intent"; intent: Intent }
-  | { type: "createLobby"; name: string; password: string | null; playerName: string }
-  | { type: "joinLobby"; lobbyId: string; password: string | null; playerName: string }
+  | {
+      type: "createLobby";
+      name: string;
+      password: string | null;
+      playerName: string;
+      appearance?: Appearance;
+    }
+  | {
+      type: "joinLobby";
+      lobbyId: string;
+      password: string | null;
+      playerName: string;
+      appearance?: Appearance;
+    }
   | { type: "leaveLobby" };
 export type ServerMsg =
   | { type: "welcome"; playerId: string }

@@ -10,6 +10,7 @@ import {
 import { SceneView } from "./render/scene";
 import { Hud } from "./ui/hud";
 import { MenuControl } from "./ui/menu";
+import { MirrorControl } from "./ui/mirror";
 import { RitualControl } from "./ui/ritual";
 
 const $ = (id: string): HTMLElement => document.getElementById(id)!;
@@ -35,6 +36,7 @@ const scene = new SceneView($("stage"), send);
 const hud = new Hud(send);
 const ritual = new RitualControl(send, scene);
 const menu = new MenuControl(startSession);
+new MirrorControl(); // self-contained: title button in, localStorage out
 
 function startSession(s: Session): void {
   session = s;

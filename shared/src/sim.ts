@@ -2,6 +2,7 @@
    60 Hz tick, accepts validated intents, and emits snapshots. The renderer
    (and eventually remote clients) never mutate state directly. */
 import type RAPIER_NS from "@dimforge/rapier3d-compat";
+import { sanitizeAppearance, type Appearance } from "./appearance";
 import {
   buildShoe,
   handValue,
@@ -136,6 +137,8 @@ const freshStats = (): PlayerStats => ({
 interface Player {
   id: string;
   name: string;
+  /* sanitized at join, immutable for the stay — see appearance.ts */
+  appearance: Appearance;
   seat: number;
   money: number;
   pendingBet: number;
@@ -346,7 +349,7 @@ export class Simulation {
 
   /* ---------------- intents ---------------- */
   applyIntent(playerId: string, intent: Intent): void {
-    if (intent.type === "join") return this.join(playerId, intent.name);
+    if (intent.type === "join") return this.join(playerId, intent.name, intent.appearance);
     const p = this.players.get(playerId);
     if (!p) return;
 
@@ -436,7 +439,7 @@ export class Simulation {
     }
   }
 
-  private join(playerId: string, name: string): void {
+  private join(playerId: string, name: string, appearance?: unknown): void {
     if (this.players.has(playerId)) return;
     // prefer the middle seat, then fan outward
     const order = [2, 1, 3, 0, 4].filter((i) => i < SEAT_COUNT);
@@ -446,6 +449,7 @@ export class Simulation {
     this.players.set(playerId, {
       id: playerId,
       name: name.slice(0, 24) || "GAMBLER",
+      appearance: sanitizeAppearance(appearance, seat),
       seat,
       money: START_MONEY,
       pendingBet: 0,
@@ -1452,6 +1456,7 @@ export class Simulation {
     const players: PlayerSnap[] = [...this.players.values()].map((p) => ({
       id: p.id,
       name: p.name,
+      appearance: p.appearance,
       seat: p.seat,
       money: Math.round(p.money),
       pendingBet: p.pendingBet,

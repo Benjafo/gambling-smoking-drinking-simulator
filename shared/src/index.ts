@@ -1,3 +1,4 @@
+export * from "./appearance";
 export * from "./blackjack";
 export * from "./constants";
 export * from "./types";

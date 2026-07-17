@@ -12,6 +12,7 @@
                                (nginx proxies /ws to the lobby server in prod)
      ?server=8090              ws://<page host>:8090
      ?server=ws://host:port    exactly that */
+import type { Appearance } from "@shared/appearance";
 import { WS_PORT_DEFAULT } from "@shared/constants";
 import type { ClientMsg, Intent, LobbyInfo, ServerMsg, Snapshot } from "@shared/types";
 
@@ -51,7 +52,7 @@ export class LocalSession implements Session {
   private snapCb: ((snap: Snapshot) => void) | null = null;
   private endCb: ((reason: EndReason) => void) | null = null;
 
-  constructor(name: string) {
+  constructor(name: string, appearance?: Appearance) {
     this.worker = new Worker(new URL("./simWorker.ts", import.meta.url), { type: "module" });
     this.worker.onmessage = (e: MessageEvent<ServerMsg>) => {
       if (e.data.type === "snapshot") this.snapCb?.(e.data.snap);
@@ -62,7 +63,7 @@ export class LocalSession implements Session {
       playerId: this.playerId,
     });
     // the worker queues intents until the sim is up
-    this.send({ type: "join", name });
+    this.send({ type: "join", name, appearance });
   }
   send(intent: Intent): void {
     this.worker.postMessage({ type: "intent", playerId: this.playerId, intent });
@@ -163,11 +164,21 @@ export class ServerConnection {
     };
   }
 
-  createLobby(name: string, password: string | null, playerName: string): Promise<Session> {
-    return this.requestSeat({ type: "createLobby", name, password, playerName });
+  createLobby(
+    name: string,
+    password: string | null,
+    playerName: string,
+    appearance?: Appearance
+  ): Promise<Session> {
+    return this.requestSeat({ type: "createLobby", name, password, playerName, appearance });
   }
-  joinLobby(lobbyId: string, password: string | null, playerName: string): Promise<Session> {
-    return this.requestSeat({ type: "joinLobby", lobbyId, password, playerName });
+  joinLobby(
+    lobbyId: string,
+    password: string | null,
+    playerName: string,
+    appearance?: Appearance
+  ): Promise<Session> {
+    return this.requestSeat({ type: "joinLobby", lobbyId, password, playerName, appearance });
   }
 
   private requestSeat(msg: ClientMsg): Promise<Session> {

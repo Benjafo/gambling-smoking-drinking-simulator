@@ -1,10 +1,50 @@
 /* The clay-figure regulars, shared by the table scene (seated, posed arms)
    and the lobby room (standing, walk-cycle legs). Split out of scene.ts so
-   both scenes can build the same people without importing each other. */
+   both scenes can build the same people without importing each other.
+
+   Players arrive as an Appearance (palette indices, sanitized by the sim);
+   lookOf() resolves it to hexes. Non-player figures (the dealer, the
+   mirror's preview) can hand-build a FigureLook with colors outside the
+   player palettes. */
 import * as THREE from "three";
+import {
+  ACC_CHAIN,
+  ACC_EAR_CIGAR,
+  ACC_MUSTACHE,
+  ACC_NONE,
+  ACC_SHADES,
+  HAT_BARE,
+  HAT_COLORS,
+  HAT_COWBOY,
+  HAT_FLATCAP,
+  HAT_VISOR,
+  PANTS_COLORS,
+  SHIRT_COLORS,
+  SKIN_TONES,
+  type Appearance,
+} from "@shared/appearance";
 
 const UP = new THREE.Vector3(0, 1, 0);
 const _seg = new THREE.Vector3();
+
+/* a figure's resolved wardrobe: raw hexes + silhouette picks */
+export interface FigureLook {
+  shirt: number;
+  skin: number;
+  pants: number;
+  hat: { style: number; color: number } | null;
+  accessory: number;
+}
+
+export function lookOf(a: Appearance): FigureLook {
+  return {
+    shirt: SHIRT_COLORS[a.shirt],
+    skin: SKIN_TONES[a.skin],
+    pants: PANTS_COLORS[a.pants],
+    hat: a.hat === HAT_BARE ? null : { style: a.hat, color: HAT_COLORS[a.hatColor] },
+    accessory: a.accessory,
+  };
+}
 
 /* one arm: shoulder-anchored capsule aimed at the hand sphere; poseArm()
    glues the hand to a target and stretches the arm to it */
@@ -30,6 +70,116 @@ export function poseArm(rig: ArmRig, target: THREE.Vector3): void {
   rig.arm.scale.set(1, len / ARM_LEN, 1);
 }
 
+/* hat silhouettes, built at the head's local origin (skull radius 0.115).
+   Each one leans on the same tipped-brim language as the original fedora. */
+function buildHat(style: number, mat: THREE.MeshStandardMaterial): THREE.Group {
+  const hat = new THREE.Group();
+  const add = (m: THREE.Mesh): THREE.Mesh => {
+    m.castShadow = true;
+    hat.add(m);
+    return m;
+  };
+  switch (style) {
+    case HAT_FLATCAP: {
+      // low dome hugging the skull, a stubby bill out front
+      const dome = add(new THREE.Mesh(new THREE.SphereGeometry(0.125, 16, 10), mat));
+      dome.scale.y = 0.45;
+      dome.position.set(0, 0.068, -0.012);
+      const bill = add(new THREE.Mesh(new THREE.BoxGeometry(0.115, 0.012, 0.07), mat));
+      bill.position.set(0, 0.052, 0.115);
+      break;
+    }
+    case HAT_COWBOY: {
+      const brim = add(new THREE.Mesh(new THREE.CylinderGeometry(0.19, 0.19, 0.016, 18), mat));
+      brim.position.y = 0.07;
+      const crown = add(new THREE.Mesh(new THREE.CylinderGeometry(0.072, 0.092, 0.13, 14), mat));
+      crown.position.y = 0.145;
+      // the band stays cabinet-dark whatever the felt color
+      const band = add(
+        new THREE.Mesh(
+          new THREE.CylinderGeometry(0.094, 0.096, 0.024, 14),
+          new THREE.MeshStandardMaterial({ color: 0x17130d, roughness: 0.8 })
+        )
+      );
+      band.position.y = 0.093;
+      break;
+    }
+    case HAT_VISOR: {
+      // bare skull above — the band and bill do all the silhouette work
+      const band = add(new THREE.Mesh(new THREE.TorusGeometry(0.116, 0.013, 8, 20), mat));
+      band.rotation.x = Math.PI / 2;
+      band.position.y = 0.052;
+      const bill = add(new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.01, 0.085), mat));
+      bill.position.set(0, 0.052, 0.145);
+      break;
+    }
+    default: {
+      // fedora: brim + tapered crown — the house style
+      const brim = add(new THREE.Mesh(new THREE.CylinderGeometry(0.155, 0.155, 0.014, 18), mat));
+      brim.position.y = 0.075;
+      const crown = add(new THREE.Mesh(new THREE.CylinderGeometry(0.078, 0.098, 0.1, 14), mat));
+      crown.position.y = 0.13;
+    }
+  }
+  hat.position.y = 0.01;
+  hat.rotation.z = 0.09; // tipped a touch — silhouette does the work
+  return hat;
+}
+
+/* accessories ride the head group (they turn with the stare) except the
+   chain, which lies on the chest and is parented to the body instead */
+function buildAccessory(kind: number): { mesh: THREE.Object3D; onHead: boolean } | null {
+  switch (kind) {
+    case ACC_SHADES: {
+      const g = new THREE.Group();
+      const mat = new THREE.MeshStandardMaterial({
+        color: 0x0b0b0e,
+        roughness: 0.25,
+        metalness: 0.3,
+      });
+      for (const s of [-1, 1]) {
+        const lens = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.036, 0.012), mat);
+        lens.position.set(s * 0.042, 0.015, 0.104);
+        g.add(lens);
+      }
+      const bridge = new THREE.Mesh(new THREE.BoxGeometry(0.032, 0.008, 0.01), mat);
+      bridge.position.set(0, 0.02, 0.104);
+      g.add(bridge);
+      return { mesh: g, onHead: true };
+    }
+    case ACC_MUSTACHE: {
+      const m = new THREE.Mesh(
+        new THREE.CapsuleGeometry(0.013, 0.045, 3, 8),
+        new THREE.MeshStandardMaterial({ color: 0x241708, roughness: 0.9 })
+      );
+      m.rotation.z = Math.PI / 2;
+      m.position.set(0, -0.03, 0.102);
+      return { mesh: m, onHead: true };
+    }
+    case ACC_EAR_CIGAR: {
+      const c = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.011, 0.011, 0.075, 8),
+        new THREE.MeshStandardMaterial({ color: 0xa87f4f, roughness: 0.85 })
+      );
+      c.rotation.x = Math.PI / 2;
+      c.position.set(0.108, 0.035, 0.01);
+      return { mesh: c, onHead: true };
+    }
+    case ACC_CHAIN: {
+      const chain = new THREE.Mesh(
+        new THREE.TorusGeometry(0.1, 0.012, 8, 22),
+        new THREE.MeshStandardMaterial({ color: 0xc9a227, roughness: 0.3, metalness: 0.75 })
+      );
+      // draped against the slumped chest, pivoting from the neck
+      chain.position.set(0, 1.12, 0.1);
+      chain.rotation.x = 1.12;
+      return { mesh: chain, onHead: false };
+    }
+    default:
+      return null;
+  }
+}
+
 /* A regular, built from primitives: slumped torso, arms, hat, and just
    enough face to read a stare. The group's +Z is the front. Everything
    above the shoulders lives in `head`, pivoted at the neck, so a remote
@@ -37,9 +187,8 @@ export function poseArm(rig: ArmRig, target: THREE.Vector3): void {
    `seated` adds thighs on a stool; `standing` adds full hip-pivoted legs
    for the lobby room, returned so the walk cycle can swing them. */
 export function makeFigure(
-  shirt: number,
-  skin: number,
-  opts: { hat?: number; seated?: boolean; standing?: boolean } = {}
+  look: FigureLook,
+  opts: { seated?: boolean; standing?: boolean } = {}
 ): {
   group: THREE.Group;
   head: THREE.Group;
@@ -48,9 +197,9 @@ export function makeFigure(
   legs?: [THREE.Group, THREE.Group];
 } {
   const g = new THREE.Group();
-  const shirtMat = new THREE.MeshStandardMaterial({ color: shirt, roughness: 0.9 });
-  const skinMat = new THREE.MeshStandardMaterial({ color: skin, roughness: 0.75 });
-  const darkMat = new THREE.MeshStandardMaterial({ color: opts.hat ?? 0x17130d, roughness: 0.8 });
+  const shirtMat = new THREE.MeshStandardMaterial({ color: look.shirt, roughness: 0.9 });
+  const skinMat = new THREE.MeshStandardMaterial({ color: look.skin, roughness: 0.75 });
+  const pantsMat = new THREE.MeshStandardMaterial({ color: look.pants, roughness: 0.8 });
 
   const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.17, 0.36, 4, 12), shirtMat);
   body.position.y = 0.85;
@@ -75,17 +224,14 @@ export function makeFigure(
     head.add(eye);
   }
 
-  // hat: brim + tapered crown, tipped a touch — silhouette does the work
-  const brim = new THREE.Mesh(new THREE.CylinderGeometry(0.155, 0.155, 0.014, 18), darkMat);
-  brim.position.y = 0.075;
-  const crown = new THREE.Mesh(new THREE.CylinderGeometry(0.078, 0.098, 0.1, 14), darkMat);
-  crown.position.y = 0.13;
-  brim.castShadow = crown.castShadow = true;
-  const hat = new THREE.Group();
-  hat.add(brim, crown);
-  hat.position.y = 0.01;
-  hat.rotation.z = 0.09;
-  head.add(hat);
+  if (look.hat) {
+    const hatMat = new THREE.MeshStandardMaterial({ color: look.hat.color, roughness: 0.8 });
+    head.add(buildHat(look.hat.style, hatMat));
+  }
+  if (look.accessory !== ACC_NONE) {
+    const acc = buildAccessory(look.accessory);
+    if (acc) (acc.onHead ? head : g).add(acc.mesh);
+  }
 
   // arms as poseable rigs: shoulder-anchored capsules aimed at the hand
   // spheres, so a raised bottle raises the arm with it
@@ -115,7 +261,7 @@ export function makeFigure(
     for (const s of [-1, 1]) {
       const hip = new THREE.Group();
       hip.position.set(s * 0.085, 0.62, 0);
-      const leg = new THREE.Mesh(legGeo, darkMat);
+      const leg = new THREE.Mesh(legGeo, pantsMat);
       leg.position.y = -0.29;
       leg.castShadow = true;
       hip.add(leg);
@@ -127,7 +273,7 @@ export function makeFigure(
   if (opts.seated !== false) {
     const legGeo = new THREE.CapsuleGeometry(0.065, 0.2, 3, 8);
     for (const s of [-1, 1]) {
-      const leg = new THREE.Mesh(legGeo, darkMat);
+      const leg = new THREE.Mesh(legGeo, pantsMat);
       leg.position.set(s * 0.085, 0.47, 0.14);
       leg.rotation.x = 1.35;
       leg.castShadow = true;

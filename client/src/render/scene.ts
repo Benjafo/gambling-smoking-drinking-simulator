@@ -2,6 +2,7 @@
    per-seat camera and pointer routing (grab > pickup > look). Everything
    here renders snapshots; nothing here mutates game state. */
 import * as THREE from "three";
+import { ACC_NONE, HAT_FEDORA } from "@shared/appearance";
 import {
   TABLE,
   DEN_ROOM,
@@ -37,7 +38,7 @@ import {
   chipMaterials,
 } from "./textures";
 import { chipBreakdown } from "../chips";
-import { makeFigure, poseArm, type ArmRig } from "./figure";
+import { lookOf, makeFigure, poseArm, type ArmRig } from "./figure";
 import { LobbyRoomView, LOOK_SENS } from "./lobbyRoom";
 import { CardZone } from "./cards";
 import { DebrisView } from "./debris";
@@ -934,10 +935,18 @@ export class SceneView {
   }
 
   private buildDealer(): void {
-    const { group, head, armR, armL } = makeFigure(0xd9d2c0, 0x17130d, {
-      standing: true,
-      hat: 0x1e3a28,
-    });
+    // hand-built look: shadow-dark skin and the green felt hat aren't in
+    // any player palette — the dealer is furniture, not a customer
+    const { group, head, armR, armL } = makeFigure(
+      {
+        shirt: 0xd9d2c0,
+        skin: 0x17130d,
+        pants: 0x1e3a28,
+        hat: { style: HAT_FEDORA, color: 0x1e3a28 },
+        accessory: ACC_NONE,
+      },
+      { standing: true }
+    );
     group.position.set(DEALER_POS.x, 0, DEALER_POS.z);
     // yaw-only: figures stand upright. A 3D lookAt would tip the body back
     // and slide the rendered head off the seat axis — where the player's
@@ -1017,9 +1026,9 @@ export class SceneView {
     }
   }
 
-  private makeAvatar(seat: number): AvatarView {
-    const colors = [0x4a3b2a, 0x2c3c60, 0x6a1f1f, 0x24512f, 0x3a3226];
-    const { group, head, armR, armL } = makeFigure(colors[seat % colors.length], 0x8a7560);
+  private makeAvatar(snap: PlayerSnap): AvatarView {
+    const seat = snap.seat;
+    const { group, head, armR, armL } = makeFigure(lookOf(snap.appearance));
     const p = seatPosition(seat);
     group.position.set(p.x, 0.28, p.z);
     group.lookAt(0, 0.28, 0); // yaw-only: upright on the seat axis (see buildDealer)
@@ -1689,7 +1698,7 @@ export class SceneView {
     }
     let av = existing;
     if (!av) {
-      av = this.makeAvatar(p.seat);
+      av = this.makeAvatar(p);
       this.avatars.set(p.seat, av);
     }
     av.targetYaw = p.look.yaw;

@@ -64,11 +64,13 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--open);outline-o
 #menuScreen{background:rgba(9,12,9,.92)}
 #overScreen{background:#160d0c}
 /* CRT scanlines on the full-bleed screens (not the transparent lobby overlay) */
-#titleScreen::before,#menuScreen::before,#overScreen::before,#optionsScreen::before{
+#titleScreen::before,#menuScreen::before,#overScreen::before,#optionsScreen::before,
+#mirrorScreen::before{
   content:"";position:absolute;inset:0;pointer-events:none;z-index:0;
   background:repeating-linear-gradient(rgba(0,0,0,.22) 0 1px,transparent 1px 3px);
 }
-#titleScreen > *,#menuScreen > *,#overScreen > *,#optionsScreen > *{z-index:1}
+#titleScreen > *,#menuScreen > *,#overScreen > *,#optionsScreen > *,
+#mirrorScreen > *{z-index:1}
 
 /* ---------- title screen: attract mode over the live den ---------- */
 /* the 3D room stays visible on the right; an ink scrim carries the menu */
@@ -224,6 +226,34 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--open);outline-o
 .server-row .srv-meta{color:var(--smoke);font-size:16px;letter-spacing:.05em;white-space:nowrap}
 #joinBox{display:flex;flex-direction:column;gap:8px}
 #menuErr:empty,#menuNotice:empty,#serverStatus:empty{display:none}
+
+/* ---------- the mirror (character creator) ---------- */
+#mirrorScreen{background:rgba(9,12,9,.92);gap:18px}
+.mirror-wrap{display:flex;gap:22px;align-items:stretch;justify-content:center;flex-wrap:wrap}
+#mirrorStage{
+  width:min(340px,86vw);min-height:420px;background:var(--night-2);
+  border:2px solid var(--ink);box-shadow:inset 0 0 0 1px var(--line),5px 5px 0 rgba(0,0,0,.4);
+  cursor:grab;
+}
+#mirrorStage:active{cursor:grabbing}
+#mirrorStage canvas{display:block}
+.mirror-panel{width:min(430px,88vw)}
+#mirrorRows{display:flex;flex-direction:column;gap:13px;text-align:left}
+.mirror-row{display:flex;flex-direction:column;gap:6px}
+.mirror-row.dim{opacity:.35;pointer-events:none}
+.swatch-row{display:flex;gap:8px;flex-wrap:wrap}
+.swatch{
+  width:28px;height:28px;padding:0;border:2px solid var(--ink);border-radius:0;
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.1),0 2px 0 var(--ink);cursor:pointer;
+}
+.swatch:hover{filter:brightness(1.2)}
+.swatch:active{transform:translateY(2px);box-shadow:inset 0 0 0 1px rgba(255,255,255,.1)}
+.swatch.sel{outline:2px solid var(--open);outline-offset:1px}
+.step-row{display:flex;align-items:center;gap:10px}
+.step-name{
+  flex:1;text-align:center;font-family:var(--crt);font-size:19px;
+  letter-spacing:.06em;color:var(--paper);
+}
 
 /* ---------- options ---------- */
 #optionsBtn{
