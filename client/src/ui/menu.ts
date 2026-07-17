@@ -13,6 +13,7 @@ import {
   resolveServerUrl,
   type Session,
 } from "../transport";
+import { loadAppearance } from "./mirror";
 
 const $ = (id: string): HTMLElement => document.getElementById(id)!;
 
@@ -60,7 +61,7 @@ export class MenuControl {
     $("titlePlayBtn").addEventListener("click", () => this.showBrowse());
     $("titleSoloBtn").addEventListener("click", () => {
       if (this.busy) return;
-      this.seat(Promise.resolve(new LocalSession(this.playerName())));
+      this.seat(Promise.resolve(new LocalSession(this.playerName(), loadAppearance())));
     });
     $("browseBackBtn").addEventListener("click", () => this.showTitle());
     addEventListener("keydown", (e) => {
@@ -86,7 +87,7 @@ export class MenuControl {
       const tableName =
         ($("lobbyNameInput") as HTMLInputElement).value.trim().slice(0, LOBBY_NAME_MAX) ||
         this.playerName() + "'S TABLE";
-      this.seat(this.conn.createLobby(tableName, password, this.playerName()));
+      this.seat(this.conn.createLobby(tableName, password, this.playerName(), loadAppearance()));
     });
 
     $("serverList").addEventListener("click", (e) => {
@@ -102,14 +103,16 @@ export class MenuControl {
         this.render();
         ($("joinPassInput") as HTMLInputElement).focus();
       } else {
-        this.seat(this.conn.joinLobby(lobby.id, null, this.playerName()));
+        this.seat(this.conn.joinLobby(lobby.id, null, this.playerName(), loadAppearance()));
       }
     });
 
     const joinGo = () => {
       if (!this.joinTarget || this.busy) return;
       const pass = ($("joinPassInput") as HTMLInputElement).value;
-      this.seat(this.conn.joinLobby(this.joinTarget.id, pass, this.playerName()));
+      this.seat(
+        this.conn.joinLobby(this.joinTarget.id, pass, this.playerName(), loadAppearance())
+      );
     };
     $("joinGoBtn").addEventListener("click", joinGo);
     $("joinPassInput").addEventListener("keydown", (e) => {

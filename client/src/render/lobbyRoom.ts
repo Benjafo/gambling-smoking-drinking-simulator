@@ -30,7 +30,7 @@ import { carpetTexture, leatherTexture, woodTexture } from "./textures";
 import { DebrisView } from "./debris";
 import { HeldItemControl, makeBottleMesh, makeCigarMesh } from "./held";
 import { denySound, pickupSound } from "./effects";
-import { makeFigure, poseArm } from "./figure";
+import { lookOf, makeFigure, poseArm } from "./figure";
 
 /* you must be able to look at your own feet: pickup reach is 2.2m, and at
    the old -0.55 clamp the crosshair could only touch floor 2.38m+ away —
@@ -748,8 +748,7 @@ export class LobbyRoomView {
 
   /* ---------------- avatars ---------------- */
   private makeLobbyAvatar(p: PlayerSnap): LobbyAvatar {
-    const colors = [0x4a3b2a, 0x2c3c60, 0x6a1f1f, 0x24512f, 0x3a3226];
-    const { group, legs, armR, armL } = makeFigure(colors[p.seat % colors.length], 0x8a7560, {
+    const { group, legs, armR, armL } = makeFigure(lookOf(p.appearance), {
       standing: true,
     });
     // arms hang at the sides — the default rest reaches for a felt that

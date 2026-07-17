@@ -19,6 +19,7 @@ import {
   SNAPSHOT_EVERY_TICKS,
   TICK_RATE,
 } from "../../shared/src/constants";
+import type { Appearance } from "../../shared/src/appearance";
 import type { ClientMsg, LobbyInfo, ServerMsg } from "../../shared/src/types";
 
 interface Lobby {
@@ -72,13 +73,20 @@ export function startServer(port: number): Server {
       if (conn.lobby === null && ws.readyState === WebSocket.OPEN) ws.send(payload);
   };
 
-  const seatPlayer = (ws: WebSocket, conn: Conn, lobby: Lobby, playerName: string): void => {
+  const seatPlayer = (
+    ws: WebSocket,
+    conn: Conn,
+    lobby: Lobby,
+    playerName: string,
+    appearance?: Appearance
+  ): void => {
     const playerId = "p" + lobby.nextPlayer++;
     lobby.clients.set(ws, playerId);
     conn.lobby = lobby;
     conn.playerId = playerId;
     const name = playerName.trim().slice(0, PLAYER_NAME_MAX) || "GAMBLER";
-    lobby.sim.applyIntent(playerId, { type: "join", name });
+    // appearance rides through unchecked — the sim sanitizes it at join
+    lobby.sim.applyIntent(playerId, { type: "join", name, appearance });
     send(ws, { type: "joined", lobbyId: lobby.id, lobbyName: lobby.name, playerId });
     console.log(`${playerId} "${name}" joined ${lobby.id} "${lobby.name}" (${lobby.clients.size} seated)`);
     broadcastLobbies();
@@ -148,7 +156,7 @@ export function startServer(port: number): Server {
           };
           lobbies.set(id, lobby);
           console.log(`${id} "${name}" opened${password ? " (private)" : ""}`);
-          seatPlayer(ws, conn, lobby, msg.playerName);
+          seatPlayer(ws, conn, lobby, msg.playerName, msg.appearance);
           break;
         }
 
@@ -168,7 +176,7 @@ export function startServer(port: number): Server {
             send(ws, { type: "joinError", reason: "TABLE FULL — FIVE STOOLS, NO STANDING." });
             return;
           }
-          seatPlayer(ws, conn, lobby, msg.playerName);
+          seatPlayer(ws, conn, lobby, msg.playerName, msg.appearance);
           break;
         }
 
