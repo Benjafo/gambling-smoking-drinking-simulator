@@ -127,6 +127,9 @@ export interface Snapshot {
 
 export type Intent =
   | { type: "join"; name: string; appearance?: Appearance }
+  /* waiting-room closet: restyle mid-stay (lobby phase only); lasts until
+     the player leaves — the join-time appearance is not overwritten locally */
+  | { type: "setAppearance"; appearance: Appearance }
   | { type: "leave" }
   | { type: "startGame" }
   | { type: "setBet"; amount: number }

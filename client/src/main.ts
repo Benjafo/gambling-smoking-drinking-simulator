@@ -1,4 +1,4 @@
-import type { Intent } from "@shared/types";
+import type { Intent, Snapshot } from "@shared/types";
 import type { Session } from "./transport";
 import {
   getMuted,
@@ -36,7 +36,22 @@ const scene = new SceneView($("stage"), send);
 const hud = new Hud(send);
 const ritual = new RitualControl(send, scene);
 const menu = new MenuControl(startSession);
-new MirrorControl(); // self-contained: title button in, localStorage out
+const mirror = new MirrorControl();
+let latestSnap: Snapshot | null = null;
+
+/* E at the waiting-room closet: the same customizer, but editing THIS
+   stay's look — changes stream to the table as setAppearance intents and
+   the saved menu look stays untouched */
+scene.lobbyRoom.onOpenCloset = () => {
+  const me = latestSnap?.players.find((p) => p.id === session?.playerId);
+  if (!me) return;
+  document.exitPointerLock?.();
+  mirror.showForLobby(
+    me.appearance,
+    (a) => send({ type: "setAppearance", appearance: a }),
+    () => scene.capturePointer()
+  );
+};
 
 function startSession(s: Session): void {
   session = s;
@@ -46,6 +61,7 @@ function startSession(s: Session): void {
   let arrived = false;
 
   s.onSnapshot((snap) => {
+    latestSnap = snap;
     scene.apply(snap, s.playerId);
     if (!arrived) {
       arrived = true;
@@ -61,6 +77,7 @@ function startSession(s: Session): void {
 
   s.onEnd((reason) => {
     session = null;
+    latestSnap = null;
     document.exitPointerLock?.(); // a lost connection mustn't strand a locked cursor
     ritual.update(undefined); // cancel any half-finished gesture overlay
     hud.sessionEnd();
@@ -100,6 +117,8 @@ document.addEventListener("pointerlockchange", () => {
   // the lock exit rode the same Esc press that just closed the menu — a
   // close must stay a close, not bounce the menu straight back open
   if (performance.now() - lastEscClose < 350) return;
+  // the closet customizer releases the lock on purpose — not a menu request
+  if (mirror.open()) return;
   if (session && scene.inLobby && !optionsOpen()) toggleOptions(true);
 });
 addEventListener("keydown", (e) => {

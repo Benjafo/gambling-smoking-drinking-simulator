@@ -364,6 +364,12 @@ export class Simulation {
       case "startGame":
         this.startGame(p);
         break;
+      case "setAppearance":
+        // the waiting-room closet: a fresh look for this stay only — the
+        // next join reverts to whatever the menu customizer saved locally
+        if (this.phase === "lobby")
+          p.appearance = sanitizeAppearance(intent.appearance, p.seat);
+        break;
       case "setBet":
         if (this.phase === "betting" && p.alive && !p.committed)
           p.pendingBet = Math.max(0, Math.min(Math.floor(intent.amount), p.money));
