@@ -51,10 +51,12 @@ export const LOBBY_OBSTACLES: LobbyObstacle[] = [
   { x: -2.4, z: -2.75, r: 0.62, h: 0.85, stand: 0.45 }, // couch, left cushion (against -Z wall)
   { x: -1.3, z: -2.75, r: 0.62, h: 0.85, stand: 0.45 }, // couch, right cushion
   { x: -1.85, z: -1.45, r: 0.62, h: 0.43 }, // coffee table in front of it
-  { x: 1.7, z: -1.5, r: 0.4, h: 1.03 }, // round bar table A
+  /* table A used to sit mid-room at (1.7,-1.5), squarely blocking the view
+     into the closet — it drinks by the jukebox now, under the posters */
+  { x: -2.4, z: 2.45, r: 0.4, h: 1.03 }, // round bar table A, jukebox corner
   { x: 2.9, z: 0.6, r: 0.4, h: 1.03 }, // round bar table B
-  { x: 1.15, z: -1.9, r: 0.2, h: 0.63 }, // stool at table A, door side
-  { x: 2.25, z: -1.15, r: 0.2, h: 0.63 }, // stool at table A, room side
+  { x: -1.85, z: 2.75, r: 0.2, h: 0.63 }, // stool at table A, door side
+  { x: -2.75, z: 1.85, r: 0.2, h: 0.63 }, // stool at table A, room side
   { x: 3.3, z: 1.25, r: 0.2, h: 0.63 }, // stool at table B
   { x: -3.55, z: 2.35, r: 0.62, h: 1.55 }, // jukebox in the far corner
   { x: 3.6, z: 2.3, r: 0.5, h: 1.5 }, // cigarette machine by the door

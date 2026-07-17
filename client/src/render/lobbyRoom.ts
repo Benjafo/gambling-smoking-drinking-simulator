@@ -11,6 +11,7 @@
    against, and local prediction runs the same stepLobbyMove() the sim runs,
    so the camera never fights the authority it's predicting. */
 import * as THREE from "three";
+import { Reflector } from "three/examples/jsm/objects/Reflector.js";
 import {
   CLOSET_RADIUS,
   DISPENSE_RADIUS,
@@ -126,6 +127,11 @@ export class LobbyRoomView {
   private lastMoveSent = 0;
 
   private avatars = new Map<string, LobbyAvatar>();
+  /* my own figure, for the closet mirror only: invisible in the main pass
+     (first person), flipped visible for the Reflector's render */
+  private selfFigure: THREE.Group | null = null;
+  private selfLookKey = "";
+  private reflector: Reflector | null = null;
 
   /* pre-game littering: the lobby's own debris + held-empty machinery,
      the same gestures the table uses (drag the empty, release to fling) */
@@ -440,7 +446,8 @@ export class LobbyRoomView {
       p.rotateZ(tilt);
       this.scene.add(p);
     };
-    poster(["LOSERS DRINK FREE", "*nothing here is free"], halfW - 0.02, -1.4, -Math.PI / 2, 0.05);
+    // z 0.4: clear of the closet that now owns the -z half of this wall
+    poster(["LOSERS DRINK FREE", "*nothing here is free"], halfW - 0.02, 0.4, -Math.PI / 2, 0.05);
     poster(["NO REFUNDS", "house rule no. 1 of 1"], -1.0, halfD - 0.02, Math.PI, -0.04);
     poster(["MISSING: LUCK", "reward: none"], -halfW + 0.02, 1.6, Math.PI / 2, 0.07);
 
@@ -577,7 +584,7 @@ export class LobbyRoomView {
       g.position.set(x, 0, z);
       this.scene.add(g);
     };
-    barTable(1.7, -1.5);
+    barTable(-2.4, 2.45); // table A, by the jukebox under the posters
     barTable(2.9, 0.6);
 
     const stool = (x: number, z: number, tipped = false): void => {
@@ -599,8 +606,8 @@ export class LobbyRoomView {
       }
       this.scene.add(g);
     };
-    stool(1.15, -1.9);
-    stool(2.25, -1.15);
+    stool(-1.85, 2.75);
+    stool(-2.75, 1.85);
     stool(3.3, 1.25);
     stool(2.35, 1.1, true); // lost an argument with gravity
 
@@ -787,35 +794,38 @@ export class LobbyRoomView {
     // one shelf on the far half; the top hat lives there
     add(new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.04, 0.62), woodMat), cx + 0.02, 1.0, cz - 0.44);
 
-    // the mirror, propped against the shelf edge like someone meant to hang
-    // it years ago. The glass is a painted sheen, not real metalness — with
-    // no envmap a "true" mirror renders as a black hole in this dark room
+    // the mirror, leaning against the back wall on the suit's side (the
+    // shelf side belongs to the top hat). It's a real Reflector — one extra
+    // scene render whenever it's on screen, cheap in a room this small, and
+    // frustum culling parks it the moment you look away. The reflection is
+    // also the only place your own figure renders in first person: see the
+    // onBeforeRender wrap below.
     const mirror = new THREE.Group();
     const frame = new THREE.Mesh(
-      new THREE.BoxGeometry(0.05, 1.34, 0.64),
+      new THREE.BoxGeometry(0.05, 1.34, 0.58),
       new THREE.MeshStandardMaterial({ color: 0x241a0f, roughness: 0.6 })
     );
-    const glass = new THREE.Mesh(
-      new THREE.BoxGeometry(0.02, 1.2, 0.52),
-      new THREE.MeshBasicMaterial({
-        map: canvasTexture(128, 256, (ctx) => {
-          const grad = ctx.createLinearGradient(0, 256, 128, 0);
-          grad.addColorStop(0, "#3d4a4e");
-          grad.addColorStop(0.42, "#6d8288");
-          grad.addColorStop(0.5, "#a8bcc0");
-          grad.addColorStop(0.58, "#66797f");
-          grad.addColorStop(1, "#2e383c");
-          ctx.fillStyle = grad;
-          ctx.fillRect(0, 0, 128, 256);
-        }),
-      })
-    );
-    glass.position.x = -0.03;
     frame.castShadow = true;
-    mirror.add(frame, glass);
-    mirror.position.set(cx - 0.02, 0.62, cz - 0.32);
-    mirror.rotation.z = -0.22; // leaned back onto the shelf
-    mirror.rotation.y = 0.45; // and knocked askew — nobody straightens it
+    this.reflector = new Reflector(new THREE.PlaneGeometry(0.46, 1.2), {
+      clipBias: 0.003,
+      textureWidth: 512,
+      textureHeight: 512,
+      color: 0x9aabaf, // a dive-bar mirror, not a jewelry store's
+    });
+    this.reflector.rotation.y = -Math.PI / 2; // face out of the closet
+    this.reflector.position.x = -0.03;
+    // while the reflection renders, materialize my own figure — the main
+    // pass never draws it (first person), but the glass should
+    const renderReflection = this.reflector.onBeforeRender.bind(this.reflector);
+    this.reflector.onBeforeRender = (renderer, scene, camera, geom, mat, group) => {
+      if (this.selfFigure) this.selfFigure.visible = true;
+      renderReflection(renderer, scene, camera, geom, mat, group);
+      if (this.selfFigure) this.selfFigure.visible = false;
+    };
+    mirror.add(frame, this.reflector);
+    mirror.position.set(cx + 0.1, 0.75, cz + 0.42);
+    mirror.rotation.z = -0.2; // leaned back against the drywall
+    mirror.rotation.y = 0.12; // knocked a touch askew — nobody straightens it
     g.add(mirror);
 
     // hanging rod, brass like every other fixture in the house
@@ -946,6 +956,11 @@ export class LobbyRoomView {
   reset(): void {
     for (const av of this.avatars.values()) this.scene.remove(av.group);
     this.avatars.clear();
+    if (this.selfFigure) {
+      this.scene.remove(this.selfFigure);
+      this.selfFigure = null;
+      this.selfLookKey = "";
+    }
     this.debris.apply([]);
     this.held.reset();
     this.latest = null;
@@ -964,6 +979,18 @@ export class LobbyRoomView {
 
     for (const p of snap.players) {
       if (p.id === myId) {
+        // keep the mirror's stand-in dressed like the snapshot says I am
+        const key = JSON.stringify(p.appearance);
+        if (!this.selfFigure || this.selfLookKey !== key) {
+          if (this.selfFigure) this.scene.remove(this.selfFigure);
+          const { group, armR, armL } = makeFigure(lookOf(p.appearance), { standing: true });
+          poseArm(armR, new THREE.Vector3(0.21, 0.58, 0.06));
+          poseArm(armL, new THREE.Vector3(-0.21, 0.58, 0.06));
+          group.visible = false;
+          this.selfFigure = group;
+          this.selfLookKey = key;
+          this.scene.add(group);
+        }
         if (!this.posInit) {
           this.myPos.set(p.pos.x, p.pos.y, p.pos.z);
           this.motion.vy = 0;
@@ -1317,6 +1344,13 @@ export class LobbyRoomView {
       av.legs[1].rotation.x += (-swing * strideTarget - av.legs[1].rotation.x) * damp;
       av.group.position.y =
         av.baseY + (av.moving ? Math.abs(Math.sin(av.walkPhase * Math.PI)) * 0.03 : 0);
+    }
+
+    // my mirror stand-in shadows the predicted body: same spot, same facing.
+    // It stays invisible here — only the Reflector's pass flips it on.
+    if (this.selfFigure) {
+      this.selfFigure.position.copy(this.myPos);
+      this.selfFigure.rotation.y = this.yaw;
     }
 
     // litter in motion, and the empty in my hand
