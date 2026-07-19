@@ -31,7 +31,7 @@ import {
 import type { Intent, PlayerSnap, PropKind, Snapshot, ViceKind } from "@shared/types";
 import { carpetTexture, leatherTexture, woodTexture } from "./textures";
 import { DebrisView } from "./debris";
-import { HeldItemControl, makeBottleMesh, makeCigarMesh } from "./held";
+import { HeldItemControl } from "./held";
 import { denySound, hurtSound, pickupSound, OuchBubbles, SmokeSystem } from "./effects";
 import { lookOf, makeFigure, poseArm } from "./figure";
 
@@ -188,7 +188,7 @@ export class LobbyRoomView {
         }
         this.captureLook(); // any gameplay key re-arms mouse-look (Esc can't)
         if (this.nearDoor()) this.tryStartAtDoor();
-        else this.tryDispense();
+        else if (!this.tryPickupAim()) this.tryDispense();
         return;
       }
       if (e.code === "KeyO") {
@@ -557,25 +557,12 @@ export class LobbyRoomView {
       leg.position.set(lx, 0.19, lz);
       coffee.add(leg);
     }
-    const b1 = makeBottleMesh();
-    b1.position.set(-0.28, 0.49, 0.1);
-    const b2 = makeBottleMesh();
-    b2.position.set(-0.16, 0.485, -0.12);
-    b2.rotation.y = 1.7;
-    const b3 = makeBottleMesh(); // the tipped one, mid-roll forever
-    b3.position.set(0.13, 0.465, 0.14);
-    b3.rotation.set(Math.PI / 2, 0, 2.3);
-    // overflowing ashtray
+    /* the bottles and butts that used to be baked in here are REAL now —
+       seeded via LOBBY_TABLE_CLUTTER so they can be grabbed and flung;
+       only the ashtray stays furniture */
     const tray = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.06, 0.03, 14), darkMat);
     tray.position.set(0.33, 0.44, -0.08);
-    coffee.add(b1, b2, b3, tray);
-    for (let i = 0; i < 4; i++) {
-      const butt = makeCigarMesh(true);
-      butt.scale.setScalar(0.7);
-      butt.position.set(0.33 + Math.sin(i * 2.4) * 0.045, 0.457, -0.08 + Math.cos(i * 2.4) * 0.04);
-      butt.rotation.set(Math.PI / 2, 0, i * 1.9);
-      coffee.add(butt);
-    }
+    coffee.add(tray);
     // a dead hand of cards, face up, nobody won
     for (let i = 0; i < 5; i++) {
       const card = new THREE.Mesh(
@@ -599,9 +586,8 @@ export class LobbyRoomView {
       stem.position.y = 0.5;
       const foot = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.26, 0.04, 18), darkMat);
       foot.position.y = 0.02;
-      const bottle = makeBottleMesh();
-      bottle.position.set(0.12, 1.09, -0.05);
-      g.add(tp, stem, foot, bottle);
+      // the abandoned bottle on top is seeded debris now (LOBBY_TABLE_CLUTTER)
+      g.add(tp, stem, foot);
       g.position.set(x, 0, z);
       this.scene.add(g);
     };
@@ -1074,18 +1060,7 @@ export class LobbyRoomView {
       this.beginVirtualCursor(e);
       return;
     }
-    const target = this.findDebrisAt(ndc);
-    if (target) {
-      if (this.held.hasHeld) {
-        this.held.flashDeny();
-        denySound();
-        return;
-      }
-      this.send({ type: "pickup", itemId: target.id });
-      this.held.beginFloorGrab(target.kind, target.pos);
-      this.beginVirtualCursor(e);
-      return;
-    }
+    // (litter pickup moved to the E key — a click on litter just looks)
     if (this.locked && this.held.grabHeld()) {
       // locked, holding, crosshair on nothing: the click means the empty
       // in your hand — the wind-up starts from the center
@@ -1120,6 +1095,8 @@ export class LobbyRoomView {
       return; // crosshair hover refreshes per frame, where walking counts too
     }
     if (!this.looking) {
+      // plain hover: remember where the cursor is — the E key aims with it
+      this.lastPointer = { x: e.clientX, y: e.clientY };
       this.updateHover(this.ndc(e));
       return;
     }
@@ -1239,6 +1216,28 @@ export class LobbyRoomView {
       this.motion.grounded = false;
     }
     this.send({ type: "jump" });
+  }
+
+  /* E on aimed litter: grab what the crosshair (or the cursor) is on.
+     False when nothing's under the aim, so E can fall through to the
+     machines. */
+  private tryPickupAim(): boolean {
+    const ndc = this.locked
+      ? CENTER
+      : new THREE.Vector2(
+          (this.lastPointer.x / innerWidth) * 2 - 1,
+          -(this.lastPointer.y / innerHeight) * 2 + 1
+        );
+    const target = this.findDebrisAt(ndc);
+    if (!target) return false;
+    if (this.held.hasHeld) {
+      this.held.flashDeny();
+      denySound();
+      return true; // aiming at litter with full hands is a deny, not a dispense
+    }
+    this.send({ type: "pickup", itemId: target.id });
+    pickupSound();
+    return true;
   }
 
   private tryDispense(): void {

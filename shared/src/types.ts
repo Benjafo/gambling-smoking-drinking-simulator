@@ -82,6 +82,8 @@ export interface DebrisSnap {
   kind: PropKind;
   phase: DebrisPhase;
   room: DebrisRoom;
+  /* came with the room: the janitor's clear-litter never touches it */
+  seeded: boolean;
   /* room-local coordinates (lobby debris is NOT in table space) */
   pos: V3;
   rot: Quat;

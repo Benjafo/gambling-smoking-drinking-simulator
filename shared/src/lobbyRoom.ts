@@ -143,6 +143,33 @@ export const LOBBY_TOYS: LobbyToy[] = [
   { kind: "stick", x: -3.68, z: -1.5, yaw: -0.35 },
 ];
 
+/* the bottles and butts abandoned on the TABLE TOPS — real, pickable
+   debris like the floor scatter (nothing in this room is grab-proof), just
+   seeded at furniture height. `y` is the tabletop surface; the sim lifts
+   each piece by its own shape. Like all seeded filth, the janitor spares
+   them. */
+export interface LobbyTableItem {
+  kind: ViceKind;
+  x: number;
+  y: number;
+  z: number;
+  /* upright: standing where it was left; otherwise the lie's heading */
+  roll: number;
+  upright?: boolean;
+}
+export const LOBBY_TABLE_CLUTTER: LobbyTableItem[] = [
+  /* coffee table (surface 0.425): the session nobody cleaned up after */
+  { kind: "beer", x: -2.13, y: 0.425, z: -1.35, roll: 0.3, upright: true },
+  { kind: "beer", x: -2.01, y: 0.425, z: -1.57, roll: 1.7, upright: true },
+  { kind: "beer", x: -1.72, y: 0.425, z: -1.31, roll: 2.3 }, // the tipped one
+  { kind: "cigar", x: -1.62, y: 0.425, z: -1.44, roll: 0.8 },
+  { kind: "cigar", x: -1.57, y: 0.425, z: -1.38, roll: 2.7 },
+  { kind: "cigar", x: -1.66, y: 0.425, z: -1.52, roll: 4.5 },
+  /* one abandoned on each round bar table (surface 1.025) */
+  { kind: "beer", x: -2.28, y: 1.025, z: 2.4, roll: 0.9, upright: true },
+  { kind: "beer", x: 3.02, y: 1.025, z: 0.55, roll: 2.1, upright: true },
+];
+
 /* where joiners appear (indexed by seat, so re-seats reuse spots), facing
    the door on the +Z wall. yaw convention matches seatAngle: 0 faces +Z,
    facing dir = (sin yaw, cos yaw). */

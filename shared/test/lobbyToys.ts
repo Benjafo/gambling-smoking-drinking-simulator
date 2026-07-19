@@ -5,7 +5,7 @@
    of pockets back onto the lobby floor.
    Run with: npm run test:sim */
 import { Simulation } from "../src/sim";
-import { LOBBY_REACH, LOBBY_SCATTER, LOBBY_TOYS } from "../src/lobbyRoom";
+import { LOBBY_REACH, LOBBY_SCATTER, LOBBY_TABLE_CLUTTER, LOBBY_TOYS } from "../src/lobbyRoom";
 import { TICK_RATE } from "../src/constants";
 import { isVice } from "../src/types";
 import type { PlayerSnap, Snapshot } from "../src/types";
@@ -27,10 +27,17 @@ sim.applyIntent(P1, { type: "join", name: "TOYCOLLECTOR" });
 
 /* ---- the room comes furnished ---- */
 let s = snap();
-const expectVice = LOBBY_SCATTER.filter((i) => i.kind !== "paper").length;
+const expectVice =
+  LOBBY_SCATTER.filter((i) => i.kind !== "paper").length + LOBBY_TABLE_CLUTTER.length;
 assert(
   s.debris.filter((d) => isVice(d.kind)).length === expectVice,
-  `the scatter's bottles and butts are real debris (${expectVice} seeded)`
+  `the scatter's and tables' bottles and butts are real debris (${expectVice} seeded)`
+);
+/* the table-top pieces rest at furniture height, not the floor */
+const highSeeds = s.debris.filter((d) => isVice(d.kind) && d.pos.y > 0.3);
+assert(
+  highSeeds.length === LOBBY_TABLE_CLUTTER.length,
+  `${LOBBY_TABLE_CLUTTER.length} pieces sit up on the table tops`
 );
 const toys = s.debris.filter((d) => !isVice(d.kind));
 assert(toys.length === LOBBY_TOYS.length, "the toys are seeded too");

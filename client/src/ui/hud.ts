@@ -536,7 +536,9 @@ export class Hud {
 
   private renderLobby(snap: Snapshot): void {
     const amLeader = snap.leaderId === this.myId;
-    const hasLitter = snap.debris.length > 0;
+    // only what the PLAYERS spawned counts — the pre-strewn dump and the
+    // toys aren't the janitor's to take, so they can't light the button
+    const hasLitter = snap.debris.some((d) => !d.seeded);
     const counting = snap.startsIn !== null;
     const sig =
       snap.players.map((p) => p.id + ":" + p.name).join() +

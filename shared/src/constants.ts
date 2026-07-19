@@ -145,10 +145,16 @@ export function cardSlot(
   scale: number,
   lean: number
 ): { pos: V3; rot: { x: number; y: number; z: number; w: number } } {
-  const off = (i - 1) * CARD_SLOT_PITCH * scale;
+  // full pitch for the first three cards, then the fan tightens to 45%
+  // steps — long hands overlap like a held fan instead of marching into
+  // the neighbor's slots. Index-only math: dealt cards never reposition,
+  // and the sim's card colliders always agree with the client's meshes.
+  const steps = i <= 2 ? i : 2 + (i - 2) * 0.45;
+  const off = (steps - 1) * CARD_SLOT_PITCH * scale;
   const pos = {
     x: anchor.x + Math.cos(yaw) * off,
-    y: anchor.y + ((CARD_H * scale) / 2) * Math.sin(lean) * 0.95,
+    // overlapped cards stack a hair higher per index so they never z-fight
+    y: anchor.y + ((CARD_H * scale) / 2) * Math.sin(lean) * 0.95 + i * 0.0028 * scale,
     z: anchor.z - Math.sin(yaw) * off,
   };
   const hx = (-Math.PI / 2 + lean) / 2;

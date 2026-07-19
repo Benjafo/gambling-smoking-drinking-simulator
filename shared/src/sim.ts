@@ -84,6 +84,7 @@ import {
   LOBBY_SCATTER,
   LOBBY_SPAWNS,
   LOBBY_TOYS,
+  LOBBY_TABLE_CLUTTER,
   stepLobbyMove,
 } from "./lobbyRoom";
 import {
@@ -313,6 +314,18 @@ export class Simulation {
         t.upright
           ? { x: 0, y: Math.sin(t.yaw / 2), z: 0, w: Math.cos(t.yaw / 2) }
           : lyingQuat(t.yaw)
+      );
+    }
+    // the table-top leavings: same seeded filth, furniture height
+    for (const c of LOBBY_TABLE_CLUTTER) {
+      const shape = DEBRIS_SHAPE[c.kind];
+      const halfLen = shape.halfHeight + shape.radius;
+      this.seedSettled(
+        c.kind,
+        { x: c.x, y: c.y + (c.upright ? halfLen : shape.radius + 0.002), z: c.z },
+        c.upright
+          ? { x: 0, y: Math.sin(c.roll / 2), z: 0, w: Math.cos(c.roll / 2) }
+          : lyingQuat(c.roll)
       );
     }
   }
@@ -1581,6 +1594,7 @@ export class Simulation {
       kind: d.kind,
       phase: d.phase,
       room: d.room,
+      seeded: d.seeded,
       pos: d.pos,
       rot: d.rot,
     }));
