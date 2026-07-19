@@ -5,7 +5,7 @@
    of pockets back onto the lobby floor.
    Run with: npm run test:sim */
 import { Simulation } from "../src/sim";
-import { LOBBY_REACH, LOBBY_SCATTER, LOBBY_TOYS } from "../src/lobbyRoom";
+import { LOBBY_REACH, LOBBY_SCATTER, LOBBY_TABLE_CLUTTER, LOBBY_TOYS } from "../src/lobbyRoom";
 import { TICK_RATE } from "../src/constants";
 import { isVice } from "../src/types";
 import type { PlayerSnap, Snapshot } from "../src/types";
@@ -27,10 +27,17 @@ sim.applyIntent(P1, { type: "join", name: "TOYCOLLECTOR" });
 
 /* ---- the room comes furnished ---- */
 let s = snap();
-const expectVice = LOBBY_SCATTER.filter((i) => i.kind !== "paper").length;
+const expectVice =
+  LOBBY_SCATTER.filter((i) => i.kind !== "paper").length + LOBBY_TABLE_CLUTTER.length;
 assert(
   s.debris.filter((d) => isVice(d.kind)).length === expectVice,
-  `the scatter's bottles and butts are real debris (${expectVice} seeded)`
+  `the scatter's and tables' bottles and butts are real debris (${expectVice} seeded)`
+);
+/* the table-top pieces rest at furniture height, not the floor */
+const highSeeds = s.debris.filter((d) => isVice(d.kind) && d.pos.y > 0.3);
+assert(
+  highSeeds.length === LOBBY_TABLE_CLUTTER.length,
+  `${LOBBY_TABLE_CLUTTER.length} pieces sit up on the table tops`
 );
 const toys = s.debris.filter((d) => !isVice(d.kind));
 assert(toys.length === LOBBY_TOYS.length, "the toys are seeded too");
@@ -106,7 +113,10 @@ assert(
 );
 standNear(-3.0, 0); // at the beer fridge
 sim.applyIntent(P1, { type: "dispense", kind: "beer" });
-assert(me().held?.kind === "beer", "fridge handed over a bottle");
+sim.applyIntent(P1, { type: "consumeStart", kind: "beer" });
+sim.applyIntent(P1, { type: "ritualEngage", on: true });
+for (let i = 0; i < TICK_RATE * 10 && me().held === null; i++) sim.step();
+assert(me().held?.kind === "beer", "fridge stocked a fresh one; drinking it left the empty");
 sim.applyIntent(P1, {
   type: "fling",
   itemId: me().held!.id,
@@ -115,7 +125,7 @@ sim.applyIntent(P1, {
   angVel: { x: 3, y: 1, z: 2 },
 });
 sim.step();
-assert(snap().debris.length === census + 1, "the dispensed bottle joined the floor");
+assert(snap().debris.length === census + 1, "the drained bottle joined the floor");
 sim.applyIntent(P1, { type: "clearLitter" });
 assert(
   snap().debris.length === census,

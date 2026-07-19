@@ -21,6 +21,7 @@ export class RitualControl {
   private phase: "drag" | "hold" | "primed" | "pouring" | "fling" = "drag";
   private auto = false;
   private sawRitual = false; // sim confirmed the ritual started
+  private me: PlayerSnap | undefined; // latest authoritative self (update())
   private anchorX = 0;
   private anchorY = 0;
   private baseY = 0;
@@ -32,7 +33,9 @@ export class RitualControl {
 
   constructor(
     private send: (i: Intent) => void,
-    private scene: SceneView
+    private scene: SceneView,
+    /* the vice key hit a wall — the HUD says which one out loud */
+    private onDeny?: (reason: "handsFull" | "machineFirst" | "outOfStock", kind: ViceKind) => void
   ) {
     this.items = { cigar: $("cigarItem"), beer: $("beerItem") };
     this.ringFg = document.querySelector("#dropTarget .ring-fg") as SVGCircleElement;
@@ -54,10 +57,31 @@ export class RitualControl {
       const kind = kinds[e.code];
       if (!kind || e.repeat || this.active) return;
       if ((e.target as HTMLElement)?.tagName === "INPUT") return;
-      // table chrome only: no HUD (menu) or waiting room (nothing to smoke)
+      // in-session only (the machines stock the waiting room too — the
+      // same held keys work in both rooms), and never under a menu
       if (!$("hud").classList.contains("active")) return;
-      if (document.body.classList.contains("lobby-room")) return;
-      if (this.items[kind].classList.contains("disabled")) return;
+      // mirror the sim's gates, but out loud — silence reads as a dead key.
+      // A matching machine freebie in hand is smokable anywhere; any other
+      // holdable blocks (the empty never drops itself); empty hands in the
+      // waiting room means nobody's been to a machine yet.
+      const held = this.me?.held;
+      if (held) {
+        if (!held.fresh || held.kind !== kind) {
+          this.scene.flashHeldDeny();
+          this.onDeny?.("handsFull", kind);
+          return;
+        }
+      } else if (document.body.classList.contains("lobby-room")) {
+        this.onDeny?.("machineFirst", kind);
+        return;
+      } else if (this.items[kind].classList.contains("disabled")) {
+        // dead or spectating stays silent; a bare pocket gets pointed at
+        // the shop instead of a dead key
+        const inv = kind === "cigar" ? this.me?.cigarInv : this.me?.beerInv;
+        if (this.me?.alive && !this.me.waiting && (inv ?? 0) < 1)
+          this.onDeny?.("outOfStock", kind);
+        return;
+      }
       this.holdKey = kind;
       this.start(kind, 0, 0, true);
       $("targetLabel").textContent = kind === "cigar" ? "KEEP HOLDING C…" : "KEEP HOLDING B…";
@@ -232,6 +256,7 @@ export class RitualControl {
 
   /* called on every snapshot with our player */
   update(me: PlayerSnap | undefined): void {
+    this.me = me;
     if (!this.active || this.phase === "fling") return;
     const ritual = me?.ritual ?? null;
     if (ritual) {

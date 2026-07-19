@@ -3,6 +3,7 @@
    (and eventually remote clients) never mutate state directly. */
 import type RAPIER_NS from "@dimforge/rapier3d-compat";
 import { sanitizeAppearance, type Appearance } from "./appearance";
+import { BotBrain } from "./bots";
 import {
   buildShoe,
   handValue,
@@ -46,6 +47,8 @@ import {
   PLAYER_HIT_Y_MIN,
   PLAYER_HIT_Y_MAX,
   PLAYER_HIT_RADIUS,
+  LOBBY_HIT_Y_MIN,
+  LOBBY_HIT_Y_MAX,
   LOOK_YAW_LIMIT,
   LOOK_PITCH_MIN,
   LOOK_PITCH_MAX,
@@ -82,6 +85,7 @@ import {
   LOBBY_SCATTER,
   LOBBY_SPAWNS,
   LOBBY_TOYS,
+  LOBBY_TABLE_CLUTTER,
   stepLobbyMove,
 } from "./lobbyRoom";
 import {
@@ -100,6 +104,7 @@ import {
 } from "./physics";
 import { isVice } from "./types";
 import type {
+  BotDifficulty,
   Intent,
   PlayerSnap,
   PlayerStats,
@@ -160,11 +165,15 @@ interface Player {
   beerInv: number;
   /* gesture-driven: progress accrues only while the client reports the
      ritual engaged (cigar held still in the zone / beer tipped up). The sim
-     owns the clock, so the time cost can't be skipped. */
-  ritual: { kind: ViceKind; progressTicks: number; engaged: boolean } | null;
+     owns the clock, so the time cost can't be skipped. `fresh` marks a
+     ritual consuming a machine freebie out of the hand, not bought stock —
+     it scores nothing and its empty is never earned. */
+  ritual: { kind: ViceKind; progressTicks: number; engaged: boolean; fresh?: boolean } | null;
   /* earned: minted by finishing a ritual, not scavenged off the floor —
      only earned empties are eligible for the settle-time money drop.
-     pos mirrors the owner's drag (wind-up), clamped to arm's reach. */
+     fresh: an unopened machine freebie, the only thing consumeStart will
+     take from a hand. pos mirrors the owner's drag (wind-up), clamped to
+     arm's reach. */
   /* seeded rides along so provenance survives a pickup: what came with the
      room goes back to being permanent when it lands again */
   held: {
@@ -173,6 +182,7 @@ interface Player {
     sinceTick: number;
     earned: boolean;
     seeded: boolean;
+    fresh: boolean;
     pos: V3 | null;
   } | null;
   /* camera direction relative to facing the table center, client-reported */
@@ -248,6 +258,10 @@ export class Simulation {
   /* participants when the run started: 2+ means last-alive wins */
   runPlayerCount = 0;
   players = new Map<string, Player>();
+  /* dev bots, keyed by player id — brains live beside the sim and act
+     through applyIntent like any remote client (see bots.ts) */
+  readonly bots = new Map<string, BotBrain>();
+  private nextBotNum = 1;
   seatTaken: (string | null)[] = new Array(SEAT_COUNT).fill(null);
   shoe: Card[] = [];
   dealerHand: Card[] = [];
@@ -306,6 +320,18 @@ export class Simulation {
         t.upright
           ? { x: 0, y: Math.sin(t.yaw / 2), z: 0, w: Math.cos(t.yaw / 2) }
           : lyingQuat(t.yaw)
+      );
+    }
+    // the table-top leavings: same seeded filth, furniture height
+    for (const c of LOBBY_TABLE_CLUTTER) {
+      const shape = DEBRIS_SHAPE[c.kind];
+      const halfLen = shape.halfHeight + shape.radius;
+      this.seedSettled(
+        c.kind,
+        { x: c.x, y: c.y + (c.upright ? halfLen : shape.radius + 0.002), z: c.z },
+        c.upright
+          ? { x: 0, y: Math.sin(c.roll / 2), z: 0, w: Math.cos(c.roll / 2) }
+          : lyingQuat(c.roll)
       );
     }
   }
@@ -398,6 +424,12 @@ export class Simulation {
       case "clearLitter":
         this.clearLitter(p);
         break;
+      case "addBot":
+        this.addBot(p, intent.difficulty);
+        break;
+      case "clearBots":
+        this.clearBots(p);
+        break;
       case "consumeStart":
         this.consumeStart(p, intent.kind);
         break;
@@ -408,6 +440,17 @@ export class Simulation {
         if (p.ritual) p.ritual.progressTicks = 0;
         break;
       case "consumeCancel":
+        // a spilled freebie goes back into the hand, not into the void
+        if (p.ritual?.fresh)
+          p.held = {
+            id: this.nextDebrisId++,
+            kind: p.ritual.kind,
+            sinceTick: this.tick,
+            earned: false,
+            seeded: false,
+            fresh: true,
+            pos: null,
+          };
         p.ritual = null;
         break;
       case "fling":
@@ -521,12 +564,46 @@ export class Simulation {
     this.openBetting();
   }
 
+  /* dev bots: seat a sim-driven opponent. Leader-only and lobby-only —
+     mid-run joiners would only spectate, and a test table's roster should
+     be settled before the door. Seats are the natural cap. */
+  private addBot(p: Player, difficulty: BotDifficulty): void {
+    if (this.phase !== "lobby" || p.id !== this.leaderId) return;
+    const id = "bot" + this.nextBotNum;
+    const brain = new BotBrain(
+      id,
+      difficulty,
+      (this.rng.next() * 0xffffffff) >>> 0,
+      this.nextBotNum
+    );
+    this.join(id, brain.name, brain.appearance);
+    if (!this.players.has(id)) return; // no free stool
+    this.nextBotNum++;
+    this.bots.set(id, brain);
+  }
+
+  /* leader-only, any phase: clear every bot off the table. Mid-run this is
+     the escape hatch — removals run the same leave path as a rage-quit, so
+     turn order and the last-alive check take care of themselves. */
+  private clearBots(p: Player): void {
+    if (p.id !== this.leaderId) return;
+    for (const id of [...this.bots.keys()]) {
+      const bot = this.players.get(id);
+      if (bot) this.removePlayer(bot);
+    }
+  }
+
   private removePlayer(p: Player): void {
     if (p.held) this.autoDrop(p); // don't vanish a held bottle
     this.seatTaken[p.seat] = null;
     this.players.delete(p.id);
-    if (this.leaderId === p.id)
-      this.leaderId = this.players.keys().next().value ?? null;
+    this.bots.delete(p.id);
+    // leadership passes down the join order, but never to a bot while a
+    // human remains — a table nobody can start is a dead table
+    if (this.leaderId === p.id) {
+      const ids = [...this.players.keys()];
+      this.leaderId = ids.find((id) => !this.bots.has(id)) ?? ids[0] ?? null;
+    }
     if (this.turnPlayerId === p.id) this.advanceTurn();
     if (this.players.size === 0) {
       this.phase = "lobby";
@@ -832,11 +909,13 @@ export class Simulation {
     else p.beerInv += qty;
   }
 
-  /* lobby-room toy: pull a free bottle/cigar from the wall dispenser you're
-     standing at. No money, no inventory, and never `earned` — pre-game
-     littering pays no points and drops no cash, so the waiting room can't
-     farm the run's scoring. Hands-empty doubles as the spam limiter: you
-     must fling one before you can pull the next. */
+  /* lobby-room perk: pull a free FRESH bottle/cigar from the machine you're
+     standing at — it lands in the hand, visibly unopened, ready for the
+     same C/B ritual the table runs (the drained empty stays in hand after;
+     fling it). Free but worthless to the run: freebie rituals score
+     nothing and mint unearned empties, so the waiting room can't farm
+     points. Hands-empty is the spam limiter: deal with what you're holding
+     first. */
   private dispense(p: Player, kind: ViceKind): void {
     if (this.phase !== "lobby" || !p.alive || p.ritual || p.held) return;
     const d = LOBBY_DISPENSERS.find((s) => s.kind === kind);
@@ -847,6 +926,7 @@ export class Simulation {
       sinceTick: this.tick,
       earned: false,
       seeded: false,
+      fresh: true,
       pos: null,
     };
   }
@@ -861,9 +941,19 @@ export class Simulation {
   }
 
   private consumeStart(p: Player, kind: ViceKind): void {
-    // hands full blocks the next vice: the empty never drops itself — you
-    // fling it or you stay thirsty. Litter is the player's problem.
-    if (!p.alive || p.ritual || p.held) return;
+    if (!p.alive || p.ritual) return;
+    if (p.held) {
+      // a machine freebie in the hand is the one holdable that's smokable —
+      // wherever it was carried. Anything else blocks the next vice: the
+      // empty never drops itself — you fling it or you stay thirsty.
+      if (!p.held.fresh || p.held.kind !== kind) return;
+      p.held = null; // the ritual takes it; cancel or completion hands one back
+      p.ritual = { kind, progressTicks: 0, engaged: false, fresh: true };
+      return;
+    }
+    // empty-handed in the waiting room: nothing to light — the machines
+    // stock the lobby, the pocket inventory is table stock
+    if (this.phase === "lobby") return;
     if (kind === "cigar" && p.cigarInv < 1) return;
     if (kind === "beer" && p.beerInv < 1) return;
     p.ritual = { kind, progressTicks: 0, engaged: false };
@@ -883,29 +973,39 @@ export class Simulation {
 
   private completeRitual(p: Player): void {
     const kind = p.ritual!.kind;
+    const fresh = !!p.ritual!.fresh; // a machine freebie, not bought stock
     p.ritual = null;
     if (kind === "cigar") {
-      if (p.cigarInv < 1) return;
-      p.cigarInv--;
+      if (!fresh) {
+        if (p.cigarInv < 1) return;
+        p.cigarInv--;
+      }
       p.stats.cigarsSmoked++;
       p.cigarMeter = Math.min(METER_MAX, p.cigarMeter + this.viceFill(p.cigarTol));
       p.cigarTol = Math.min(TOLERANCE_MAX, p.cigarTol + TOLERANCE_PER_USE);
     } else {
-      if (p.beerInv < 1) return;
-      p.beerInv--;
+      if (!fresh) {
+        if (p.beerInv < 1) return;
+        p.beerInv--;
+      }
       p.stats.beersDrunk++;
       p.beerMeter = Math.min(METER_MAX, p.beerMeter + this.viceFill(p.beerTol));
       p.beerTol = Math.min(TOLERANCE_MAX, p.beerTol + TOLERANCE_PER_USE);
     }
-    p.score += SCORE_VICE;
-    this.events.push({ t: "score", playerId: p.id, points: SCORE_VICE });
+    // freebies are pure flavor: no points, and the empty is never `earned` —
+    // held through the door or flung later, it can't pay out
+    if (!fresh) {
+      p.score += SCORE_VICE;
+      this.events.push({ t: "score", playerId: p.id, points: SCORE_VICE });
+    }
     // hands are guaranteed empty here: consumeStart refuses while holding
     p.held = {
       id: this.nextDebrisId++,
       kind,
       sinceTick: this.tick,
-      earned: true,
+      earned: !fresh,
       seeded: false,
+      fresh: false,
       pos: null,
     };
   }
@@ -1058,6 +1158,7 @@ export class Simulation {
       sinceTick: this.tick,
       earned: false,
       seeded: d.seeded,
+      fresh: false,
       pos: null,
     };
   }
@@ -1082,6 +1183,9 @@ export class Simulation {
   /* ---------------- tick ---------------- */
   step(): void {
     this.tick++;
+    // bots act first, through the same intent door as everyone else — and
+    // before the lobby branch below, so they loiter pre-game too
+    for (const brain of this.bots.values()) brain.step(this);
     if (this.phase === "lobby") {
       if (this.startAtTick !== null && this.tick >= this.startAtTick) {
         // countdown expired: seat everyone and fall through into the round
@@ -1091,8 +1195,16 @@ export class Simulation {
         // the waiting room: integrate everyone's held walk input, and keep
         // the physics running — pre-game litter flies for real. Everyone
         // steps every tick: gravity doesn't wait for key input.
-        for (const p of this.players.values())
+        for (const p of this.players.values()) {
           stepLobbyMove(p, p.moveDir.x, p.moveDir.z, TICK_DT, p.moveRun);
+          // pre-game vices are real too: the ritual clock runs here, while
+          // meters, deaths, and the win check stay parked until the run
+          if (p.ritual?.engaged) {
+            p.ritual.progressTicks++;
+            if (p.ritual.progressTicks >= msTicks(RITUAL_MS[p.ritual.kind]))
+              this.completeRitual(p);
+          }
+        }
         this.stepPhysics();
         return;
       }
@@ -1368,8 +1480,15 @@ export class Simulation {
         this.removeDebris(d);
         continue;
       }
-      // players only have hit capsules at their seats — lobby throws whiff
-      if (!d.touched && !d.hitPlayer && d.owner && d.room === "den") this.checkPlayerHit(d);
+      // hit capsules live at the seats during the run and on the walkers
+      // pre-game (lobby debris left flying when the run starts hits no one)
+      if (
+        !d.touched &&
+        !d.hitPlayer &&
+        d.owner &&
+        (d.room === "den" || this.phase === "lobby")
+      )
+        this.checkPlayerHit(d);
       // settle by policy, not just isSleeping(): tiny capsules never cross
       // Rapier's sleep threshold (contact-solver jitter keeps ~1 rad/s of
       // imperceptible spin alive forever)
@@ -1388,31 +1507,39 @@ export class Simulation {
   }
 
   /* a flung empty that beans another player before touching anything pays
-     the flinger a bonus. Manual point-vs-capsule math — players have no
-     Rapier colliders, and plain arithmetic keeps the sim deterministic. */
+     the flinger a bonus — during the run. Pre-game lobby hits sting (the
+     event fires, the victim yelps) but pay nothing, like all lobby antics.
+     Manual point-vs-capsule math — players have no Rapier colliders, and
+     plain arithmetic keeps the sim deterministic. */
   private checkPlayerHit(d: Debris): void {
     const flinger = this.players.get(d.owner!);
     if (!flinger || !flinger.alive) return;
+    const lobby = d.room === "lobby";
     const r2 = PLAYER_HIT_RADIUS * PLAYER_HIT_RADIUS;
     const victims = [...this.players.values()]
       .filter((q) => q.id !== d.owner)
       .sort((a, b) => a.seat - b.seat); // deterministic pick order
     for (const q of victims) {
-      const base = seatPosition(q.seat);
-      const cy = Math.max(PLAYER_HIT_Y_MIN, Math.min(PLAYER_HIT_Y_MAX, d.pos.y));
+      const base = lobby ? q.pos : seatPosition(q.seat);
+      const yMin = lobby ? base.y + LOBBY_HIT_Y_MIN : PLAYER_HIT_Y_MIN;
+      const yMax = lobby ? base.y + LOBBY_HIT_Y_MAX : PLAYER_HIT_Y_MAX;
+      const cy = Math.max(yMin, Math.min(yMax, d.pos.y));
       const dx = d.pos.x - base.x;
       const dy = d.pos.y - cy;
       const dz = d.pos.z - base.z;
       if (dx * dx + dy * dy + dz * dz > r2) continue;
       d.hitPlayer = true;
-      flinger.score += SCORE_PLAYER_HIT;
-      flinger.stats.directHits++;
+      const points = lobby ? 0 : SCORE_PLAYER_HIT;
+      if (!lobby) {
+        flinger.score += SCORE_PLAYER_HIT;
+        flinger.stats.directHits++;
+      }
       this.events.push({
         t: "playerHit",
         flingerId: flinger.id,
         victimId: q.id,
         pos: { ...d.pos },
-        points: SCORE_PLAYER_HIT,
+        points,
       });
       // players have no collider, so the empty would sail through the
       // victim's chest — knock it back off them instead
@@ -1485,7 +1612,12 @@ export class Simulation {
           }
         : null,
       held: p.held
-        ? { id: p.held.id, kind: p.held.kind, pos: p.held.pos ? { ...p.held.pos } : null }
+        ? {
+            id: p.held.id,
+            kind: p.held.kind,
+            fresh: p.held.fresh,
+            pos: p.held.pos ? { ...p.held.pos } : null,
+          }
         : null,
       look: {
         yaw: Math.round(p.lookYaw * 100) / 100,
@@ -1499,6 +1631,7 @@ export class Simulation {
       moveYaw: Math.round(p.moveYaw * 100) / 100,
       moving: p.moveDir.x !== 0 || p.moveDir.z !== 0,
       alive: p.alive,
+      bot: this.bots.has(p.id),
       waiting: p.waiting,
       sittingOut: p.sittingOut,
       causeOfDeath: p.causeOfDeath,
@@ -1511,6 +1644,7 @@ export class Simulation {
       kind: d.kind,
       phase: d.phase,
       room: d.room,
+      seeded: d.seeded,
       pos: d.pos,
       rot: d.rot,
     }));

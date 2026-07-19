@@ -44,7 +44,7 @@ export const RITUAL_MS: Record<"cigar" | "beer", number> = { cigar: 2500, beer: 
 export const DEAL_STEP_MS = 600;
 export const DEALER_DRAW_MS = 850;
 export const RESULT_PAUSE_MS = 1500;
-export const BETTING_WINDOW_MS = 15000; // betting closes on stragglers; first ante refreshes it
+export const BETTING_WINDOW_MS = 10000; // the visible get-your-bets-in timer; re-arms while nobody antes
 export const GAME_START_COUNTDOWN_MS = 10000; // leader hit the door → banner counts down
 export const ACT_TIMEOUT_MS = 30000; // auto-stand an AFK player
 
@@ -66,6 +66,10 @@ export const SCORE_PLAYER_HIT = 40;
 export const PLAYER_HIT_Y_MIN = 0.72;
 export const PLAYER_HIT_Y_MAX = 1.5;
 export const PLAYER_HIT_RADIUS = 0.3; // includes debris-size slop
+/* the same capsule for a lobby walker, relative to the feet (a standing
+   body, shins to hat, wherever the furniture has them) */
+export const LOBBY_HIT_Y_MIN = 0.2;
+export const LOBBY_HIT_Y_MAX = 1.55;
 
 /* head-tracking limits: the camera clamps here and the sim re-clamps
    whatever clients report. Yaw reaches well past the shoulder — checking
@@ -141,10 +145,16 @@ export function cardSlot(
   scale: number,
   lean: number
 ): { pos: V3; rot: { x: number; y: number; z: number; w: number } } {
-  const off = (i - 1) * CARD_SLOT_PITCH * scale;
+  // full pitch for the first three cards, then the fan tightens to 45%
+  // steps — long hands overlap like a held fan instead of marching into
+  // the neighbor's slots. Index-only math: dealt cards never reposition,
+  // and the sim's card colliders always agree with the client's meshes.
+  const steps = i <= 2 ? i : 2 + (i - 2) * 0.45;
+  const off = (steps - 1) * CARD_SLOT_PITCH * scale;
   const pos = {
     x: anchor.x + Math.cos(yaw) * off,
-    y: anchor.y + ((CARD_H * scale) / 2) * Math.sin(lean) * 0.95,
+    // overlapped cards stack a hair higher per index so they never z-fight
+    y: anchor.y + ((CARD_H * scale) / 2) * Math.sin(lean) * 0.95 + i * 0.0028 * scale,
     z: anchor.z - Math.sin(yaw) * off,
   };
   const hx = (-Math.PI / 2 + lean) / 2;

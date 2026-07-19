@@ -28,11 +28,18 @@ import {
   stepLobbyMove,
   type LobbyMotion,
 } from "@shared/lobbyRoom";
-import type { Intent, PlayerSnap, PropKind, Snapshot, ViceKind } from "@shared/types";
+import type {
+  BotDifficulty,
+  Intent,
+  PlayerSnap,
+  PropKind,
+  Snapshot,
+  ViceKind,
+} from "@shared/types";
 import { carpetTexture, leatherTexture, woodTexture } from "./textures";
 import { DebrisView } from "./debris";
-import { HeldItemControl, makeBottleMesh, makeCigarMesh } from "./held";
-import { denySound, pickupSound } from "./effects";
+import { HeldItemControl } from "./held";
+import { denySound, hurtSound, pickupSound, OuchBubbles, SmokeSystem } from "./effects";
 import { lookOf, makeFigure, poseArm } from "./figure";
 
 /* you must be able to look at your own feet: pickup reach is 2.2m, and at
@@ -137,6 +144,12 @@ export class LobbyRoomView {
      the same gestures the table uses (drag the empty, release to fling) */
   private debris: DebrisView;
   readonly held: HeldItemControl;
+  /* the waiting room's own effect plumes — the den's emitters render into
+     the den scene, invisible from in here */
+  readonly smoke: SmokeSystem;
+  private ouch: OuchBubbles;
+  private shakeLeft = 0; // seconds of camera shake remaining
+  private shakeAmp = 0;
   private raycaster = new THREE.Raycaster();
   /* the canvas, for hover cursors — set by SceneView after construction */
   domElement: HTMLElement | null = null;
@@ -165,6 +178,8 @@ export class LobbyRoomView {
     this.buildTrash();
     this.debris = new DebrisView(this.scene);
     this.held = new HeldItemControl(this.scene, this.camera, send);
+    this.smoke = new SmokeSystem(this.scene);
+    this.ouch = new OuchBubbles(this.scene);
 
     addEventListener("keydown", (e) => {
       if (!this.active || (e.target as HTMLElement)?.tagName === "INPUT") return;
@@ -180,13 +195,24 @@ export class LobbyRoomView {
         }
         this.captureLook(); // any gameplay key re-arms mouse-look (Esc can't)
         if (this.nearDoor()) this.tryStartAtDoor();
-        else this.tryDispense();
+        else if (!this.tryPickupAim()) this.tryDispense();
         return;
       }
       if (e.code === "KeyO") {
         // the janitor key — leader-only, same intent as the lobby button.
         // (C used to be an alias; it's the cigar hold-key at the table now)
         if (this.latest?.leaderId === this.myId) this.send({ type: "clearLitter" });
+        return;
+      }
+      if (e.code === "KeyB") {
+        // dev bots — leader-only; difficulty rides the lobby panel's select
+        if (this.latest?.leaderId === this.myId) {
+          const sel = document.getElementById("botDiff") as HTMLSelectElement | null;
+          this.send({
+            type: "addBot",
+            difficulty: (sel?.value ?? "medium") as BotDifficulty,
+          });
+        }
         return;
       }
       if (e.code === "Space") {
@@ -211,15 +237,28 @@ export class LobbyRoomView {
   }
 
   /* ---------------- pointer lock (mouse-look) ---------------- */
+  /* Esc-close free look: Esc carries no activation the browser will sell a
+     lock for, so main.ts hides the cursor and flips this on instead — every
+     locked code path (raw-delta look, centered crosshair, virtual cursor)
+     treats it as the real thing until the next gesture buys the lock back */
+  private lookPending = false;
+  setLookPending(on: boolean): void {
+    this.lookPending = on;
+    this.syncLockUi();
+  }
   private get locked(): boolean {
-    return !!this.domElement && document.pointerLockElement === this.domElement;
+    return (
+      !!this.domElement &&
+      (this.lookPending || document.pointerLockElement === this.domElement)
+    );
   }
 
   /* called on lobby entry (riding the join click's user activation), on
      any canvas click, and by SceneView when the options RESUME button
      closes over the lobby */
   captureLook(): void {
-    if (!this.active || this.locked || !this.domElement) return;
+    if (!this.active || !this.domElement) return;
+    if (document.pointerLockElement === this.domElement) return;
     try {
       // returns a promise in most engines, undefined in older ones; a
       // refusal (headless, iframe policy, Esc cooldown) just leaves the
@@ -324,11 +363,29 @@ export class LobbyRoomView {
     const frameMat = new THREE.MeshStandardMaterial({ color: 0x0f0b06, roughness: 0.8 });
     // painted, not wood-grain: the only green surface in a room of plaster
     // and paneling, so the way out reads from anywhere
+    // the dark of the den behind the doorway, with a warm sliver of light
+    // leaking along the open edge — the crack says "there's a room through
+    // here", the sign above says which one
+    const voidPlane = new THREE.Mesh(
+      new THREE.PlaneGeometry(0.95, 2.1),
+      new THREE.MeshBasicMaterial({ color: 0x020402, side: THREE.DoubleSide })
+    );
+    voidPlane.position.set(doorX, 1.05, halfD - 0.01);
+    const leak = new THREE.Mesh(
+      new THREE.PlaneGeometry(0.11, 2.02),
+      new THREE.MeshBasicMaterial({ color: 0x8a5a20, side: THREE.DoubleSide })
+    );
+    leak.position.set(doorX - 0.42, 1.05, halfD - 0.015);
+    this.scene.add(voidPlane, leak);
+    // the door itself hangs on the right jamb and stands a touch ajar,
+    // swung OUT toward the den — knob-side gap facing the room
+    const doorGroup = new THREE.Group();
     const door = new THREE.Mesh(
       new THREE.BoxGeometry(0.95, 2.1, 0.06),
       new THREE.MeshStandardMaterial({ color: 0x356041, roughness: 0.5 })
     );
-    door.position.set(doorX, 1.05, halfD - 0.02);
+    door.position.set(-0.475, 1.05, 0);
+    doorGroup.add(door);
     // inset panels a shade darker, slightly proud — depth the flat slab lacked
     const panelMat = new THREE.MeshStandardMaterial({ color: 0x27452f, roughness: 0.6 });
     for (const [py, ph] of [
@@ -336,9 +393,22 @@ export class LobbyRoomView {
       [0.55, 0.8],
     ]) {
       const panel = new THREE.Mesh(new THREE.BoxGeometry(0.62, ph, 0.03), panelMat);
-      panel.position.set(doorX, py, halfD - 0.06);
-      this.scene.add(panel);
+      panel.position.set(-0.475, py, -0.04);
+      doorGroup.add(panel);
     }
+    const brassDoorMat = new THREE.MeshStandardMaterial({
+      color: 0xe8c469,
+      metalness: 0.8,
+      roughness: 0.3,
+    });
+    const knob = new THREE.Mesh(new THREE.SphereGeometry(0.035, 10, 8), brassDoorMat);
+    knob.position.set(-0.825, 1.02, -0.07);
+    const kick = new THREE.Mesh(new THREE.BoxGeometry(0.86, 0.2, 0.02), brassDoorMat);
+    kick.position.set(-0.475, 0.14, -0.04);
+    doorGroup.add(knob, kick);
+    doorGroup.position.set(doorX + 0.475, 0, halfD - 0.02); // hinge at the right jamb
+    doorGroup.rotation.y = 0.14; // cracked open, outward
+    this.scene.add(doorGroup);
     // a full frame, not just a lintel — jambs make it a doorway, not wallpaper
     const lintel = new THREE.Mesh(new THREE.BoxGeometry(1.19, 0.1, 0.12), frameMat);
     lintel.position.set(doorX, 2.15, halfD - 0.03);
@@ -347,16 +417,7 @@ export class LobbyRoomView {
     jambL.position.set(doorX - 0.535, 1.1, halfD - 0.03);
     const jambR = new THREE.Mesh(jambGeo, frameMat);
     jambR.position.set(doorX + 0.535, 1.1, halfD - 0.03);
-    const brassDoorMat = new THREE.MeshStandardMaterial({
-      color: 0xe8c469,
-      metalness: 0.8,
-      roughness: 0.3,
-    });
-    const knob = new THREE.Mesh(new THREE.SphereGeometry(0.035, 10, 8), brassDoorMat);
-    knob.position.set(doorX - 0.35, 1.02, halfD - 0.09);
-    const kick = new THREE.Mesh(new THREE.BoxGeometry(0.86, 0.2, 0.02), brassDoorMat);
-    kick.position.set(doorX, 0.14, halfD - 0.06);
-    this.scene.add(door, lintel, jambL, jambR, knob, kick);
+    this.scene.add(lintel, jambL, jambR);
 
     // glowing sign over the door
     const tableSign = new THREE.Mesh(
@@ -536,25 +597,12 @@ export class LobbyRoomView {
       leg.position.set(lx, 0.19, lz);
       coffee.add(leg);
     }
-    const b1 = makeBottleMesh();
-    b1.position.set(-0.28, 0.49, 0.1);
-    const b2 = makeBottleMesh();
-    b2.position.set(-0.16, 0.485, -0.12);
-    b2.rotation.y = 1.7;
-    const b3 = makeBottleMesh(); // the tipped one, mid-roll forever
-    b3.position.set(0.13, 0.465, 0.14);
-    b3.rotation.set(Math.PI / 2, 0, 2.3);
-    // overflowing ashtray
+    /* the bottles and butts that used to be baked in here are REAL now —
+       seeded via LOBBY_TABLE_CLUTTER so they can be grabbed and flung;
+       only the ashtray stays furniture */
     const tray = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.06, 0.03, 14), darkMat);
     tray.position.set(0.33, 0.44, -0.08);
-    coffee.add(b1, b2, b3, tray);
-    for (let i = 0; i < 4; i++) {
-      const butt = makeCigarMesh(true);
-      butt.scale.setScalar(0.7);
-      butt.position.set(0.33 + Math.sin(i * 2.4) * 0.045, 0.457, -0.08 + Math.cos(i * 2.4) * 0.04);
-      butt.rotation.set(Math.PI / 2, 0, i * 1.9);
-      coffee.add(butt);
-    }
+    coffee.add(tray);
     // a dead hand of cards, face up, nobody won
     for (let i = 0; i < 5; i++) {
       const card = new THREE.Mesh(
@@ -578,9 +626,8 @@ export class LobbyRoomView {
       stem.position.y = 0.5;
       const foot = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.26, 0.04, 18), darkMat);
       foot.position.y = 0.02;
-      const bottle = makeBottleMesh();
-      bottle.position.set(0.12, 1.09, -0.05);
-      g.add(tp, stem, foot, bottle);
+      // the abandoned bottle on top is seeded debris now (LOBBY_TABLE_CLUTTER)
+      g.add(tp, stem, foot);
       g.position.set(x, 0, z);
       this.scene.add(g);
     };
@@ -641,13 +688,16 @@ export class LobbyRoomView {
     );
     jukeArch.position.set(0, 1.15, 0.262);
     juke.add(jukeBody, jukeTop, jukePanel, jukeArch);
-    juke.position.set(-3.55, 0, 2.35);
-    juke.rotation.y = 0.6; // angled out of its corner
+    // backed snug into the -X/+Z corner, glowing panel facing the room on
+    // the diagonal — like something you could walk up and feed a quarter
+    juke.position.set(-3.72, 0, 2.73);
+    juke.rotation.y = Math.PI * 0.75;
     this.jukeLight = new THREE.PointLight(0xe9a63a, 2.5, 4, 2);
-    this.jukeLight.position.set(-3.1, 0.9, 1.9);
+    this.jukeLight.position.set(-3.3, 0.9, 2.3);
     this.scene.add(juke, this.jukeLight);
 
-    /* cigarette machine (obstacles[6]) by the door */
+    /* cigar machine by the door — a dispenser, so it gets the fridge
+       treatment: named signage plus its own glow */
     const cig = new THREE.Group();
     const cigBody = new THREE.Mesh(
       new THREE.BoxGeometry(0.72, 1.5, 0.42),
@@ -666,7 +716,7 @@ export class LobbyRoomView {
           ctx.shadowColor = "#e9a63a";
           ctx.shadowBlur = 14;
           ctx.fillStyle = "#f2cf8b";
-          ctx.fillText("SMOKES", 128, 62);
+          ctx.fillText("CIGARS", 128, 62);
           ctx.font = "26px 'VT323',monospace";
           ctx.shadowBlur = 0;
           ctx.fillStyle = "#a39a8b";
@@ -683,9 +733,12 @@ export class LobbyRoomView {
       cig.add(pull);
     }
     cig.add(cigBody, cigFace);
-    cig.position.set(3.6, 0, 2.3);
-    cig.rotation.y = -0.35;
+    cig.position.set(3.85, 0, 2.3);
+    cig.rotation.y = -Math.PI / 2; // back to the +X wall, face into the room
     this.scene.add(cig);
+    const cigGlow = new THREE.PointLight(0xe9a63a, 1.2, 2.6, 2);
+    cigGlow.position.set(3.3, 1.1, 2.3);
+    this.scene.add(cigGlow);
 
     /* beer fridge (obstacles[9]) against the -X wall — the other dispenser */
     const fridge = new THREE.Group();
@@ -1049,18 +1102,7 @@ export class LobbyRoomView {
       this.beginVirtualCursor(e);
       return;
     }
-    const target = this.findDebrisAt(ndc);
-    if (target) {
-      if (this.held.hasHeld) {
-        this.held.flashDeny();
-        denySound();
-        return;
-      }
-      this.send({ type: "pickup", itemId: target.id });
-      this.held.beginFloorGrab(target.kind, target.pos);
-      this.beginVirtualCursor(e);
-      return;
-    }
+    // (litter pickup moved to the E key — a click on litter just looks)
     if (this.locked && this.held.grabHeld()) {
       // locked, holding, crosshair on nothing: the click means the empty
       // in your hand — the wind-up starts from the center
@@ -1095,6 +1137,8 @@ export class LobbyRoomView {
       return; // crosshair hover refreshes per frame, where walking counts too
     }
     if (!this.looking) {
+      // plain hover: remember where the cursor is — the E key aims with it
+      this.lastPointer = { x: e.clientX, y: e.clientY };
       this.updateHover(this.ndc(e));
       return;
     }
@@ -1216,6 +1260,28 @@ export class LobbyRoomView {
     this.send({ type: "jump" });
   }
 
+  /* E on aimed litter: grab what the crosshair (or the cursor) is on.
+     False when nothing's under the aim, so E can fall through to the
+     machines. */
+  private tryPickupAim(): boolean {
+    const ndc = this.locked
+      ? CENTER
+      : new THREE.Vector2(
+          (this.lastPointer.x / innerWidth) * 2 - 1,
+          -(this.lastPointer.y / innerHeight) * 2 + 1
+        );
+    const target = this.findDebrisAt(ndc);
+    if (!target) return false;
+    if (this.held.hasHeld) {
+      this.held.flashDeny();
+      denySound();
+      return true; // aiming at litter with full hands is a deny, not a dispense
+    }
+    this.send({ type: "pickup", itemId: target.id });
+    pickupSound();
+    return true;
+  }
+
   private tryDispense(): void {
     const d = this.nearDispenser();
     if (!d) return;
@@ -1226,6 +1292,30 @@ export class LobbyRoomView {
     }
     this.send({ type: "dispense", kind: d.kind });
     pickupSound();
+  }
+
+  /* a flung empty found a body: the yelp everyone sees, plus the sting —
+     shake and hurt-buzz — only the victim feels. The waiting-room mirror
+     of the den's playerHit block (minus the points pop: lobby hits pay
+     nothing). */
+  playerHit(
+    ev: { flingerId: string; victimId: string; pos: { x: number; y: number; z: number } },
+    myId: string
+  ): void {
+    const at = new THREE.Vector3(ev.pos.x, ev.pos.y, ev.pos.z);
+    if (ev.victimId === myId) {
+      // the impact point is at your own head — behind your view. Pull the
+      // yelp into frame, biased toward the side the bottle came from
+      const fwd = this.camera.getWorldDirection(new THREE.Vector3());
+      const side = at.clone().sub(this.camera.position);
+      side.addScaledVector(fwd, -side.dot(fwd));
+      if (side.lengthSq() > 1e-6) side.setLength(0.18);
+      at.copy(this.camera.position).addScaledVector(fwd, 0.55).add(side);
+      this.shakeAmp = Math.max(this.shakeAmp, 0.025);
+      this.shakeLeft = Math.max(this.shakeLeft, 0.3);
+      hurtSound();
+    }
+    this.ouch.emit(at);
   }
 
   private updateDispenseHint(): void {
@@ -1249,11 +1339,16 @@ export class LobbyRoomView {
       el.classList.remove("show");
       return;
     }
-    el.textContent = this.held.hasHeld
-      ? "HANDS FULL — PRESS F TO FLING IT"
-      : d.kind === "beer"
-        ? "PRESS E — GRAB A BEER"
-        : "PRESS E — GRAB A SMOKE";
+    const meHeld = this.latest?.players.find((p) => p.id === this.myId)?.held;
+    el.textContent = meHeld?.fresh
+      ? meHeld.kind === "beer"
+        ? "GOT ONE — HOLD B TO DRINK IT"
+        : "GOT ONE — HOLD C TO SMOKE IT"
+      : this.held.hasHeld
+        ? "HANDS FULL — PRESS F TO FLING IT"
+        : d.kind === "beer"
+          ? "PRESS E — GRAB A BEER"
+          : "PRESS E — GRAB A CIGAR";
     el.classList.add("show");
   }
 
@@ -1305,6 +1400,15 @@ export class LobbyRoomView {
         eyeY + Math.sin(this.pitch),
         this.myPos.z + cy * cp
       );
+      // getting beaned rattles the walker's eyes, same feel as the den
+      if (this.shakeLeft > 0) {
+        this.shakeLeft = Math.max(0, this.shakeLeft - dt);
+        const k = this.shakeLeft > 0 ? this.shakeLeft / 0.16 : 0;
+        this.camera.position.x += (Math.random() - 0.5) * this.shakeAmp * k * 2;
+        this.camera.position.y += (Math.random() - 0.5) * this.shakeAmp * k * 2;
+        this.camera.position.z += (Math.random() - 0.5) * this.shakeAmp * k * 2;
+        if (this.shakeLeft === 0) this.shakeAmp = 0;
+      }
 
       // tell the sim about held input: direction changes go out immediately,
       // facing drift goes out on a slow beat
@@ -1356,6 +1460,8 @@ export class LobbyRoomView {
     // litter in motion, and the empty in my hand
     this.debris.frame(dt);
     this.held.frame(dt);
+    this.smoke.frame(dt);
+    this.ouch.frame(dt);
     // stream the wind-up drag (~10 Hz) — same contract the table uses
     const gp = this.held.grabWorldPos();
     if (gp) {

@@ -47,6 +47,12 @@ export class MirrorControl {
   private mode: "menu" | "lobby" = "menu";
   private applyCb: ((a: Appearance) => void) | null = null;
   private closeCb: (() => void) | null = null;
+  /* has anything been hand-picked since the last roll of the dice? */
+  private dirtySinceRandom = true;
+  /* main.ts hooks this to guard its lock-loss handler: an Esc that closed
+     the mirror can bounce a transiently-granted pointer lock, and that
+     loss must not read as a menu request */
+  onEscClose: (() => void) | null = null;
 
   constructor() {
     this.buildRows();
@@ -57,13 +63,30 @@ export class MirrorControl {
       if (this.view) this.view.spin = this.spinOn;
       $("mirrorSpinBtn").textContent = this.spinOn ? "SPIN: ON" : "SPIN: OFF";
     });
+    $("mirrorRandomBtn").addEventListener("click", () => {
+      // hand-picked edits on the table: ask before scrambling them
+      if (this.dirtySinceRandom) $("mirrorConfirm").classList.add("show");
+      else this.randomize();
+    });
+    $("mirrorRandomYes").addEventListener("click", () => {
+      $("mirrorConfirm").classList.remove("show");
+      this.randomize();
+    });
+    $("mirrorRandomNo").addEventListener("click", () =>
+      $("mirrorConfirm").classList.remove("show")
+    );
     addEventListener("keydown", (e) => {
-      if (e.key === "Escape" && this.open()) {
+      if (e.key !== "Escape" || !this.open()) return;
+      // the confirm modal eats the first Esc; the mirror takes the next
+      if ($("mirrorConfirm").classList.contains("show")) {
+        $("mirrorConfirm").classList.remove("show");
+      } else {
         this.hide();
-        // registered before main.ts's Esc handler: a close must stay a
-        // close, not become an options toggle on the same press
-        e.stopImmediatePropagation();
+        this.onEscClose?.();
       }
+      // registered before main.ts's Esc handler: a close must stay a
+      // close, not become an options toggle on the same press
+      e.stopImmediatePropagation();
     });
   }
 
@@ -91,6 +114,9 @@ export class MirrorControl {
 
   private openScreen(): void {
     $("mirrorScreen").classList.add("active");
+    $("mirrorConfirm").classList.remove("show");
+    // whatever walks in is a deliberate look — scrambling it needs a nod
+    this.dirtySinceRandom = true;
     // the glass warms up on first open and stays for the app's lifetime
     if (!this.view) this.view = new MirrorView($("mirrorStage"));
     this.view.spin = this.spinOn;
@@ -108,6 +134,28 @@ export class MirrorControl {
 
   private set(field: Field, value: number): void {
     this.look = sanitizeAppearance({ ...this.look, [field]: value });
+    this.dirtySinceRandom = true;
+    this.commit();
+  }
+
+  /* the whole wardrobe off the rack at once — no confirmation here, the
+     button decides whether to ask first */
+  private randomize(): void {
+    const r = (n: number) => Math.floor(Math.random() * n);
+    this.look = sanitizeAppearance({
+      skin: r(SKIN_TONES.length),
+      shirt: r(SHIRT_COLORS.length),
+      pants: r(PANTS_COLORS.length),
+      hat: r(HAT_STYLE_COUNT),
+      hatColor: r(HAT_COLORS.length),
+      accessory: r(ACCESSORY_COUNT),
+    });
+    this.dirtySinceRandom = false;
+    this.commit();
+  }
+
+  /* persist per mode, refresh the glass and the rows */
+  private commit(): void {
     if (this.mode === "menu") localStorage.setItem(STORE_KEY, JSON.stringify(this.look));
     else this.applyCb?.(this.look);
     this.view?.setLook(this.look);

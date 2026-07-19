@@ -7,7 +7,7 @@
     ".": "./src/index.ts"
   },
   "scripts": {
-    "test": "tsx test/simSmoke.ts && tsx test/tolerance.ts && tsx test/moneyDrop.ts && tsx test/lobby.ts && tsx test/lobbyMove.ts && tsx test/lobbyLitter.ts && tsx test/lobbyToys.ts && tsx test/playerHit.ts && tsx test/cardBlock.ts && tsx test/standings.ts && tsx test/sitOut.ts && tsx test/appearance.ts",
+    "test": "tsx test/simSmoke.ts && tsx test/tolerance.ts && tsx test/moneyDrop.ts && tsx test/lobby.ts && tsx test/lobbyMove.ts && tsx test/lobbyLitter.ts && tsx test/lobbyToys.ts && tsx test/lobbyVice.ts && tsx test/playerHit.ts && tsx test/cardBlock.ts && tsx test/standings.ts && tsx test/sitOut.ts && tsx test/appearance.ts && tsx test/bots.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

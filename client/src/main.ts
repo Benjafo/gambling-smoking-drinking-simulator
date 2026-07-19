@@ -34,7 +34,11 @@ let session: Session | null = null;
 const send = (i: Intent) => session?.send(i);
 const scene = new SceneView($("stage"), send);
 const hud = new Hud(send);
-const ritual = new RitualControl(send, scene);
+const ritual = new RitualControl(send, scene, (why, kind) => {
+  if (why === "handsFull") hud.handsFull();
+  else if (why === "machineFirst") hud.machineFirst();
+  else hud.outOfStock(kind);
+});
 const menu = new MenuControl(startSession);
 const mirror = new MirrorControl();
 let latestSnap: Snapshot | null = null;
@@ -49,7 +53,10 @@ scene.lobbyRoom.onOpenCloset = () => {
   mirror.showForLobby(
     me.appearance,
     (a) => send({ type: "setAppearance", appearance: a }),
-    () => scene.capturePointer()
+    // arm the pending-look recapture rather than raw-requesting a lock: a
+    // BACK click's activation upgrades it instantly, and an Esc close gets
+    // the same hidden-cursor free look as an Esc-closed menu
+    () => armRecapture()
   );
 };
 
@@ -62,6 +69,9 @@ function startSession(s: Session): void {
 
   s.onSnapshot((snap) => {
     latestSnap = snap;
+    // the run ending puts buttons on screen — pending free look mustn't
+    // keep the cursor hidden over the leaderboard
+    if (recaptureArmed && snap.phase === "over") disarmRecapture();
     scene.apply(snap, s.playerId);
     if (!arrived) {
       arrived = true;
@@ -78,6 +88,7 @@ function startSession(s: Session): void {
   s.onEnd((reason) => {
     session = null;
     latestSnap = null;
+    disarmRecapture(); // ...nor a hidden one
     document.exitPointerLock?.(); // a lost connection mustn't strand a locked cursor
     ritual.update(undefined); // cancel any half-finished gesture overlay
     hud.sessionEnd();
@@ -93,8 +104,11 @@ function startSession(s: Session): void {
    resume/leave slabs for a plain BACK */
 const optionsOpen = () => $("optionsScreen").classList.contains("active");
 const toggleOptions = (on: boolean) => {
+  if (on) disarmRecapture(); // an opening menu wants the cursor back
   $("optionsScreen").classList.toggle("active", on);
   $("optionsScreen").classList.toggle("from-menu", !session);
+  // a fresh open always starts at the top, not wherever it was left
+  if (on) $("optionsScreen").scrollTop = 0;
 };
 
 $("optionsBtn").addEventListener("click", () => toggleOptions(!optionsOpen()));
@@ -106,37 +120,109 @@ $("resumeBtn").addEventListener("click", () => {
 $("optionsBackBtn").addEventListener("click", () => toggleOptions(false));
 $("leaveBtn").addEventListener("click", () => session?.leave()); // onEnd does the rest
 
-/* Esc in the lobby wears two hats and the browser gets first grab: while
-   the pointer is locked, Esc only exits the lock (the keydown never
-   reaches us), so a lock loss over the lobby IS the menu request */
+/* Esc carries no user activation, so the relock after an Esc-close usually
+   bounces off the browser. armRecapture() doesn't wait for one: it hides
+   the cursor and flips the rooms' lookPending flag, so free look runs on
+   raw mouse deltas IMMEDIATELY — then it shops for a gesture the browser
+   will sell a real lock for (once right away, in case a menu click's
+   activation is still spendable; once after the ~1.3s post-Esc cooldown
+   some engines enforce; and on the next key or non-UI click). Disarms the
+   moment a real lock lands or a screen takes the cursor back. */
+let recaptureArmed = false;
+let recaptureTimer = 0;
+const disarmRecapture = () => {
+  recaptureArmed = false;
+  clearInterval(recaptureTimer);
+  document.body.classList.remove("look-pending");
+  scene.setLookPending(false);
+};
+const tryRecapture = () => {
+  if (!recaptureArmed) return;
+  const wanted =
+    session &&
+    !optionsOpen() &&
+    !mirror.open() &&
+    !$("overScreen").classList.contains("active");
+  if (!wanted) return disarmRecapture();
+  if (!document.pointerLockElement) scene.capturePointer();
+};
+const armRecapture = () => {
+  recaptureArmed = true;
+  document.body.classList.add("look-pending");
+  scene.setLookPending(true);
+  tryRecapture();
+  clearInterval(recaptureTimer);
+  // chase the earliest moment the browser will sell the lock back: the
+  // post-Esc cooldown lapses within ~1.3s and a menu click's activation
+  // stays spendable for ~5s — poll the boundary instead of guessing it
+  let tries = 0;
+  recaptureTimer = window.setInterval(() => {
+    if (!recaptureArmed || ++tries > 14) return clearInterval(recaptureTimer);
+    tryRecapture();
+  }, 350);
+};
+addEventListener(
+  "pointerdown",
+  (e) => {
+    if ((e.target as HTMLElement)?.closest?.("button,input,label,a,select")) return;
+    tryRecapture();
+  },
+  true
+);
+
+/* Esc wears two hats and the browser gets first grab: while the pointer
+   is locked, Esc only exits the lock (the keydown never reaches us), so a
+   lock loss over either room IS the menu request */
 let lastLockExit = 0;
 let lastEscClose = 0;
 document.addEventListener("pointerlockchange", () => {
-  if (document.pointerLockElement) return;
+  if (document.pointerLockElement) {
+    disarmRecapture(); // look is live again — stop hunting for a gesture
+    return;
+  }
   lastLockExit = performance.now();
   // the lock exit rode the same Esc press that just closed the menu — a
   // close must stay a close, not bounce the menu straight back open
   if (performance.now() - lastEscClose < 350) return;
   // the closet customizer releases the lock on purpose — not a menu request
   if (mirror.open()) return;
-  if (session && scene.inLobby && !optionsOpen()) toggleOptions(true);
+  // ...and so does the sim when the run ends (the leaderboard needs a cursor)
+  if ($("overScreen").classList.contains("active")) return;
+  // mid-recapture, a lock can be granted off lingering click activation and
+  // torn straight back down by the same Esc press — that transient loss is
+  // collateral of the chase, never a menu request
+  if (recaptureArmed) return;
+  if (session && !optionsOpen()) toggleOptions(true);
 });
 addEventListener("keydown", (e) => {
-  if (e.key !== "Escape") return;
+  if (e.key !== "Escape") {
+    // any other key is a real gesture — the armed recapture can spend it
+    if ((e.target as HTMLElement)?.tagName !== "INPUT") tryRecapture();
+    return;
+  }
   // an engine that DOES deliver the lock-exiting Esc mustn't double-toggle
   if (optionsOpen() && performance.now() - lastLockExit < 350) return;
+  // the mirror fields its own Esc (and stops propagation) — this guard is
+  // the backstop so a close can never double as an options toggle
+  if (mirror.open()) return;
   if (session) {
     const opening = !optionsOpen();
     toggleOptions(opening);
     if (!opening) {
       lastEscClose = performance.now();
-      scene.capturePointer(); // best effort — Esc grants no gesture
+      armRecapture(); // Esc grants no gesture — chase the next one
     }
   } else if (optionsOpen()) toggleOptions(false);
 });
+// an Esc that closed the mirror gets the same bounce guard as an Esc that
+// closed the menu: any transient lock loss it causes must stay quiet
+mirror.onEscClose = () => {
+  lastEscClose = performance.now();
+};
 
 /* audio: per-category volume (master / music / effects) + mute, persisted
    by effects.ts */
+const audioRows: Element[] = [];
 for (const [inputId, valId, channel] of [
   ["masterVolInput", "masterVolVal", "master"],
   ["musicVolInput", "musicVolVal", "music"],
@@ -144,6 +230,7 @@ for (const [inputId, valId, channel] of [
 ] as const) {
   const input = $(inputId) as HTMLInputElement;
   const val = $(valId);
+  audioRows.push(input.closest(".audio-row")!);
   input.value = String(Math.round(getVolume(channel) * 100));
   val.textContent = input.value + "%";
   input.addEventListener("input", () => {
@@ -158,9 +245,14 @@ for (const [inputId, valId, channel] of [
     });
 }
 const muteChk = $("sfxMuteChk") as HTMLInputElement;
+// mute greys the whole mixer so the sliders themselves say nobody's listening
+const syncMuteUi = () =>
+  audioRows.forEach((r) => r.classList.toggle("muted", getMuted()));
 muteChk.checked = getMuted();
+syncMuteUi();
 muteChk.addEventListener("change", () => {
   setMuted(muteChk.checked);
+  syncMuteUi();
   if (!muteChk.checked) pickupSound();
 });
 

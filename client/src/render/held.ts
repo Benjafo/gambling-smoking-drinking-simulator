@@ -104,19 +104,48 @@ export function makeStickMesh(): THREE.Group {
   return g;
 }
 
-/* the mesh for anything that can sit in a hand — spent cigars only; the lit
-   ritual cigar is built directly where the ritual renders */
-export function makeHeldMesh(kind: PropKind): THREE.Group {
+/* the mesh for anything that can sit in a hand. Spent by default (the lit
+   ritual cigar is built directly where the ritual renders); `fresh` is the
+   machine's unopened freebie — capped bottle, pristine cigar — so a glance
+   at the hand says whether C/B has something to work with */
+export function makeHeldMesh(kind: PropKind, fresh = false): THREE.Group {
   switch (kind) {
-    case "beer":
-      return makeBottleMesh();
+    case "beer": {
+      const g = makeBottleMesh();
+      if (fresh) {
+        // gold foil cap: unopened, not another dead soldier
+        const cap = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.015, 0.015, 0.02, 10),
+          new THREE.MeshStandardMaterial({ color: 0xe8c469, metalness: 0.7, roughness: 0.25 })
+        );
+        cap.position.y = 0.162;
+        g.add(cap);
+      }
+      return g;
+    }
     case "cigar":
-      return makeCigarMesh(true);
+      return fresh ? makeFreshCigarMesh() : makeCigarMesh(true);
     case "plunger":
       return makePlungerMesh();
     case "stick":
       return makeStickMesh();
   }
+}
+
+/* an unsmoked cigar: full length, both ends clean, no ash, no ember */
+function makeFreshCigarMesh(): THREE.Group {
+  const g = new THREE.Group();
+  const body = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.012, 0.012, 0.13, 10),
+    new THREE.MeshStandardMaterial({ color: 0x6b3a1c, roughness: 0.8 })
+  );
+  const band = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.0125, 0.0125, 0.012, 10),
+    new THREE.MeshStandardMaterial({ color: 0xe8c469, metalness: 0.5, roughness: 0.35 })
+  );
+  band.position.y = -0.03;
+  g.add(body, band);
+  return g;
 }
 
 const HAND_OFFSET = new THREE.Vector3(0.3, -0.26, -0.72);
@@ -190,7 +219,7 @@ export class HeldItemControl {
       }
       this.dropMesh();
       this.heldId = held.id;
-      this.mesh = makeHeldMesh(held.kind);
+      this.mesh = makeHeldMesh(held.kind, held.fresh);
       this.mesh.add(hitProxy());
       this.scene.add(this.mesh);
     } else if (!held && this.heldId !== null) {
@@ -365,27 +394,32 @@ export class HeldItemControl {
   flashDeny(): void {
     if (!this.mesh || this.denyUntil > performance.now()) return;
     this.denyUntil = performance.now() + 450;
+    // dedupe first: the bottle shares ONE glass material across three
+    // meshes, and a per-mesh pass would capture the mid-flash red as the
+    // "original" — leaving the bottle red forever after the last restore
+    const mats = new Set<THREE.MeshStandardMaterial>();
     this.mesh.traverse((o) => {
       const mat = (o as THREE.Mesh).material as THREE.MeshStandardMaterial | undefined;
-      if (mat?.emissive) {
-        const orig = mat.emissive.clone();
-        const origIntensity = mat.emissiveIntensity;
-        mat.emissive.setHex(0xd02010);
-        mat.emissiveIntensity = 1.6;
-        setTimeout(() => {
-          mat.emissive.copy(orig);
-          mat.emissiveIntensity = origIntensity;
-          setTimeout(() => {
-            mat.emissive.setHex(0xd02010);
-            mat.emissiveIntensity = 1.6;
-            setTimeout(() => {
-              mat.emissive.copy(orig);
-              mat.emissiveIntensity = origIntensity;
-            }, 130);
-          }, 90);
-        }, 130);
-      }
+      if (mat?.emissive) mats.add(mat);
     });
+    for (const mat of mats) {
+      const orig = mat.emissive.clone();
+      const origIntensity = mat.emissiveIntensity;
+      mat.emissive.setHex(0xd02010);
+      mat.emissiveIntensity = 1.6;
+      setTimeout(() => {
+        mat.emissive.copy(orig);
+        mat.emissiveIntensity = origIntensity;
+        setTimeout(() => {
+          mat.emissive.setHex(0xd02010);
+          mat.emissiveIntensity = 1.6;
+          setTimeout(() => {
+            mat.emissive.copy(orig);
+            mat.emissiveIntensity = origIntensity;
+          }, 130);
+        }, 90);
+      }, 130);
+    }
   }
 
   frame(dt: number): void {

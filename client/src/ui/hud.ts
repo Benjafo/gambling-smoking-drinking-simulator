@@ -1,8 +1,8 @@
 /* DOM overlay HUD — the original game's UI language, now rendering snapshots
    and emitting intents instead of mutating state. */
-import { MIN_BET, TOLERANCE_MAX, TOLERANCE_PER_USE } from "@shared/constants";
+import { BETTING_WINDOW_MS, MIN_BET, SEAT_COUNT, TOLERANCE_MAX, TOLERANCE_PER_USE } from "@shared/constants";
 import { handValue } from "@shared/blackjack";
-import type { Intent, PlayerSnap, Snapshot } from "@shared/types";
+import type { BotDifficulty, Intent, PlayerSnap, Snapshot } from "@shared/types";
 import { chipLabel, chipStyle } from "../chips";
 
 const $ = (id: string): HTMLElement => document.getElementById(id)!;
@@ -67,6 +67,7 @@ export class Hud {
   private lobbySig = "";
   private overSig = "";
   private startSecs = -1;
+  private betsSecs = -1;
 
   constructor(private send: (i: Intent) => void) {
     for (const id of ["cigarTol", "beerTol"])
@@ -89,6 +90,9 @@ export class Hud {
     // leader-only intents: the sim ignores them from anyone else.
     // starting the game has no button — the leader walks to the door (E)
     $("lobbyClearBtn").addEventListener("click", () => this.send({ type: "clearLitter" }));
+    // dev bots: leader-only like the janitor button (the sim enforces it)
+    $("botAddBtn").addEventListener("click", () => this.addBot());
+    $("botClearBtn").addEventListener("click", () => this.send({ type: "clearBots" }));
     $("retryBtn").addEventListener("click", () => this.send({ type: "restart" }));
 
     $("dealBtn").addEventListener("click", () => {
@@ -133,6 +137,13 @@ export class Hud {
       if (e.key === "Shift") $("chipRack").classList.remove("shifted");
     });
     addEventListener("blur", () => $("chipRack").classList.remove("shifted"));
+  }
+
+  /* seat a bot at the lobby's selected difficulty — the button and the
+     waiting room's B key both land here */
+  addBot(): void {
+    const difficulty = ($("botDiff") as HTMLSelectElement).value as BotDifficulty;
+    this.send({ type: "addBot", difficulty });
   }
 
   /* keys stay dead while a full-screen UI owns the keyboard (title, menu,
@@ -250,6 +261,8 @@ export class Hud {
     $("banner").className = "";
     $("startBanner").classList.remove("show");
     this.startSecs = -1;
+    $("betsBanner").classList.remove("show");
+    this.betsSecs = -1;
     $("flingHint").classList.remove("show");
     document.body.classList.remove("panic");
     document.body.classList.remove("lobby-room");
@@ -293,6 +306,25 @@ export class Hud {
       }
     } else this.startSecs = -1;
 
+    // betting countdown: the sim opens a fresh window the moment the last
+    // hand settles out (and re-arms it while nobody antes), so this banner IS
+    // the "next round starts in" clock — shown until my bet is committed
+    const betsOpen =
+      snap.phase === "betting" && snap.bettingEndsIn !== null &&
+      me.alive && !me.waiting && !me.committed && !me.sittingOut;
+    $("betsBanner").classList.toggle("show", betsOpen);
+    if (betsOpen) {
+      const left = snap.bettingEndsIn!;
+      const frac = Math.max(0, Math.min(1, left / (BETTING_WINDOW_MS / 1000)));
+      ($("betsFill") as HTMLElement).style.width = `${frac * 100}%`;
+      $("betsBanner").classList.toggle("urgent", left <= 3);
+      const secs = Math.max(1, Math.ceil(left));
+      if (secs !== this.betsSecs) {
+        this.betsSecs = secs;
+        $("betsCount").textContent = String(secs);
+      }
+    } else this.betsSecs = -1;
+
     // meters
     this.meter($("cigarFill"), me.cigarMeter);
     this.meter($("beerFill"), me.beerMeter);
@@ -324,7 +356,15 @@ export class Hud {
     ($("buyBeer5") as HTMLButtonElement).disabled = benched || me.money < snap.beerPrice * 5;
 
     this.renderBetting();
-    $("flingHint").classList.toggle("show", me.held !== null);
+    const fh = $("flingHint");
+    fh.classList.toggle("show", me.held !== null);
+    if (me.held)
+      // a fresh machine freebie invites the ritual; anything else is litter
+      fh.textContent = me.held.fresh
+        ? me.held.kind === "beer"
+          ? "HOLD B — DRINK IT · F — FLING IT"
+          : "HOLD C — SMOKE IT · F — FLING IT"
+        : "PRESS F TO FLING THE EMPTY — OR DRAG & RELEASE TO AIM IT";
 
     for (const ev of snap.events) {
       if (ev.t === "result" && ev.playerId === this.myId) {
@@ -349,7 +389,11 @@ export class Hud {
         // sound, and bubble); the banner belongs to the sniper
         if (ev.victimId === this.myId) this.redFlash();
         else if (ev.flingerId === this.myId)
-          this.banner("DIRECT HIT  +" + ev.points + " PTS", "win");
+          // lobby hits pay nothing — the bragging banner still fires
+          this.banner(
+            ev.points > 0 ? "DIRECT HIT  +" + ev.points + " PTS" : "DIRECT HIT",
+            "win"
+          );
       }
       else if (ev.t === "eliminated" && ev.playerId !== this.myId) {
         const who = snap.players.find((p) => p.id === ev.playerId);
@@ -500,6 +544,20 @@ export class Hud {
     );
   }
 
+  /* the vice keys' refusals, said out loud */
+  handsFull(): void {
+    this.banner("HANDS FULL — F FLINGS THE EMPTY", "lose");
+  }
+  machineFirst(): void {
+    this.banner("EMPTY-HANDED — GRAB ONE FROM A MACHINE (E)", "lose");
+  }
+  outOfStock(kind: "cigar" | "beer"): void {
+    this.banner(
+      kind === "cigar" ? "OUT OF CIGARS — BUY MORE FROM THE SHOP" : "OUT OF BEER — BUY MORE FROM THE SHOP",
+      "lose"
+    );
+  }
+
   private banner(text: string, kind: string): void {
     const b = $("banner");
     b.textContent = text;
@@ -510,7 +568,9 @@ export class Hud {
 
   private renderLobby(snap: Snapshot): void {
     const amLeader = snap.leaderId === this.myId;
-    const hasLitter = snap.debris.length > 0;
+    // only what the PLAYERS spawned counts — the pre-strewn dump and the
+    // toys aren't the janitor's to take, so they can't light the button
+    const hasLitter = snap.debris.some((d) => !d.seeded);
     const counting = snap.startsIn !== null;
     const sig =
       snap.players.map((p) => p.id + ":" + p.name).join() +
@@ -524,7 +584,7 @@ export class Hud {
           `<div class="lobby-row${p.id === this.myId ? " you" : ""}">
              <span class="who">${esc(p.name)}${p.id === this.myId ? " (you)" : ""}</span>
              <span class="tag${p.id === snap.leaderId ? " leader" : ""}">${
-               p.id === snap.leaderId ? "★ LEADER" : "AT THE TABLE"
+               p.id === snap.leaderId ? "★ LEADER" : p.bot ? "BOT" : "AT THE TABLE"
              }</span>
            </div>`
       )
@@ -534,6 +594,10 @@ export class Hud {
     const clearBtn = $("lobbyClearBtn") as HTMLButtonElement;
     clearBtn.style.display = amLeader ? "" : "none";
     clearBtn.disabled = !hasLitter;
+    // dev bots: leader-only row; ADD greys out when the stools run out
+    $("botRow").style.display = amLeader ? "" : "none";
+    ($("botAddBtn") as HTMLButtonElement).disabled = snap.players.length >= SEAT_COUNT;
+    ($("botClearBtn") as HTMLButtonElement).disabled = !snap.players.some((p) => p.bot);
     $("lobbyHint").textContent = counting
       ? "Last call. Finish your business — the table seats you when the count hits zero."
       : amLeader
@@ -591,7 +655,7 @@ export class Hud {
 
     $("overStats").innerHTML =
       `Peak money <b>${fmtMoney(me.stats.peakMoney)}</b> · Final <b>${fmtMoney(me.money)}</b> · ` +
-      `Litter on the floor <b>${snap.debris.length}</b> · Survived <b>${fmtTime(snap.elapsed)}</b>`;
+      `Litter flung <b>${me.stats.litters}</b> · Survived <b>${fmtTime(snap.elapsed)}</b>`;
 
     const amLeader = snap.leaderId === this.myId;
     ($("retryBtn") as HTMLButtonElement).disabled = !amLeader;
