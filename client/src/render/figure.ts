@@ -167,13 +167,17 @@ function buildAccessory(kind: number): { mesh: THREE.Object3D; onHead: boolean }
       return { mesh: g, onHead: true };
     }
     case ACC_MUSTACHE: {
-      const m = new THREE.Mesh(
-        new THREE.CapsuleGeometry(0.013, 0.045, 3, 8),
-        new THREE.MeshStandardMaterial({ color: 0x241708, roughness: 0.9 })
-      );
-      m.rotation.z = Math.PI / 2;
-      m.position.set(0, -0.03, 0.102);
-      return { mesh: m, onHead: true };
+      // a handlebar in two halves, drooping down-and-out from under the
+      // nose — the old single horizontal bar read as an open mouth
+      const g = new THREE.Group();
+      const mat = new THREE.MeshStandardMaterial({ color: 0x241708, roughness: 0.9 });
+      for (const s of [-1, 1]) {
+        const half = new THREE.Mesh(new THREE.CapsuleGeometry(0.011, 0.036, 3, 8), mat);
+        half.position.set(s * 0.026, -0.032, 0.104);
+        half.rotation.z = s * -1.94; // outer tip hangs lower than the center
+        g.add(half);
+      }
+      return { mesh: g, onHead: true };
     }
     case ACC_EAR_CIGAR: {
       const c = new THREE.Mesh(

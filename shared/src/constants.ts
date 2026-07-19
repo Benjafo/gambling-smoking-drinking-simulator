@@ -44,7 +44,7 @@ export const RITUAL_MS: Record<"cigar" | "beer", number> = { cigar: 2500, beer: 
 export const DEAL_STEP_MS = 600;
 export const DEALER_DRAW_MS = 850;
 export const RESULT_PAUSE_MS = 1500;
-export const BETTING_WINDOW_MS = 15000; // betting closes on stragglers; first ante refreshes it
+export const BETTING_WINDOW_MS = 10000; // the visible get-your-bets-in timer; re-arms while nobody antes
 export const GAME_START_COUNTDOWN_MS = 10000; // leader hit the door → banner counts down
 export const ACT_TIMEOUT_MS = 30000; // auto-stand an AFK player
 

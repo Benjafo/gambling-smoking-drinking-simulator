@@ -127,6 +127,16 @@
   <span class="sb-text">GAME STARTS IN <b id="startCount">10</b></span>
 </div>
 
+<!-- betting countdown: rolls from the moment the last hand ends until the
+     cards fly; the reminder to get bets in before the next round starts -->
+<div id="betsBanner" aria-live="polite">
+  <span class="nr-body">
+    <span class="sb-label">NEXT ROUND</span>
+    <span class="sb-text">GET YOUR BETS IN — <b id="betsCount">10</b></span>
+  </span>
+  <span class="nr-bar"><i id="betsFill"></i></span>
+</div>
+
 <!-- ============ TITLE SCREEN (attract mode over the live den) ============ -->
 <div id="titleScreen" class="screen active">
   <div class="marquee">JOINT<br>LIABILITY<small class="vices-title">SMOKE · DRINK · GO BROKE</small></div>

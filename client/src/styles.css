@@ -659,16 +659,46 @@ body.lobby-room #sidebar,body.lobby-room #actionDock{display:none}
   box-shadow:inset 0 0 0 2px var(--bulb),6px 6px 0 rgba(0,0,0,.5);
 }
 #startBanner.show{display:flex;animation:startPulse 1s steps(2) infinite}
-#startBanner .sb-label{
+#startBanner .sb-label,#betsBanner .sb-label{
   font-family:var(--tiny);font-size:12px;letter-spacing:.2em;
   color:var(--neon);text-shadow:2px 2px 0 var(--ink);
 }
-#startBanner .sb-text{
+#startBanner .sb-text,#betsBanner .sb-text{
   font-family:var(--px);font-weight:700;font-size:24px;letter-spacing:.03em;
   text-shadow:3px 3px 0 var(--ink);
 }
-#startBanner .sb-text b{font-size:30px;color:var(--paper)}
+#startBanner .sb-text b,#betsBanner .sb-text b{font-size:30px;color:var(--paper)}
 @keyframes startPulse{50%{box-shadow:inset 0 0 0 2px var(--bulb-deep),6px 6px 0 rgba(0,0,0,.5)}}
+
+/* betting countdown: same perch as the start banner, but the run is live so
+   it sits below the HUD's overlays; goes red-neon on the final seconds */
+#betsBanner{
+  position:fixed;left:50%;top:14px;transform:translateX(-50%);z-index:90;
+  display:none;flex-direction:column;align-items:stretch;gap:8px;padding:10px 24px;
+  pointer-events:none;white-space:nowrap;
+  color:var(--open);background:#0a1520;border:3px solid var(--ink);
+  box-shadow:inset 0 0 0 2px var(--open),6px 6px 0 rgba(0,0,0,.5);
+}
+#betsBanner.show{display:flex}
+#betsBanner .nr-body{display:flex;align-items:center;gap:16px;justify-content:center}
+#betsBanner .sb-label{color:var(--open);text-shadow:2px 2px 0 var(--ink)}
+#betsBanner .sb-text b{color:var(--paper)}
+#betsBanner .nr-bar{
+  display:block;height:6px;background:rgba(0,0,0,.45);
+  box-shadow:inset 0 0 0 1px var(--ink);
+}
+#betsBanner .nr-bar i{
+  display:block;height:100%;width:100%;background:var(--open);
+  transition:width .12s linear;
+}
+#betsBanner.urgent{
+  color:var(--neon);background:#230a07;
+  box-shadow:inset 0 0 0 2px var(--neon),6px 6px 0 rgba(0,0,0,.5);
+  animation:betsPulse .5s steps(2) infinite;
+}
+#betsBanner.urgent .sb-label{color:var(--neon)}
+#betsBanner.urgent .nr-bar i{background:var(--neon)}
+@keyframes betsPulse{50%{box-shadow:inset 0 0 0 2px var(--neon-deep),6px 6px 0 rgba(0,0,0,.5)}}
 
 #flingHint{
   position:absolute;left:50%;bottom:240px;transform:translateX(-50%);display:none;

@@ -132,7 +132,7 @@ let recaptureArmed = false;
 let recaptureTimer = 0;
 const disarmRecapture = () => {
   recaptureArmed = false;
-  clearTimeout(recaptureTimer);
+  clearInterval(recaptureTimer);
   document.body.classList.remove("look-pending");
   scene.setLookPending(false);
 };
@@ -151,8 +151,15 @@ const armRecapture = () => {
   document.body.classList.add("look-pending");
   scene.setLookPending(true);
   tryRecapture();
-  clearTimeout(recaptureTimer);
-  recaptureTimer = window.setTimeout(tryRecapture, 1400);
+  clearInterval(recaptureTimer);
+  // chase the earliest moment the browser will sell the lock back: the
+  // post-Esc cooldown lapses within ~1.3s and a menu click's activation
+  // stays spendable for ~5s — poll the boundary instead of guessing it
+  let tries = 0;
+  recaptureTimer = window.setInterval(() => {
+    if (!recaptureArmed || ++tries > 14) return clearInterval(recaptureTimer);
+    tryRecapture();
+  }, 350);
 };
 addEventListener(
   "pointerdown",

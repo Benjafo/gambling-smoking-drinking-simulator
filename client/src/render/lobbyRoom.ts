@@ -363,11 +363,29 @@ export class LobbyRoomView {
     const frameMat = new THREE.MeshStandardMaterial({ color: 0x0f0b06, roughness: 0.8 });
     // painted, not wood-grain: the only green surface in a room of plaster
     // and paneling, so the way out reads from anywhere
+    // the dark of the den behind the doorway, with a warm sliver of light
+    // leaking along the open edge — the crack says "there's a room through
+    // here", the sign above says which one
+    const voidPlane = new THREE.Mesh(
+      new THREE.PlaneGeometry(0.95, 2.1),
+      new THREE.MeshBasicMaterial({ color: 0x020402, side: THREE.DoubleSide })
+    );
+    voidPlane.position.set(doorX, 1.05, halfD - 0.01);
+    const leak = new THREE.Mesh(
+      new THREE.PlaneGeometry(0.11, 2.02),
+      new THREE.MeshBasicMaterial({ color: 0x8a5a20, side: THREE.DoubleSide })
+    );
+    leak.position.set(doorX - 0.42, 1.05, halfD - 0.015);
+    this.scene.add(voidPlane, leak);
+    // the door itself hangs on the right jamb and stands a touch ajar,
+    // swung OUT toward the den — knob-side gap facing the room
+    const doorGroup = new THREE.Group();
     const door = new THREE.Mesh(
       new THREE.BoxGeometry(0.95, 2.1, 0.06),
       new THREE.MeshStandardMaterial({ color: 0x356041, roughness: 0.5 })
     );
-    door.position.set(doorX, 1.05, halfD - 0.02);
+    door.position.set(-0.475, 1.05, 0);
+    doorGroup.add(door);
     // inset panels a shade darker, slightly proud — depth the flat slab lacked
     const panelMat = new THREE.MeshStandardMaterial({ color: 0x27452f, roughness: 0.6 });
     for (const [py, ph] of [
@@ -375,9 +393,22 @@ export class LobbyRoomView {
       [0.55, 0.8],
     ]) {
       const panel = new THREE.Mesh(new THREE.BoxGeometry(0.62, ph, 0.03), panelMat);
-      panel.position.set(doorX, py, halfD - 0.06);
-      this.scene.add(panel);
+      panel.position.set(-0.475, py, -0.04);
+      doorGroup.add(panel);
     }
+    const brassDoorMat = new THREE.MeshStandardMaterial({
+      color: 0xe8c469,
+      metalness: 0.8,
+      roughness: 0.3,
+    });
+    const knob = new THREE.Mesh(new THREE.SphereGeometry(0.035, 10, 8), brassDoorMat);
+    knob.position.set(-0.825, 1.02, -0.07);
+    const kick = new THREE.Mesh(new THREE.BoxGeometry(0.86, 0.2, 0.02), brassDoorMat);
+    kick.position.set(-0.475, 0.14, -0.04);
+    doorGroup.add(knob, kick);
+    doorGroup.position.set(doorX + 0.475, 0, halfD - 0.02); // hinge at the right jamb
+    doorGroup.rotation.y = 0.14; // cracked open, outward
+    this.scene.add(doorGroup);
     // a full frame, not just a lintel — jambs make it a doorway, not wallpaper
     const lintel = new THREE.Mesh(new THREE.BoxGeometry(1.19, 0.1, 0.12), frameMat);
     lintel.position.set(doorX, 2.15, halfD - 0.03);
@@ -386,16 +417,7 @@ export class LobbyRoomView {
     jambL.position.set(doorX - 0.535, 1.1, halfD - 0.03);
     const jambR = new THREE.Mesh(jambGeo, frameMat);
     jambR.position.set(doorX + 0.535, 1.1, halfD - 0.03);
-    const brassDoorMat = new THREE.MeshStandardMaterial({
-      color: 0xe8c469,
-      metalness: 0.8,
-      roughness: 0.3,
-    });
-    const knob = new THREE.Mesh(new THREE.SphereGeometry(0.035, 10, 8), brassDoorMat);
-    knob.position.set(doorX - 0.35, 1.02, halfD - 0.09);
-    const kick = new THREE.Mesh(new THREE.BoxGeometry(0.86, 0.2, 0.02), brassDoorMat);
-    kick.position.set(doorX, 0.14, halfD - 0.06);
-    this.scene.add(door, lintel, jambL, jambR, knob, kick);
+    this.scene.add(lintel, jambL, jambR);
 
     // glowing sign over the door
     const tableSign = new THREE.Mesh(
@@ -666,10 +688,12 @@ export class LobbyRoomView {
     );
     jukeArch.position.set(0, 1.15, 0.262);
     juke.add(jukeBody, jukeTop, jukePanel, jukeArch);
-    juke.position.set(-3.55, 0, 2.35);
-    juke.rotation.y = 0.6; // angled out of its corner
+    // backed snug into the -X/+Z corner, glowing panel facing the room on
+    // the diagonal — like something you could walk up and feed a quarter
+    juke.position.set(-3.72, 0, 2.73);
+    juke.rotation.y = Math.PI * 0.75;
     this.jukeLight = new THREE.PointLight(0xe9a63a, 2.5, 4, 2);
-    this.jukeLight.position.set(-3.1, 0.9, 1.9);
+    this.jukeLight.position.set(-3.3, 0.9, 2.3);
     this.scene.add(juke, this.jukeLight);
 
     /* cigar machine by the door — a dispenser, so it gets the fridge
