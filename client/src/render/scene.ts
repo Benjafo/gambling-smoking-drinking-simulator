@@ -52,6 +52,7 @@ import {
   impactSound,
   dealSound,
   denySound,
+  pickupSound,
   cashSound,
   pointsSound,
   whooshSound,
@@ -208,6 +209,12 @@ export class SceneView {
 
   private ritualGhost: THREE.Group | null = null;
   private ritualGhostKind: ViceKind | null = null;
+  /* which room's scene the ghost was added to — it must be removed from the
+     same one even if the run starts (and the room flips) mid-ritual */
+  private ritualGhostScene: THREE.Scene | null = null;
+  /* the ghost's screen-space pin — frame() re-applies it with the live
+     camera so the vice pans with the view instead of hanging in the world */
+  private ritualGhostNdc: { x: number; y: number; tilt: number } | null = null;
   /* the first-person zippo — rises to the ghost cigar's tip during the
      lighting ritual */
   private zippo: ZippoLighter;
@@ -1133,21 +1140,7 @@ export class SceneView {
         capture(e);
         return;
       }
-      const target = this.findDebrisAt(ndc);
-      if (target) {
-        if (this.held.hasHeld) {
-          // hands full: deny, and make the held item say so
-          this.held.flashDeny();
-          denySound();
-          return;
-        }
-        // one motion: the pickup intent flies while the drag starts locally
-        this.send({ type: "pickup", itemId: target.id });
-        this.held.beginFloorGrab(target.kind, target.pos);
-        this.beginVirtualCursor(e);
-        capture(e);
-        return;
-      }
+      // (litter pickup moved to the E key — a click on litter just looks)
       if (this.tableLocked && this.held.grabHeld()) {
         // locked, holding, crosshair on nothing: the click means the empty
         // in your hand — the wind-up starts from the center
@@ -1215,6 +1208,8 @@ export class SceneView {
         this.lookDirty = true; // everyone else gets to watch the head turn
         return;
       }
+      // plain hover: remember where the cursor is — the E key aims with it
+      this.lastPointer = { x: e.clientX, y: e.clientY };
       this.updateHover(this.ndc(e));
     });
     const up = () => {
@@ -1229,10 +1224,11 @@ export class SceneView {
     document.addEventListener("pointerlockchange", () => {
       if (this.mode === "table") this.syncTableLockUi();
     });
-    // F flings the held empty along the gaze — the keyboard path that works
-    // wherever the cursor doesn't (pointer lock has no cursor to aim with)
+    // F flings the held empty along the gaze; E grabs the aimed litter —
+    // the keyboard pair that works wherever the cursor doesn't (pointer
+    // lock has no cursor to click with)
     addEventListener("keydown", (e) => {
-      if (e.code !== "KeyF" || e.repeat) return;
+      if ((e.code !== "KeyF" && e.code !== "KeyE") || e.repeat) return;
       if ((e.target as HTMLElement)?.tagName === "INPUT") return;
       if (!this.latest) return;
       if (
@@ -1241,8 +1237,29 @@ export class SceneView {
         this.optionsScreenEl.classList.contains("active")
       )
         return;
-      const held = this.mode === "lobby" ? this.lobbyRoom.held : this.held;
-      held.quickFling();
+      if (e.code === "KeyF") {
+        const held = this.mode === "lobby" ? this.lobbyRoom.held : this.held;
+        held.quickFling();
+        return;
+      }
+      // E at the table: pick up what the crosshair (or cursor) is on.
+      // The waiting room fields its own E — machines, door, closet, litter.
+      if (this.mode !== "table") return;
+      const ndc = this.tableLocked
+        ? CENTER_NDC
+        : new THREE.Vector2(
+            (this.lastPointer.x / innerWidth) * 2 - 1,
+            -(this.lastPointer.y / innerHeight) * 2 + 1
+          );
+      const target = this.findDebrisAt(ndc);
+      if (!target) return;
+      if (this.held.hasHeld) {
+        this.held.flashDeny();
+        denySound();
+        return;
+      }
+      this.send({ type: "pickup", itemId: target.id });
+      pickupSound();
     });
   }
 
@@ -1400,13 +1417,23 @@ export class SceneView {
     return { x: ((v.x + 1) / 2) * innerWidth, y: ((1 - v.y) / 2) * innerHeight };
   }
 
-  /* ---------------- ritual ghost (driven by RitualControl) ---------------- */
+  /* the vice keys' hard no: pulse whichever room's held empty red, with
+     the buzz — hands stay full until the F key deals with it */
+  flashHeldDeny(): void {
+    (this.mode === "lobby" ? this.lobbyRoom.held : this.held).flashDeny();
+    denySound();
+  }
+
+  /* ---------------- ritual ghost (driven by RitualControl) ----------------
+     the ghost haunts whichever room the player is in: the den at the table,
+     the waiting room pre-game (its machines stock fresh vices too) */
   showRitualGhost(kind: ViceKind): void {
     this.hideRitualGhost();
     this.ritualGhost = kind === "beer" ? makeBottleMesh() : makeCigarMesh(false);
     if (kind === "cigar") this.ritualGhost.scale.setScalar(1.35); // foreshortened, needs presence
     this.ritualGhostKind = kind;
-    this.scene.add(this.ritualGhost);
+    this.ritualGhostScene = this.mode === "lobby" ? this.lobbyRoom.scene : this.scene;
+    this.ritualGhostScene.add(this.ritualGhost);
   }
 
   /* place the ghost on the pointer ray. Orientation is first-person:
@@ -1416,11 +1443,13 @@ export class SceneView {
        so the bottle stays visible instead of foreshortening into a disc */
   moveRitualGhost(ndcX: number, ndcY: number, tilt: number): void {
     if (!this.ritualGhost) return;
-    this.ritualRay.setFromCamera(new THREE.Vector2(ndcX, ndcY), this.camera);
+    this.ritualGhostNdc = { x: ndcX, y: ndcY, tilt };
+    const cam = this.ritualGhostScene === this.lobbyRoom.scene ? this.lobbyRoom.camera : this.camera;
+    this.ritualRay.setFromCamera(new THREE.Vector2(ndcX, ndcY), cam);
     this.ritualGhost.position
       .copy(this.ritualRay.ray.origin)
       .addScaledVector(this.ritualRay.ray.direction, 0.9);
-    this.ritualGhost.quaternion.copy(this.camera.quaternion);
+    this.ritualGhost.quaternion.copy(cam.quaternion);
     if (this.ritualGhostKind === "cigar") {
       // ember end points away and up-right; enough screen-plane length
       // remains that it reads as a cigar, not a dot behind the lighter
@@ -1434,9 +1463,10 @@ export class SceneView {
   }
 
   /* the zippo comes up while the drag holds the cigar in the zone;
-     frame() keeps it parked under the ghost's ember */
+     frame() keeps it parked under the ghost's ember. It lives in the den
+     scene, so the waiting room lights up without it — ring and smoke only */
   showRitualLighter(): void {
-    this.zippo.show();
+    if (this.ritualGhostScene !== this.lobbyRoom.scene) this.zippo.show();
   }
 
   hideRitualLighter(): void {
@@ -1450,13 +1480,17 @@ export class SceneView {
   emitSmokeAtGhost(): void {
     if (!this.ritualGhost) return;
     // smoke rises off the ember — the far tip, not "above the hand"
-    this.smoke.emit(this.ritualGhost.localToWorld(new THREE.Vector3(0, 0.062, 0)));
+    const at = this.ritualGhost.localToWorld(new THREE.Vector3(0, 0.062, 0));
+    if (this.ritualGhostScene === this.lobbyRoom.scene) this.lobbyRoom.smoke.emit(at);
+    else this.smoke.emit(at);
   }
 
   hideRitualGhost(): void {
-    if (this.ritualGhost) this.scene.remove(this.ritualGhost);
+    if (this.ritualGhost) this.ritualGhostScene?.remove(this.ritualGhost);
     this.ritualGhost = null;
     this.ritualGhostKind = null;
+    this.ritualGhostScene = null;
+    this.ritualGhostNdc = null;
     this.zippo.hide();
   }
 
@@ -1594,6 +1628,12 @@ export class SceneView {
           pointsSound();
         }
       } else if (ev.t === "playerHit") {
+        if (this.mode === "lobby") {
+          // the waiting room owns the screen — yelp, sting, and shake in
+          // there (no points pop: pre-game hits pay nothing)
+          this.lobbyRoom.playerHit(ev, myId);
+          continue;
+        }
         const at = new THREE.Vector3(ev.pos.x, ev.pos.y, ev.pos.z);
         if (ev.victimId === myId) {
           // the impact point is at your own head — behind your view. Pull
@@ -1749,7 +1789,7 @@ export class SceneView {
           ? p.ritual.kind === "beer"
             ? makeBottleMesh()
             : makeCigarMesh(false) // lit: the ritual's cigar still burns
-          : makeHeldMesh(p.held!.kind);
+          : makeHeldMesh(p.held!.kind, p.held!.fresh);
         av.prop.position.copy(from);
         av.group.add(av.prop);
         av.propKey = key;
@@ -1844,6 +1884,13 @@ export class SceneView {
 
     if (this.mode === "lobby") {
       this.lobbyRoom.frame(dt, now);
+      // the ritual item rides the gaze in this room too (see the table
+      // branch below): re-pin before the render so panning mid-smoke keeps
+      // the vice centered in view
+      if (this.ritualGhost && this.ritualGhostNdc) {
+        const n = this.ritualGhostNdc;
+        this.moveRitualGhost(n.x, n.y, n.tilt);
+      }
       this.renderer.render(this.lobbyRoom.scene, this.lobbyRoom.camera);
       requestAnimationFrame(() => this.frame());
       return;
@@ -1975,6 +2022,13 @@ export class SceneView {
 
     this.debrisView.frame(dt);
     this.held.frame(dt);
+    // the ritual item rides the gaze: re-pin it to its screen spot every
+    // frame, so panning mid-smoke keeps the vice centered in view (the
+    // zippo below tracks the ember and follows for free)
+    if (this.ritualGhost && this.ritualGhostNdc) {
+      const n = this.ritualGhostNdc;
+      this.moveRitualGhost(n.x, n.y, n.tilt);
+    }
     this.zippo.frame(
       dt,
       now,

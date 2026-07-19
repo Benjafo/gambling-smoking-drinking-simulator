@@ -34,7 +34,11 @@ let session: Session | null = null;
 const send = (i: Intent) => session?.send(i);
 const scene = new SceneView($("stage"), send);
 const hud = new Hud(send);
-const ritual = new RitualControl(send, scene);
+const ritual = new RitualControl(send, scene, (why, kind) => {
+  if (why === "handsFull") hud.handsFull();
+  else if (why === "machineFirst") hud.machineFirst();
+  else hud.outOfStock(kind);
+});
 const menu = new MenuControl(startSession);
 const mirror = new MirrorControl();
 let latestSnap: Snapshot | null = null;
@@ -49,7 +53,10 @@ scene.lobbyRoom.onOpenCloset = () => {
   mirror.showForLobby(
     me.appearance,
     (a) => send({ type: "setAppearance", appearance: a }),
-    () => scene.capturePointer()
+    // arm the pending-look recapture rather than raw-requesting a lock: a
+    // BACK click's activation upgrades it instantly, and an Esc close gets
+    // the same hidden-cursor free look as an Esc-closed menu
+    () => armRecapture()
   );
 };
 
@@ -100,6 +107,8 @@ const toggleOptions = (on: boolean) => {
   if (on) disarmRecapture(); // an opening menu wants the cursor back
   $("optionsScreen").classList.toggle("active", on);
   $("optionsScreen").classList.toggle("from-menu", !session);
+  // a fresh open always starts at the top, not wherever it was left
+  if (on) $("optionsScreen").scrollTop = 0;
 };
 
 $("optionsBtn").addEventListener("click", () => toggleOptions(!optionsOpen()));
@@ -123,7 +132,7 @@ let recaptureArmed = false;
 let recaptureTimer = 0;
 const disarmRecapture = () => {
   recaptureArmed = false;
-  clearTimeout(recaptureTimer);
+  clearInterval(recaptureTimer);
   document.body.classList.remove("look-pending");
   scene.setLookPending(false);
 };
@@ -142,8 +151,15 @@ const armRecapture = () => {
   document.body.classList.add("look-pending");
   scene.setLookPending(true);
   tryRecapture();
-  clearTimeout(recaptureTimer);
-  recaptureTimer = window.setTimeout(tryRecapture, 1400);
+  clearInterval(recaptureTimer);
+  // chase the earliest moment the browser will sell the lock back: the
+  // post-Esc cooldown lapses within ~1.3s and a menu click's activation
+  // stays spendable for ~5s — poll the boundary instead of guessing it
+  let tries = 0;
+  recaptureTimer = window.setInterval(() => {
+    if (!recaptureArmed || ++tries > 14) return clearInterval(recaptureTimer);
+    tryRecapture();
+  }, 350);
 };
 addEventListener(
   "pointerdown",
@@ -172,6 +188,10 @@ document.addEventListener("pointerlockchange", () => {
   if (mirror.open()) return;
   // ...and so does the sim when the run ends (the leaderboard needs a cursor)
   if ($("overScreen").classList.contains("active")) return;
+  // mid-recapture, a lock can be granted off lingering click activation and
+  // torn straight back down by the same Esc press — that transient loss is
+  // collateral of the chase, never a menu request
+  if (recaptureArmed) return;
   if (session && !optionsOpen()) toggleOptions(true);
 });
 addEventListener("keydown", (e) => {
@@ -182,6 +202,9 @@ addEventListener("keydown", (e) => {
   }
   // an engine that DOES deliver the lock-exiting Esc mustn't double-toggle
   if (optionsOpen() && performance.now() - lastLockExit < 350) return;
+  // the mirror fields its own Esc (and stops propagation) — this guard is
+  // the backstop so a close can never double as an options toggle
+  if (mirror.open()) return;
   if (session) {
     const opening = !optionsOpen();
     toggleOptions(opening);
@@ -191,6 +214,11 @@ addEventListener("keydown", (e) => {
     }
   } else if (optionsOpen()) toggleOptions(false);
 });
+// an Esc that closed the mirror gets the same bounce guard as an Esc that
+// closed the menu: any transient lock loss it causes must stay quiet
+mirror.onEscClose = () => {
+  lastEscClose = performance.now();
+};
 
 /* audio: per-category volume (master / music / effects) + mute, persisted
    by effects.ts */

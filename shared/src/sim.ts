@@ -47,6 +47,8 @@ import {
   PLAYER_HIT_Y_MIN,
   PLAYER_HIT_Y_MAX,
   PLAYER_HIT_RADIUS,
+  LOBBY_HIT_Y_MIN,
+  LOBBY_HIT_Y_MAX,
   LOOK_YAW_LIMIT,
   LOOK_PITCH_MIN,
   LOOK_PITCH_MAX,
@@ -83,6 +85,7 @@ import {
   LOBBY_SCATTER,
   LOBBY_SPAWNS,
   LOBBY_TOYS,
+  LOBBY_TABLE_CLUTTER,
   stepLobbyMove,
 } from "./lobbyRoom";
 import {
@@ -162,11 +165,15 @@ interface Player {
   beerInv: number;
   /* gesture-driven: progress accrues only while the client reports the
      ritual engaged (cigar held still in the zone / beer tipped up). The sim
-     owns the clock, so the time cost can't be skipped. */
-  ritual: { kind: ViceKind; progressTicks: number; engaged: boolean } | null;
+     owns the clock, so the time cost can't be skipped. `fresh` marks a
+     ritual consuming a machine freebie out of the hand, not bought stock —
+     it scores nothing and its empty is never earned. */
+  ritual: { kind: ViceKind; progressTicks: number; engaged: boolean; fresh?: boolean } | null;
   /* earned: minted by finishing a ritual, not scavenged off the floor —
      only earned empties are eligible for the settle-time money drop.
-     pos mirrors the owner's drag (wind-up), clamped to arm's reach. */
+     fresh: an unopened machine freebie, the only thing consumeStart will
+     take from a hand. pos mirrors the owner's drag (wind-up), clamped to
+     arm's reach. */
   /* seeded rides along so provenance survives a pickup: what came with the
      room goes back to being permanent when it lands again */
   held: {
@@ -175,6 +182,7 @@ interface Player {
     sinceTick: number;
     earned: boolean;
     seeded: boolean;
+    fresh: boolean;
     pos: V3 | null;
   } | null;
   /* camera direction relative to facing the table center, client-reported */
@@ -314,6 +322,18 @@ export class Simulation {
           : lyingQuat(t.yaw)
       );
     }
+    // the table-top leavings: same seeded filth, furniture height
+    for (const c of LOBBY_TABLE_CLUTTER) {
+      const shape = DEBRIS_SHAPE[c.kind];
+      const halfLen = shape.halfHeight + shape.radius;
+      this.seedSettled(
+        c.kind,
+        { x: c.x, y: c.y + (c.upright ? halfLen : shape.radius + 0.002), z: c.z },
+        c.upright
+          ? { x: 0, y: Math.sin(c.roll / 2), z: 0, w: Math.cos(c.roll / 2) }
+          : lyingQuat(c.roll)
+      );
+    }
   }
 
   /* a debris entry born already at rest: fixed body, settled phase — the
@@ -420,6 +440,17 @@ export class Simulation {
         if (p.ritual) p.ritual.progressTicks = 0;
         break;
       case "consumeCancel":
+        // a spilled freebie goes back into the hand, not into the void
+        if (p.ritual?.fresh)
+          p.held = {
+            id: this.nextDebrisId++,
+            kind: p.ritual.kind,
+            sinceTick: this.tick,
+            earned: false,
+            seeded: false,
+            fresh: true,
+            pos: null,
+          };
         p.ritual = null;
         break;
       case "fling":
@@ -878,11 +909,13 @@ export class Simulation {
     else p.beerInv += qty;
   }
 
-  /* lobby-room toy: pull a free bottle/cigar from the wall dispenser you're
-     standing at. No money, no inventory, and never `earned` — pre-game
-     littering pays no points and drops no cash, so the waiting room can't
-     farm the run's scoring. Hands-empty doubles as the spam limiter: you
-     must fling one before you can pull the next. */
+  /* lobby-room perk: pull a free FRESH bottle/cigar from the machine you're
+     standing at — it lands in the hand, visibly unopened, ready for the
+     same C/B ritual the table runs (the drained empty stays in hand after;
+     fling it). Free but worthless to the run: freebie rituals score
+     nothing and mint unearned empties, so the waiting room can't farm
+     points. Hands-empty is the spam limiter: deal with what you're holding
+     first. */
   private dispense(p: Player, kind: ViceKind): void {
     if (this.phase !== "lobby" || !p.alive || p.ritual || p.held) return;
     const d = LOBBY_DISPENSERS.find((s) => s.kind === kind);
@@ -893,6 +926,7 @@ export class Simulation {
       sinceTick: this.tick,
       earned: false,
       seeded: false,
+      fresh: true,
       pos: null,
     };
   }
@@ -907,9 +941,19 @@ export class Simulation {
   }
 
   private consumeStart(p: Player, kind: ViceKind): void {
-    // hands full blocks the next vice: the empty never drops itself — you
-    // fling it or you stay thirsty. Litter is the player's problem.
-    if (!p.alive || p.ritual || p.held) return;
+    if (!p.alive || p.ritual) return;
+    if (p.held) {
+      // a machine freebie in the hand is the one holdable that's smokable —
+      // wherever it was carried. Anything else blocks the next vice: the
+      // empty never drops itself — you fling it or you stay thirsty.
+      if (!p.held.fresh || p.held.kind !== kind) return;
+      p.held = null; // the ritual takes it; cancel or completion hands one back
+      p.ritual = { kind, progressTicks: 0, engaged: false, fresh: true };
+      return;
+    }
+    // empty-handed in the waiting room: nothing to light — the machines
+    // stock the lobby, the pocket inventory is table stock
+    if (this.phase === "lobby") return;
     if (kind === "cigar" && p.cigarInv < 1) return;
     if (kind === "beer" && p.beerInv < 1) return;
     p.ritual = { kind, progressTicks: 0, engaged: false };
@@ -929,29 +973,39 @@ export class Simulation {
 
   private completeRitual(p: Player): void {
     const kind = p.ritual!.kind;
+    const fresh = !!p.ritual!.fresh; // a machine freebie, not bought stock
     p.ritual = null;
     if (kind === "cigar") {
-      if (p.cigarInv < 1) return;
-      p.cigarInv--;
+      if (!fresh) {
+        if (p.cigarInv < 1) return;
+        p.cigarInv--;
+      }
       p.stats.cigarsSmoked++;
       p.cigarMeter = Math.min(METER_MAX, p.cigarMeter + this.viceFill(p.cigarTol));
       p.cigarTol = Math.min(TOLERANCE_MAX, p.cigarTol + TOLERANCE_PER_USE);
     } else {
-      if (p.beerInv < 1) return;
-      p.beerInv--;
+      if (!fresh) {
+        if (p.beerInv < 1) return;
+        p.beerInv--;
+      }
       p.stats.beersDrunk++;
       p.beerMeter = Math.min(METER_MAX, p.beerMeter + this.viceFill(p.beerTol));
       p.beerTol = Math.min(TOLERANCE_MAX, p.beerTol + TOLERANCE_PER_USE);
     }
-    p.score += SCORE_VICE;
-    this.events.push({ t: "score", playerId: p.id, points: SCORE_VICE });
+    // freebies are pure flavor: no points, and the empty is never `earned` —
+    // held through the door or flung later, it can't pay out
+    if (!fresh) {
+      p.score += SCORE_VICE;
+      this.events.push({ t: "score", playerId: p.id, points: SCORE_VICE });
+    }
     // hands are guaranteed empty here: consumeStart refuses while holding
     p.held = {
       id: this.nextDebrisId++,
       kind,
       sinceTick: this.tick,
-      earned: true,
+      earned: !fresh,
       seeded: false,
+      fresh: false,
       pos: null,
     };
   }
@@ -1104,6 +1158,7 @@ export class Simulation {
       sinceTick: this.tick,
       earned: false,
       seeded: d.seeded,
+      fresh: false,
       pos: null,
     };
   }
@@ -1140,8 +1195,16 @@ export class Simulation {
         // the waiting room: integrate everyone's held walk input, and keep
         // the physics running — pre-game litter flies for real. Everyone
         // steps every tick: gravity doesn't wait for key input.
-        for (const p of this.players.values())
+        for (const p of this.players.values()) {
           stepLobbyMove(p, p.moveDir.x, p.moveDir.z, TICK_DT, p.moveRun);
+          // pre-game vices are real too: the ritual clock runs here, while
+          // meters, deaths, and the win check stay parked until the run
+          if (p.ritual?.engaged) {
+            p.ritual.progressTicks++;
+            if (p.ritual.progressTicks >= msTicks(RITUAL_MS[p.ritual.kind]))
+              this.completeRitual(p);
+          }
+        }
         this.stepPhysics();
         return;
       }
@@ -1417,8 +1480,15 @@ export class Simulation {
         this.removeDebris(d);
         continue;
       }
-      // players only have hit capsules at their seats — lobby throws whiff
-      if (!d.touched && !d.hitPlayer && d.owner && d.room === "den") this.checkPlayerHit(d);
+      // hit capsules live at the seats during the run and on the walkers
+      // pre-game (lobby debris left flying when the run starts hits no one)
+      if (
+        !d.touched &&
+        !d.hitPlayer &&
+        d.owner &&
+        (d.room === "den" || this.phase === "lobby")
+      )
+        this.checkPlayerHit(d);
       // settle by policy, not just isSleeping(): tiny capsules never cross
       // Rapier's sleep threshold (contact-solver jitter keeps ~1 rad/s of
       // imperceptible spin alive forever)
@@ -1437,31 +1507,39 @@ export class Simulation {
   }
 
   /* a flung empty that beans another player before touching anything pays
-     the flinger a bonus. Manual point-vs-capsule math — players have no
-     Rapier colliders, and plain arithmetic keeps the sim deterministic. */
+     the flinger a bonus — during the run. Pre-game lobby hits sting (the
+     event fires, the victim yelps) but pay nothing, like all lobby antics.
+     Manual point-vs-capsule math — players have no Rapier colliders, and
+     plain arithmetic keeps the sim deterministic. */
   private checkPlayerHit(d: Debris): void {
     const flinger = this.players.get(d.owner!);
     if (!flinger || !flinger.alive) return;
+    const lobby = d.room === "lobby";
     const r2 = PLAYER_HIT_RADIUS * PLAYER_HIT_RADIUS;
     const victims = [...this.players.values()]
       .filter((q) => q.id !== d.owner)
       .sort((a, b) => a.seat - b.seat); // deterministic pick order
     for (const q of victims) {
-      const base = seatPosition(q.seat);
-      const cy = Math.max(PLAYER_HIT_Y_MIN, Math.min(PLAYER_HIT_Y_MAX, d.pos.y));
+      const base = lobby ? q.pos : seatPosition(q.seat);
+      const yMin = lobby ? base.y + LOBBY_HIT_Y_MIN : PLAYER_HIT_Y_MIN;
+      const yMax = lobby ? base.y + LOBBY_HIT_Y_MAX : PLAYER_HIT_Y_MAX;
+      const cy = Math.max(yMin, Math.min(yMax, d.pos.y));
       const dx = d.pos.x - base.x;
       const dy = d.pos.y - cy;
       const dz = d.pos.z - base.z;
       if (dx * dx + dy * dy + dz * dz > r2) continue;
       d.hitPlayer = true;
-      flinger.score += SCORE_PLAYER_HIT;
-      flinger.stats.directHits++;
+      const points = lobby ? 0 : SCORE_PLAYER_HIT;
+      if (!lobby) {
+        flinger.score += SCORE_PLAYER_HIT;
+        flinger.stats.directHits++;
+      }
       this.events.push({
         t: "playerHit",
         flingerId: flinger.id,
         victimId: q.id,
         pos: { ...d.pos },
-        points: SCORE_PLAYER_HIT,
+        points,
       });
       // players have no collider, so the empty would sail through the
       // victim's chest — knock it back off them instead
@@ -1534,7 +1612,12 @@ export class Simulation {
           }
         : null,
       held: p.held
-        ? { id: p.held.id, kind: p.held.kind, pos: p.held.pos ? { ...p.held.pos } : null }
+        ? {
+            id: p.held.id,
+            kind: p.held.kind,
+            fresh: p.held.fresh,
+            pos: p.held.pos ? { ...p.held.pos } : null,
+          }
         : null,
       look: {
         yaw: Math.round(p.lookYaw * 100) / 100,
@@ -1561,6 +1644,7 @@ export class Simulation {
       kind: d.kind,
       phase: d.phase,
       room: d.room,
+      seeded: d.seeded,
       pos: d.pos,
       rot: d.rot,
     }));

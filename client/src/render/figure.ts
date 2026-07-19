@@ -121,10 +121,11 @@ function buildHat(style: number, mat: THREE.MeshStandardMaterial): THREE.Group {
     }
     default: {
       // fedora: wide brim snapped down at the front, squat crown that fills
-      // out over the skull, grosgrain band — the house style
+      // out over the skull, grosgrain band — the house style. The forward
+      // tip lives on the WHOLE hat (not just the brim) so brim, band, and
+      // crown stay flush — a brim-only tilt opened a gap at the front.
       const brim = add(new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.16, 0.012, 20), mat));
       brim.position.y = 0.072;
-      brim.rotation.x = 0.1; // front dipped, back kicked up
       const crown = add(new THREE.Mesh(new THREE.CylinderGeometry(0.088, 0.106, 0.092, 16), mat));
       crown.position.y = 0.122;
       // pinched top: a barely-domed cap, narrower than the crown walls —
@@ -134,6 +135,7 @@ function buildHat(style: number, mat: THREE.MeshStandardMaterial): THREE.Group {
       pinch.position.y = 0.165;
       const band = add(new THREE.Mesh(new THREE.CylinderGeometry(0.108, 0.11, 0.03, 16), darkBand()));
       band.position.y = 0.093;
+      hat.rotation.x = 0.1; // front dipped, back kicked up
     }
   }
   hat.position.y = 0.01;
@@ -149,27 +151,33 @@ function buildAccessory(kind: number): { mesh: THREE.Object3D; onHead: boolean }
       const g = new THREE.Group();
       const mat = new THREE.MeshStandardMaterial({
         color: 0x0b0b0e,
-        roughness: 0.25,
-        metalness: 0.3,
+        roughness: 0.35,
+        metalness: 0.2,
       });
+      // deep enough to fully bury the glossy eye spheres (front at z .114) —
+      // a thin lens let them poke through and catch red neon glints
       for (const s of [-1, 1]) {
-        const lens = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.036, 0.012), mat);
-        lens.position.set(s * 0.042, 0.015, 0.104);
+        const lens = new THREE.Mesh(new THREE.BoxGeometry(0.056, 0.042, 0.02), mat);
+        lens.position.set(s * 0.042, 0.015, 0.106);
         g.add(lens);
       }
       const bridge = new THREE.Mesh(new THREE.BoxGeometry(0.032, 0.008, 0.01), mat);
-      bridge.position.set(0, 0.02, 0.104);
+      bridge.position.set(0, 0.02, 0.106);
       g.add(bridge);
       return { mesh: g, onHead: true };
     }
     case ACC_MUSTACHE: {
-      const m = new THREE.Mesh(
-        new THREE.CapsuleGeometry(0.013, 0.045, 3, 8),
-        new THREE.MeshStandardMaterial({ color: 0x241708, roughness: 0.9 })
-      );
-      m.rotation.z = Math.PI / 2;
-      m.position.set(0, -0.03, 0.102);
-      return { mesh: m, onHead: true };
+      // a handlebar in two halves, drooping down-and-out from under the
+      // nose — the old single horizontal bar read as an open mouth
+      const g = new THREE.Group();
+      const mat = new THREE.MeshStandardMaterial({ color: 0x241708, roughness: 0.9 });
+      for (const s of [-1, 1]) {
+        const half = new THREE.Mesh(new THREE.CapsuleGeometry(0.011, 0.036, 3, 8), mat);
+        half.position.set(s * 0.026, -0.032, 0.104);
+        half.rotation.z = s * -1.94; // outer tip hangs lower than the center
+        g.add(half);
+      }
+      return { mesh: g, onHead: true };
     }
     case ACC_EAR_CIGAR: {
       const c = new THREE.Mesh(
@@ -181,13 +189,28 @@ function buildAccessory(kind: number): { mesh: THREE.Object3D; onHead: boolean }
       return { mesh: c, onHead: true };
     }
     case ACC_CHAIN: {
+      // a flat torus can't lie on a curved chest — it either floats or
+      // buries. This is a real drape: a closed tube over the shoulders and
+      // around the nape, hanging in a V down the shirt, every control
+      // point sitting just proud of the (slumped) body capsule's surface.
+      const loop = new THREE.CatmullRomCurve3(
+        [
+          [0, 0.975, 0.172],
+          [0.062, 1.05, 0.152],
+          [0.087, 1.155, 0.056],
+          [0.057, 1.185, -0.066],
+          [0, 1.19, -0.093],
+          [-0.057, 1.185, -0.066],
+          [-0.087, 1.155, 0.056],
+          [-0.062, 1.05, 0.152],
+        ].map(([x, y, z]) => new THREE.Vector3(x, y, z)),
+        true,
+        "centripetal"
+      );
       const chain = new THREE.Mesh(
-        new THREE.TorusGeometry(0.1, 0.012, 8, 22),
+        new THREE.TubeGeometry(loop, 40, 0.011, 8, true),
         new THREE.MeshStandardMaterial({ color: 0xc9a227, roughness: 0.3, metalness: 0.75 })
       );
-      // draped against the slumped chest, pivoting from the neck
-      chain.position.set(0, 1.12, 0.1);
-      chain.rotation.x = 1.12;
       return { mesh: chain, onHead: false };
     }
     default:
