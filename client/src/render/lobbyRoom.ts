@@ -28,7 +28,14 @@ import {
   stepLobbyMove,
   type LobbyMotion,
 } from "@shared/lobbyRoom";
-import type { Intent, PlayerSnap, PropKind, Snapshot, ViceKind } from "@shared/types";
+import type {
+  BotDifficulty,
+  Intent,
+  PlayerSnap,
+  PropKind,
+  Snapshot,
+  ViceKind,
+} from "@shared/types";
 import { carpetTexture, leatherTexture, woodTexture } from "./textures";
 import { DebrisView } from "./debris";
 import { HeldItemControl, makeBottleMesh, makeCigarMesh } from "./held";
@@ -189,6 +196,17 @@ export class LobbyRoomView {
         if (this.latest?.leaderId === this.myId) this.send({ type: "clearLitter" });
         return;
       }
+      if (e.code === "KeyB") {
+        // dev bots — leader-only; difficulty rides the lobby panel's select
+        if (this.latest?.leaderId === this.myId) {
+          const sel = document.getElementById("botDiff") as HTMLSelectElement | null;
+          this.send({
+            type: "addBot",
+            difficulty: (sel?.value ?? "medium") as BotDifficulty,
+          });
+        }
+        return;
+      }
       if (e.code === "Space") {
         this.captureLook();
         this.tryJump();
@@ -211,15 +229,28 @@ export class LobbyRoomView {
   }
 
   /* ---------------- pointer lock (mouse-look) ---------------- */
+  /* Esc-close free look: Esc carries no activation the browser will sell a
+     lock for, so main.ts hides the cursor and flips this on instead — every
+     locked code path (raw-delta look, centered crosshair, virtual cursor)
+     treats it as the real thing until the next gesture buys the lock back */
+  private lookPending = false;
+  setLookPending(on: boolean): void {
+    this.lookPending = on;
+    this.syncLockUi();
+  }
   private get locked(): boolean {
-    return !!this.domElement && document.pointerLockElement === this.domElement;
+    return (
+      !!this.domElement &&
+      (this.lookPending || document.pointerLockElement === this.domElement)
+    );
   }
 
   /* called on lobby entry (riding the join click's user activation), on
      any canvas click, and by SceneView when the options RESUME button
      closes over the lobby */
   captureLook(): void {
-    if (!this.active || this.locked || !this.domElement) return;
+    if (!this.active || !this.domElement) return;
+    if (document.pointerLockElement === this.domElement) return;
     try {
       // returns a promise in most engines, undefined in older ones; a
       // refusal (headless, iframe policy, Esc cooldown) just leaves the
@@ -647,7 +678,8 @@ export class LobbyRoomView {
     this.jukeLight.position.set(-3.1, 0.9, 1.9);
     this.scene.add(juke, this.jukeLight);
 
-    /* cigarette machine (obstacles[6]) by the door */
+    /* cigar machine by the door — a dispenser, so it gets the fridge
+       treatment: named signage plus its own glow */
     const cig = new THREE.Group();
     const cigBody = new THREE.Mesh(
       new THREE.BoxGeometry(0.72, 1.5, 0.42),
@@ -666,7 +698,7 @@ export class LobbyRoomView {
           ctx.shadowColor = "#e9a63a";
           ctx.shadowBlur = 14;
           ctx.fillStyle = "#f2cf8b";
-          ctx.fillText("SMOKES", 128, 62);
+          ctx.fillText("CIGARS", 128, 62);
           ctx.font = "26px 'VT323',monospace";
           ctx.shadowBlur = 0;
           ctx.fillStyle = "#a39a8b";
@@ -683,9 +715,12 @@ export class LobbyRoomView {
       cig.add(pull);
     }
     cig.add(cigBody, cigFace);
-    cig.position.set(3.6, 0, 2.3);
-    cig.rotation.y = -0.35;
+    cig.position.set(3.85, 0, 2.3);
+    cig.rotation.y = -Math.PI / 2; // back to the +X wall, face into the room
     this.scene.add(cig);
+    const cigGlow = new THREE.PointLight(0xe9a63a, 1.2, 2.6, 2);
+    cigGlow.position.set(3.3, 1.1, 2.3);
+    this.scene.add(cigGlow);
 
     /* beer fridge (obstacles[9]) against the -X wall — the other dispenser */
     const fridge = new THREE.Group();

@@ -1248,15 +1248,29 @@ export class SceneView {
 
   /* ---------------- table free look (pointer lock) ----------------
      the exact machinery the waiting room uses, shared canvas and all */
+  private lookPending = false;
   private get tableLocked(): boolean {
-    return this.mode === "table" && document.pointerLockElement === this.renderer.domElement;
+    return (
+      this.mode === "table" &&
+      (this.lookPending || document.pointerLockElement === this.renderer.domElement)
+    );
+  }
+
+  /* Esc-close free look, either room (see lobbyRoom.setLookPending): the
+     locked code paths run without the browser lock until a gesture that
+     can actually buy it comes along */
+  setLookPending(on: boolean): void {
+    this.lookPending = on;
+    this.lobbyRoom.setLookPending(on);
+    if (this.mode === "table") this.syncTableLockUi();
   }
 
   /* called on entering table mode (riding whatever click got us here) and
      on any canvas click. A refusal (headless, iframe policy, Esc cooldown)
      just leaves the drag fallback in charge. */
   private captureTableLook(): void {
-    if (this.mode !== "table" || this.tableLocked || !this.latest) return;
+    if (this.mode !== "table" || !this.latest) return;
+    if (document.pointerLockElement === this.renderer.domElement) return;
     if (
       this.titleScreenEl.classList.contains("active") ||
       this.menuScreenEl.classList.contains("active") ||
@@ -1338,12 +1352,6 @@ export class SceneView {
     } else {
       this.renderer.domElement.style.cursor = denied ? "not-allowed" : target ? "grab" : "";
     }
-  }
-
-  /* whether the waiting room owns the screen right now — main.ts uses it
-     to route pointer-lock hand-offs */
-  get inLobby(): boolean {
-    return this.mode === "lobby";
   }
 
   /* re-capture mouse-look from a UI click (the options RESUME button) —
