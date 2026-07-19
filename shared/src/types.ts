@@ -9,6 +9,9 @@ export type ViceKind = "cigar" | "beer";
 export type PropKind = ViceKind | "plunger" | "stick";
 export const isVice = (k: PropKind): k is ViceKind => k === "cigar" || k === "beer";
 export type RoomPhase = "lobby" | "betting" | "dealing" | "acting" | "dealer" | "settle" | "over";
+/* dev bot tiers — skill AND self-preservation. "autonomous" bots never touch
+   the vices and die when the opening meters run dry (see bots.ts). */
+export type BotDifficulty = "easy" | "medium" | "hard" | "autonomous";
 export type DebrisPhase = "flying" | "settled";
 /* which space a piece of litter lives in: the table den, or the waiting
    room (each renders as its own scene with its own local coordinates) */
@@ -67,6 +70,8 @@ export interface PlayerSnap {
   moveYaw: number;
   moving: boolean;
   alive: boolean;
+  /* sim-driven dev bot (see bots.ts) — tagged so a test table reads at a glance */
+  bot: boolean;
   /* joined mid-run: spectates until the next game starts */
   waiting: boolean;
   /* opted out of betting rounds: still at the table (meters run, vices and
@@ -150,6 +155,10 @@ export type Intent =
   /* leader-only, lobby-only: the janitor option — every empty in the den
      and the waiting room vanishes */
   | { type: "clearLitter" }
+  /* dev tooling, leader-only: seat a sim-driven bot (lobby only), or clear
+     them all out (any phase — the escape hatch when a test run drags) */
+  | { type: "addBot"; difficulty: BotDifficulty }
+  | { type: "clearBots" }
   | { type: "consumeStart"; kind: ViceKind }
   | { type: "ritualEngage"; on: boolean }
   | { type: "ritualReset" }

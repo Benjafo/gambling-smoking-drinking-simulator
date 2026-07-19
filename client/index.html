@@ -216,13 +216,25 @@
   <div id="lobbyList" class="lobby-list"></div>
   <p class="tagline" id="lobbyHint"></p>
   <button class="big-btn secondary" id="lobbyClearBtn" style="display:none">CLEAR THE LITTER (O)</button>
+  <!-- dev bots: leader-only test opponents (see shared/src/bots.ts) -->
+  <div class="bot-row" id="botRow" style="display:none">
+    <select id="botDiff" aria-label="Bot difficulty">
+      <option value="easy">EASY</option>
+      <option value="medium" selected>MEDIUM</option>
+      <option value="hard">HARD</option>
+      <option value="autonomous">AUTONOMOUS</option>
+    </select>
+    <button class="big-btn secondary" id="botAddBtn">ADD BOT (B)</button>
+    <button class="big-btn secondary" id="botClearBtn">CLEAR BOTS</button>
+  </div>
   <!-- the essentials only, worded like the options list — ESC has the rest -->
   <p class="lobby-controls">
     <span>WASD — WANDER · SHIFT — RUN</span>
     <span>SPACE — HOP</span>
     <span>E — INTERACT</span>
-    <span>C / B [HOLD] — SMOKE / DRINK</span>
-    <span>F — FLING THE EMPTY</span>
+    <span>F — FLING YOUR TRASH</span>
+    <span>O — CLEAR LITTER (LEADER)</span>
+    <span>B — ADD BOT (LEADER)</span>
     <span>ESC — MENU &amp; FULL CONTROLS</span>
   </p>
 </div>

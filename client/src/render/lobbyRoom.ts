@@ -28,7 +28,14 @@ import {
   stepLobbyMove,
   type LobbyMotion,
 } from "@shared/lobbyRoom";
-import type { Intent, PlayerSnap, PropKind, Snapshot, ViceKind } from "@shared/types";
+import type {
+  BotDifficulty,
+  Intent,
+  PlayerSnap,
+  PropKind,
+  Snapshot,
+  ViceKind,
+} from "@shared/types";
 import { carpetTexture, leatherTexture, woodTexture } from "./textures";
 import { DebrisView } from "./debris";
 import { HeldItemControl } from "./held";
@@ -195,6 +202,17 @@ export class LobbyRoomView {
         // the janitor key — leader-only, same intent as the lobby button.
         // (C used to be an alias; it's the cigar hold-key at the table now)
         if (this.latest?.leaderId === this.myId) this.send({ type: "clearLitter" });
+        return;
+      }
+      if (e.code === "KeyB") {
+        // dev bots — leader-only; difficulty rides the lobby panel's select
+        if (this.latest?.leaderId === this.myId) {
+          const sel = document.getElementById("botDiff") as HTMLSelectElement | null;
+          this.send({
+            type: "addBot",
+            difficulty: (sel?.value ?? "medium") as BotDifficulty,
+          });
+        }
         return;
       }
       if (e.code === "Space") {

@@ -3,6 +3,7 @@
    (and eventually remote clients) never mutate state directly. */
 import type RAPIER_NS from "@dimforge/rapier3d-compat";
 import { sanitizeAppearance, type Appearance } from "./appearance";
+import { BotBrain } from "./bots";
 import {
   buildShoe,
   handValue,
@@ -103,6 +104,7 @@ import {
 } from "./physics";
 import { isVice } from "./types";
 import type {
+  BotDifficulty,
   Intent,
   PlayerSnap,
   PlayerStats,
@@ -256,6 +258,10 @@ export class Simulation {
   /* participants when the run started: 2+ means last-alive wins */
   runPlayerCount = 0;
   players = new Map<string, Player>();
+  /* dev bots, keyed by player id — brains live beside the sim and act
+     through applyIntent like any remote client (see bots.ts) */
+  readonly bots = new Map<string, BotBrain>();
+  private nextBotNum = 1;
   seatTaken: (string | null)[] = new Array(SEAT_COUNT).fill(null);
   shoe: Card[] = [];
   dealerHand: Card[] = [];
@@ -421,6 +427,12 @@ export class Simulation {
       case "clearLitter":
         this.clearLitter(p);
         break;
+      case "addBot":
+        this.addBot(p, intent.difficulty);
+        break;
+      case "clearBots":
+        this.clearBots(p);
+        break;
       case "consumeStart":
         this.consumeStart(p, intent.kind);
         break;
@@ -555,12 +567,46 @@ export class Simulation {
     this.openBetting();
   }
 
+  /* dev bots: seat a sim-driven opponent. Leader-only and lobby-only —
+     mid-run joiners would only spectate, and a test table's roster should
+     be settled before the door. Seats are the natural cap. */
+  private addBot(p: Player, difficulty: BotDifficulty): void {
+    if (this.phase !== "lobby" || p.id !== this.leaderId) return;
+    const id = "bot" + this.nextBotNum;
+    const brain = new BotBrain(
+      id,
+      difficulty,
+      (this.rng.next() * 0xffffffff) >>> 0,
+      this.nextBotNum
+    );
+    this.join(id, brain.name, brain.appearance);
+    if (!this.players.has(id)) return; // no free stool
+    this.nextBotNum++;
+    this.bots.set(id, brain);
+  }
+
+  /* leader-only, any phase: clear every bot off the table. Mid-run this is
+     the escape hatch — removals run the same leave path as a rage-quit, so
+     turn order and the last-alive check take care of themselves. */
+  private clearBots(p: Player): void {
+    if (p.id !== this.leaderId) return;
+    for (const id of [...this.bots.keys()]) {
+      const bot = this.players.get(id);
+      if (bot) this.removePlayer(bot);
+    }
+  }
+
   private removePlayer(p: Player): void {
     if (p.held) this.autoDrop(p); // don't vanish a held bottle
     this.seatTaken[p.seat] = null;
     this.players.delete(p.id);
-    if (this.leaderId === p.id)
-      this.leaderId = this.players.keys().next().value ?? null;
+    this.bots.delete(p.id);
+    // leadership passes down the join order, but never to a bot while a
+    // human remains — a table nobody can start is a dead table
+    if (this.leaderId === p.id) {
+      const ids = [...this.players.keys()];
+      this.leaderId = ids.find((id) => !this.bots.has(id)) ?? ids[0] ?? null;
+    }
     if (this.turnPlayerId === p.id) this.advanceTurn();
     if (this.players.size === 0) {
       this.phase = "lobby";
@@ -1140,6 +1186,9 @@ export class Simulation {
   /* ---------------- tick ---------------- */
   step(): void {
     this.tick++;
+    // bots act first, through the same intent door as everyone else — and
+    // before the lobby branch below, so they loiter pre-game too
+    for (const brain of this.bots.values()) brain.step(this);
     if (this.phase === "lobby") {
       if (this.startAtTick !== null && this.tick >= this.startAtTick) {
         // countdown expired: seat everyone and fall through into the round
@@ -1585,6 +1634,7 @@ export class Simulation {
       moveYaw: Math.round(p.moveYaw * 100) / 100,
       moving: p.moveDir.x !== 0 || p.moveDir.z !== 0,
       alive: p.alive,
+      bot: this.bots.has(p.id),
       waiting: p.waiting,
       sittingOut: p.sittingOut,
       causeOfDeath: p.causeOfDeath,
