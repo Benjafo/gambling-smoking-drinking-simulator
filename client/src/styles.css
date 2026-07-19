@@ -279,6 +279,11 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--open);outline-o
 }
 .audio-row input[type=range]{flex:1;accent-color:var(--bulb);cursor:pointer;min-width:0}
 .audio-row .vol-val{flex:0 0 52px;text-align:right;color:var(--paper)}
+/* the bar is silenced: sliders still drag, but the grey and the strike
+   say the mixer isn't being listened to */
+.audio-row.muted .key{color:var(--smoke)}
+.audio-row.muted input[type=range]{accent-color:var(--smoke);filter:grayscale(1);opacity:.5}
+.audio-row.muted .vol-val{color:var(--smoke);text-decoration:line-through}
 /* opened from the title screen: no table to go back to or leave */
 #optionsScreen.from-menu #resumeBtn,#optionsScreen.from-menu #leaveBtn,
 #optionsScreen.from-menu #optionsLeaveHint{display:none}
@@ -650,6 +655,10 @@ body.lobby-room #sidebar,body.lobby-room #actionDock{display:none}
 }
 #dispenseHint.show{display:block;animation:hintPulse 1.4s steps(2) infinite}
 
+/* Esc-close free look: the browser won't re-lock without a gesture, so the
+   cursor hides by CSS while raw mouse deltas steer the camera (main.ts
+   armRecapture). !important outranks the inline grab/deny cursor styles. */
+body.look-pending, body.look-pending *{cursor:none !important}
 /* waiting-room mouse-look: a pixel crosshair while the pointer is captured */
 #crosshair{
   position:absolute;left:50%;top:50%;display:none;

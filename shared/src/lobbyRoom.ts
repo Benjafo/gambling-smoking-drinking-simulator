@@ -59,7 +59,7 @@ export const LOBBY_OBSTACLES: LobbyObstacle[] = [
   { x: -2.75, z: 1.85, r: 0.2, h: 0.63 }, // stool at table A, room side
   { x: 3.3, z: 1.25, r: 0.2, h: 0.63 }, // stool at table B
   { x: -3.55, z: 2.35, r: 0.62, h: 1.55 }, // jukebox in the far corner
-  { x: 3.6, z: 2.3, r: 0.5, h: 1.5 }, // cigarette machine by the door
+  { x: 3.85, z: 2.3, r: 0.5, h: 1.5 }, // cigar machine, flush to the +X wall by the door
   { x: -3.75, z: -2.7, r: 0.3, h: 0.3 }, // dead potted plant, corner
   { x: 0.62, z: -2.9, r: 0.22, h: 0.8 }, // standing ashtray by the couch
   { x: -3.75, z: 0.0, r: 0.45, h: 1.4 }, // beer fridge, -X wall (a dispenser)
@@ -69,7 +69,7 @@ export const LOBBY_OBSTACLES: LobbyObstacle[] = [
    and the dispense intent hands you a free throwable of its kind. Cigars
    come from the cigarette machine, beers from the fridge. */
 export const LOBBY_DISPENSERS: { kind: ViceKind; x: number; z: number }[] = [
-  { kind: "cigar", x: 3.6, z: 2.3 },
+  { kind: "cigar", x: 3.85, z: 2.3 },
   { kind: "beer", x: -3.75, z: 0.0 },
 ];
 export const DISPENSE_RADIUS = 1.35;

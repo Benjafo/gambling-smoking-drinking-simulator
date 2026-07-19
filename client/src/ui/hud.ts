@@ -591,7 +591,7 @@ export class Hud {
 
     $("overStats").innerHTML =
       `Peak money <b>${fmtMoney(me.stats.peakMoney)}</b> · Final <b>${fmtMoney(me.money)}</b> · ` +
-      `Litter on the floor <b>${snap.debris.length}</b> · Survived <b>${fmtTime(snap.elapsed)}</b>`;
+      `Litter flung <b>${me.stats.litters}</b> · Survived <b>${fmtTime(snap.elapsed)}</b>`;
 
     const amLeader = snap.leaderId === this.myId;
     ($("retryBtn") as HTMLButtonElement).disabled = !amLeader;
