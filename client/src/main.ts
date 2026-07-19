@@ -53,7 +53,10 @@ scene.lobbyRoom.onOpenCloset = () => {
   mirror.showForLobby(
     me.appearance,
     (a) => send({ type: "setAppearance", appearance: a }),
-    () => scene.capturePointer()
+    // arm the pending-look recapture rather than raw-requesting a lock: a
+    // BACK click's activation upgrades it instantly, and an Esc close gets
+    // the same hidden-cursor free look as an Esc-closed menu
+    () => armRecapture()
   );
 };
 
@@ -178,6 +181,10 @@ document.addEventListener("pointerlockchange", () => {
   if (mirror.open()) return;
   // ...and so does the sim when the run ends (the leaderboard needs a cursor)
   if ($("overScreen").classList.contains("active")) return;
+  // mid-recapture, a lock can be granted off lingering click activation and
+  // torn straight back down by the same Esc press — that transient loss is
+  // collateral of the chase, never a menu request
+  if (recaptureArmed) return;
   if (session && !optionsOpen()) toggleOptions(true);
 });
 addEventListener("keydown", (e) => {
@@ -200,6 +207,11 @@ addEventListener("keydown", (e) => {
     }
   } else if (optionsOpen()) toggleOptions(false);
 });
+// an Esc that closed the mirror gets the same bounce guard as an Esc that
+// closed the menu: any transient lock loss it causes must stay quiet
+mirror.onEscClose = () => {
+  lastEscClose = performance.now();
+};
 
 /* audio: per-category volume (master / music / effects) + mute, persisted
    by effects.ts */

@@ -238,6 +238,17 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--open);outline-o
 #mirrorStage:active{cursor:grabbing}
 #mirrorStage canvas{display:block}
 .mirror-panel{width:min(430px,88vw)}
+.mirror-actions{display:flex;gap:10px}
+.mirror-actions .menu-btn{flex:1}
+/* the randomize confirm: a small slab over the whole mirror screen */
+#mirrorConfirm{
+  position:absolute;inset:0;z-index:6;display:none;
+  align-items:center;justify-content:center;background:rgba(7,9,7,.72);
+}
+#mirrorConfirm.show{display:flex}
+#mirrorConfirm .confirm-panel{width:min(420px,90vw);text-align:center}
+#mirrorConfirm .confirm-panel p{color:var(--smoke);margin:10px 0 16px}
+#mirrorConfirm .menu-row{display:flex;gap:10px;justify-content:center}
 #mirrorRows{display:flex;flex-direction:column;gap:13px;text-align:left}
 .mirror-row{display:flex;flex-direction:column;gap:6px}
 .mirror-row.dim{opacity:.35;pointer-events:none}

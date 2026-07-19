@@ -269,6 +269,9 @@ export class Simulation {
   runStartTick = 0;
   /* lobby countdown: the tick the run begins, null when no start is queued */
   private startAtTick: number | null = null;
+  /* between-hands countdown: the tick the next betting round opens, set while
+     the result pause plays out and cleared the moment betting reopens */
+  private nextRoundAt: number | null = null;
 
   debris = new Map<number, Debris>();
   private colliderDebris = new Map<number, number>(); // collider handle → debris id

@@ -191,10 +191,23 @@
     <div class="menu-panel mirror-panel">
       <h3>GET YOURSELF TOGETHER</h3>
       <div id="mirrorRows"></div>
-      <button class="menu-btn" id="mirrorSpinBtn">SPIN: ON</button>
+      <div class="mirror-actions">
+        <button class="menu-btn" id="mirrorRandomBtn">RANDOMIZE</button>
+        <button class="menu-btn" id="mirrorSpinBtn">SPIN: ON</button>
+      </div>
     </div>
   </div>
   <p class="tagline">The mirror doesn't judge. It has seen worse.</p>
+  <div id="mirrorConfirm">
+    <div class="menu-panel confirm-panel">
+      <h3>SCRAMBLE THE LOOK?</h3>
+      <p>Your hand-picked changes get overwritten.</p>
+      <div class="menu-row">
+        <button class="menu-btn" id="mirrorRandomYes">DO IT</button>
+        <button class="menu-btn" id="mirrorRandomNo">KEEP MY LOOK</button>
+      </div>
+    </div>
+  </div>
 </div>
 
 <!-- ============ LOBBY (a panel over the 3D waiting room) ============ -->
@@ -203,16 +216,14 @@
   <div id="lobbyList" class="lobby-list"></div>
   <p class="tagline" id="lobbyHint"></p>
   <button class="big-btn secondary" id="lobbyClearBtn" style="display:none">CLEAR THE LITTER (O)</button>
+  <!-- the essentials only, worded like the options list — ESC has the rest -->
   <p class="lobby-controls">
-    <span>MOUSE — LOOK</span>
-    <span>WASD — WANDER</span>
-    <span>SHIFT [HOLD] - RUN</span>
+    <span>WASD — WANDER · SHIFT — RUN</span>
     <span>SPACE — HOP</span>
-    <span>E — INTERACT / GRAB LITTER</span>
-    <span>C / B [HOLD] — SMOKE / DRINK A FREEBIE</span>
-    <span>F — FLING YOUR TRASH</span>
-    <span>O — CLEAR LITTER (LEADER)</span>
-    <span>ESC — MENU</span>
+    <span>E — INTERACT</span>
+    <span>C / B [HOLD] — SMOKE / DRINK</span>
+    <span>F — FLING THE EMPTY</span>
+    <span>ESC — MENU &amp; FULL CONTROLS</span>
   </p>
 </div>
 
