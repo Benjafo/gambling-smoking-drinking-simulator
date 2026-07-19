@@ -56,7 +56,8 @@ export interface PlayerSnap {
   ritual: { kind: ViceKind; progress: number } | null;
   /* pos is set while the owner is dragging the empty (wind-up before a
      fling) — remote clients mirror it so the throw telegraphs */
-  held: { id: number; kind: PropKind; pos: V3 | null } | null;
+  /* fresh: an unopened machine freebie — drinkable/smokable via C/B */
+  held: { id: number; kind: PropKind; fresh: boolean; pos: V3 | null } | null;
   /* where this player's camera is pointed, relative to facing the table
      center — drives the avatar's head on everyone else's screen */
   look: { yaw: number; pitch: number };

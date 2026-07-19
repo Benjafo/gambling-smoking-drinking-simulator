@@ -106,7 +106,10 @@ assert(
 );
 standNear(-3.0, 0); // at the beer fridge
 sim.applyIntent(P1, { type: "dispense", kind: "beer" });
-assert(me().held?.kind === "beer", "fridge handed over a bottle");
+sim.applyIntent(P1, { type: "consumeStart", kind: "beer" });
+sim.applyIntent(P1, { type: "ritualEngage", on: true });
+for (let i = 0; i < TICK_RATE * 10 && me().held === null; i++) sim.step();
+assert(me().held?.kind === "beer", "fridge stocked a fresh one; drinking it left the empty");
 sim.applyIntent(P1, {
   type: "fling",
   itemId: me().held!.id,
@@ -115,7 +118,7 @@ sim.applyIntent(P1, {
   angVel: { x: 3, y: 1, z: 2 },
 });
 sim.step();
-assert(snap().debris.length === census + 1, "the dispensed bottle joined the floor");
+assert(snap().debris.length === census + 1, "the drained bottle joined the floor");
 sim.applyIntent(P1, { type: "clearLitter" });
 assert(
   snap().debris.length === census,

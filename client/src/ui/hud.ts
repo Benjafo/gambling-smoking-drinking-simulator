@@ -324,7 +324,15 @@ export class Hud {
     ($("buyBeer5") as HTMLButtonElement).disabled = benched || me.money < snap.beerPrice * 5;
 
     this.renderBetting();
-    $("flingHint").classList.toggle("show", me.held !== null);
+    const fh = $("flingHint");
+    fh.classList.toggle("show", me.held !== null);
+    if (me.held)
+      // a fresh machine freebie invites the ritual; anything else is litter
+      fh.textContent = me.held.fresh
+        ? me.held.kind === "beer"
+          ? "HOLD B — DRINK IT · F — FLING IT"
+          : "HOLD C — SMOKE IT · F — FLING IT"
+        : "PRESS F TO FLING THE EMPTY — OR DRAG & RELEASE TO AIM IT";
 
     for (const ev of snap.events) {
       if (ev.t === "result" && ev.playerId === this.myId) {
@@ -349,7 +357,11 @@ export class Hud {
         // sound, and bubble); the banner belongs to the sniper
         if (ev.victimId === this.myId) this.redFlash();
         else if (ev.flingerId === this.myId)
-          this.banner("DIRECT HIT  +" + ev.points + " PTS", "win");
+          // lobby hits pay nothing — the bragging banner still fires
+          this.banner(
+            ev.points > 0 ? "DIRECT HIT  +" + ev.points + " PTS" : "DIRECT HIT",
+            "win"
+          );
       }
       else if (ev.t === "eliminated" && ev.playerId !== this.myId) {
         const who = snap.players.find((p) => p.id === ev.playerId);
@@ -497,6 +509,20 @@ export class Hud {
   private redFlash(): void {
     this.flash(
       "radial-gradient(circle at 50% 45%,rgba(255,70,50,.5),rgba(200,30,20,.18) 60%,transparent 80%)"
+    );
+  }
+
+  /* the vice keys' refusals, said out loud */
+  handsFull(): void {
+    this.banner("HANDS FULL — F FLINGS THE EMPTY", "lose");
+  }
+  machineFirst(): void {
+    this.banner("EMPTY-HANDED — GRAB ONE FROM A MACHINE (E)", "lose");
+  }
+  outOfStock(kind: "cigar" | "beer"): void {
+    this.banner(
+      kind === "cigar" ? "OUT OF CIGARS — BUY MORE FROM THE SHOP" : "OUT OF BEER — BUY MORE FROM THE SHOP",
+      "lose"
     );
   }
 

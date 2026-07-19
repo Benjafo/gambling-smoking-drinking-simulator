@@ -1,7 +1,8 @@
-/* Pre-game littering: dispensers hand out free throwables (proximity-gated,
-   hands-empty), lobby flings are real physics contained by the room, none of
-   it scores or pays, pickup respects walking reach, and the leader's
-   clear-litter intent sweeps the floor.
+/* Pre-game littering: dispensers stock free FRESH vices (proximity-gated,
+   hands-empty), the table's ritual drinks them right there in the lobby,
+   lobby flings are real physics contained by the room, none of it scores or
+   pays, pickup respects walking reach, and the leader's clear-litter intent
+   sweeps the floor.
    Run with: npm run test:sim */
 import { Simulation } from "../src/sim";
 import {
@@ -35,10 +36,13 @@ const fresh = (s: Snapshot) => s.debris.filter((d) => !seededIds.has(d.id));
 sim.applyIntent(P1, { type: "join", name: "LEADER" });
 sim.applyIntent(P2, { type: "join", name: "TAGALONG" });
 
-/* ---- dispensing is proximity-gated ---- */
+/* ---- dispensing is proximity-gated and lands a FRESH one in hand ---- */
 const beerSpot = LOBBY_DISPENSERS.find((d) => d.kind === "beer")!;
 sim.applyIntent(P1, { type: "dispense", kind: "beer" });
 assert(player(P1).held === null, "dispense from across the room is refused");
+/* empty-handed C/B is refused in the lobby: the machines are the only source */
+sim.applyIntent(P1, { type: "consumeStart", kind: "beer" });
+assert(player(P1).ritual === null, "no lobby drinking on an empty hand — machine first");
 
 /* walk the leader to the beer fridge (aim-and-hold, like a real client) */
 let guard = 0;
@@ -55,19 +59,45 @@ while (guard++ < TICK_RATE * 20) {
 }
 sim.applyIntent(P1, { type: "move", dirX: 0, dirZ: 0, yaw: 0 });
 const before = player(P1);
+sim.applyIntent(P1, { type: "dispense", kind: "cigar" });
+assert(player(P1).held === null, "wrong machine — cigars come from the cigar machine");
 sim.applyIntent(P1, { type: "dispense", kind: "beer" });
 let me = player(P1);
-assert(me.held !== null && me.held.kind === "beer", "standing at the fridge dispenses a beer");
-assert(me.beerInv === before.beerInv, "dispensing is not inventory (free litter, not a vice)");
-assert(me.money === before.money, "dispensing costs nothing");
-const firstHeldId = me.held!.id;
-sim.applyIntent(P1, { type: "dispense", kind: "beer" });
-assert(player(P1).held!.id === firstHeldId, "hands full: no second dispense until it's flung");
-sim.applyIntent(P1, { type: "dispense", kind: "cigar" });
 assert(
-  player(P1).held!.kind === "beer",
-  "wrong machine anyway — cigars come from the cigarette machine"
+  me.held !== null && me.held.kind === "beer" && me.held.fresh,
+  "standing at the fridge lands a fresh beer in the hand"
 );
+assert(me.money === before.money, "dispensing costs nothing");
+assert(me.beerInv === before.beerInv, "the pocket's table stock is untouched");
+sim.applyIntent(P1, { type: "dispense", kind: "beer" });
+assert(
+  player(P1).held!.id === me.held!.id,
+  "hands full: no second freebie until this one's dealt with"
+);
+
+/* ---- drink it: the same ritual the table runs, ticking pre-game ---- */
+sim.applyIntent(P1, { type: "consumeStart", kind: "cigar" });
+assert(player(P1).ritual === null, "the freebie only lights its own kind");
+sim.applyIntent(P1, { type: "consumeStart", kind: "beer" });
+assert(
+  player(P1).held === null && player(P1).ritual !== null,
+  "the ritual takes the fresh one out of the hand"
+);
+sim.applyIntent(P1, { type: "consumeCancel" });
+me = player(P1);
+assert(me.ritual === null && me.held?.fresh === true, "a spilled freebie lands back in the hand");
+sim.applyIntent(P1, { type: "consumeStart", kind: "beer" });
+sim.applyIntent(P1, { type: "ritualEngage", on: true });
+guard = 0;
+while (guard++ < TICK_RATE * 10 && player(P1).held === null) sim.step();
+me = player(P1);
+assert(
+  me.held !== null && me.held.kind === "beer" && !me.held.fresh,
+  "the lobby ritual finishes: drained empty in hand"
+);
+assert(me.beerInv === before.beerInv, "the pocket still untouched — freebies aren't stock");
+assert(me.score === 0, "pre-game vices score nothing");
+const firstHeldId = me.held!.id;
 
 /* ---- flinging in the lobby: real physics, contained, unscored ---- */
 const eye = { x: me.pos.x, y: 1.5, z: me.pos.z };
@@ -154,15 +184,40 @@ assert(
 );
 
 /* ---- none of it leaks into the game ---- */
+/* back to the fridge: grab a freebie and carry it through the door */
+guard = 0;
+while (guard++ < TICK_RATE * 20) {
+  const at = player(P1).pos;
+  if (Math.hypot(at.x - beerSpot.x, at.z - beerSpot.z) <= DISPENSE_RADIUS - 0.15) break;
+  sim.applyIntent(P1, { type: "move", dirX: beerSpot.x - at.x, dirZ: beerSpot.z - at.z, yaw: 0 });
+  sim.step();
+}
+sim.applyIntent(P1, { type: "move", dirX: 0, dirZ: 0, yaw: 0 });
 sim.applyIntent(P1, { type: "dispense", kind: "beer" });
-assert(player(P1).held !== null, "one more in hand before the game starts");
+assert(player(P1).held?.fresh === true, "one fresh one in hand before the game starts");
 sim.applyIntent(P1, { type: "startGame" });
 for (let i = 0; i < TICK_RATE * 11 && sim.snapshot().phase === "lobby"; i++) sim.step(); // ride out the start countdown
 assert(sim.snapshot().phase === "betting", "leader started the game");
-sim.applyIntent(P1, { type: "dispense", kind: "beer" });
+assert(player(P1).held?.fresh === true, "the freebie survived the walk to the table");
+sim.applyIntent(P1, { type: "dispense", kind: "cigar" });
 sim.applyIntent(P1, { type: "clearLitter" });
-assert(sim.snapshot().phase === "betting", "dispense/clear intents are dead outside the lobby");
-// the carried empty flings at the table as den debris, still worthless
+assert(
+  player(P1).held!.kind === "beer" && sim.snapshot().phase === "betting",
+  "dispense/clear intents are dead outside the lobby"
+);
+/* the carried freebie drinks at the table — for nothing */
+const scoreBefore = player(P1).score;
+sim.applyIntent(P1, { type: "consumeStart", kind: "beer" });
+sim.applyIntent(P1, { type: "ritualEngage", on: true });
+guard = 0;
+while (guard++ < TICK_RATE * 10 && player(P1).held === null) sim.step();
+assert(
+  player(P1).held !== null && !player(P1).held!.fresh,
+  "the carried freebie drinks at the table"
+);
+assert(player(P1).score === scoreBefore, "…for zero points");
+assert(player(P1).beerInv === 3, "…without touching the restocked pocket");
+// its empty flings at the table as den debris, still worthless
 sim.applyIntent(P1, {
   type: "fling",
   itemId: player(P1).held!.id,

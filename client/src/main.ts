@@ -34,7 +34,11 @@ let session: Session | null = null;
 const send = (i: Intent) => session?.send(i);
 const scene = new SceneView($("stage"), send);
 const hud = new Hud(send);
-const ritual = new RitualControl(send, scene);
+const ritual = new RitualControl(send, scene, (why, kind) => {
+  if (why === "handsFull") hud.handsFull();
+  else if (why === "machineFirst") hud.machineFirst();
+  else hud.outOfStock(kind);
+});
 const menu = new MenuControl(startSession);
 const mirror = new MirrorControl();
 let latestSnap: Snapshot | null = null;

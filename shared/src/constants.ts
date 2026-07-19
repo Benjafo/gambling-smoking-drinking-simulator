@@ -66,6 +66,10 @@ export const SCORE_PLAYER_HIT = 40;
 export const PLAYER_HIT_Y_MIN = 0.72;
 export const PLAYER_HIT_Y_MAX = 1.5;
 export const PLAYER_HIT_RADIUS = 0.3; // includes debris-size slop
+/* the same capsule for a lobby walker, relative to the feet (a standing
+   body, shins to hat, wherever the furniture has them) */
+export const LOBBY_HIT_Y_MIN = 0.2;
+export const LOBBY_HIT_Y_MAX = 1.55;
 
 /* head-tracking limits: the camera clamps here and the sim re-clamps
    whatever clients report. Yaw reaches well past the shoulder — checking

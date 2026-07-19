@@ -32,7 +32,7 @@ import type { Intent, PlayerSnap, PropKind, Snapshot, ViceKind } from "@shared/t
 import { carpetTexture, leatherTexture, woodTexture } from "./textures";
 import { DebrisView } from "./debris";
 import { HeldItemControl, makeBottleMesh, makeCigarMesh } from "./held";
-import { denySound, pickupSound } from "./effects";
+import { denySound, hurtSound, pickupSound, OuchBubbles, SmokeSystem } from "./effects";
 import { lookOf, makeFigure, poseArm } from "./figure";
 
 /* you must be able to look at your own feet: pickup reach is 2.2m, and at
@@ -137,6 +137,12 @@ export class LobbyRoomView {
      the same gestures the table uses (drag the empty, release to fling) */
   private debris: DebrisView;
   readonly held: HeldItemControl;
+  /* the waiting room's own effect plumes — the den's emitters render into
+     the den scene, invisible from in here */
+  readonly smoke: SmokeSystem;
+  private ouch: OuchBubbles;
+  private shakeLeft = 0; // seconds of camera shake remaining
+  private shakeAmp = 0;
   private raycaster = new THREE.Raycaster();
   /* the canvas, for hover cursors — set by SceneView after construction */
   domElement: HTMLElement | null = null;
@@ -165,6 +171,8 @@ export class LobbyRoomView {
     this.buildTrash();
     this.debris = new DebrisView(this.scene);
     this.held = new HeldItemControl(this.scene, this.camera, send);
+    this.smoke = new SmokeSystem(this.scene);
+    this.ouch = new OuchBubbles(this.scene);
 
     addEventListener("keydown", (e) => {
       if (!this.active || (e.target as HTMLElement)?.tagName === "INPUT") return;
@@ -1245,6 +1253,30 @@ export class LobbyRoomView {
     pickupSound();
   }
 
+  /* a flung empty found a body: the yelp everyone sees, plus the sting —
+     shake and hurt-buzz — only the victim feels. The waiting-room mirror
+     of the den's playerHit block (minus the points pop: lobby hits pay
+     nothing). */
+  playerHit(
+    ev: { flingerId: string; victimId: string; pos: { x: number; y: number; z: number } },
+    myId: string
+  ): void {
+    const at = new THREE.Vector3(ev.pos.x, ev.pos.y, ev.pos.z);
+    if (ev.victimId === myId) {
+      // the impact point is at your own head — behind your view. Pull the
+      // yelp into frame, biased toward the side the bottle came from
+      const fwd = this.camera.getWorldDirection(new THREE.Vector3());
+      const side = at.clone().sub(this.camera.position);
+      side.addScaledVector(fwd, -side.dot(fwd));
+      if (side.lengthSq() > 1e-6) side.setLength(0.18);
+      at.copy(this.camera.position).addScaledVector(fwd, 0.55).add(side);
+      this.shakeAmp = Math.max(this.shakeAmp, 0.025);
+      this.shakeLeft = Math.max(this.shakeLeft, 0.3);
+      hurtSound();
+    }
+    this.ouch.emit(at);
+  }
+
   private updateDispenseHint(): void {
     const el = this.dispenseHint;
     if (!el) return;
@@ -1266,11 +1298,16 @@ export class LobbyRoomView {
       el.classList.remove("show");
       return;
     }
-    el.textContent = this.held.hasHeld
-      ? "HANDS FULL — PRESS F TO FLING IT"
-      : d.kind === "beer"
-        ? "PRESS E — GRAB A BEER"
-        : "PRESS E — GRAB A SMOKE";
+    const meHeld = this.latest?.players.find((p) => p.id === this.myId)?.held;
+    el.textContent = meHeld?.fresh
+      ? meHeld.kind === "beer"
+        ? "GOT ONE — HOLD B TO DRINK IT"
+        : "GOT ONE — HOLD C TO SMOKE IT"
+      : this.held.hasHeld
+        ? "HANDS FULL — PRESS F TO FLING IT"
+        : d.kind === "beer"
+          ? "PRESS E — GRAB A BEER"
+          : "PRESS E — GRAB A CIGAR";
     el.classList.add("show");
   }
 
@@ -1322,6 +1359,15 @@ export class LobbyRoomView {
         eyeY + Math.sin(this.pitch),
         this.myPos.z + cy * cp
       );
+      // getting beaned rattles the walker's eyes, same feel as the den
+      if (this.shakeLeft > 0) {
+        this.shakeLeft = Math.max(0, this.shakeLeft - dt);
+        const k = this.shakeLeft > 0 ? this.shakeLeft / 0.16 : 0;
+        this.camera.position.x += (Math.random() - 0.5) * this.shakeAmp * k * 2;
+        this.camera.position.y += (Math.random() - 0.5) * this.shakeAmp * k * 2;
+        this.camera.position.z += (Math.random() - 0.5) * this.shakeAmp * k * 2;
+        if (this.shakeLeft === 0) this.shakeAmp = 0;
+      }
 
       // tell the sim about held input: direction changes go out immediately,
       // facing drift goes out on a slow beat
@@ -1373,6 +1419,8 @@ export class LobbyRoomView {
     // litter in motion, and the empty in my hand
     this.debris.frame(dt);
     this.held.frame(dt);
+    this.smoke.frame(dt);
+    this.ouch.frame(dt);
     // stream the wind-up drag (~10 Hz) — same contract the table uses
     const gp = this.held.grabWorldPos();
     if (gp) {
