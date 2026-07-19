@@ -265,8 +265,19 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--open);outline-o
 }
 #optionsBtn.active{display:block}
 #optionsBtn:hover{background:#231d06}
-#optionsScreen{z-index:120;background:rgba(9,12,9,.93)}
+/* the controls list outgrew short viewports: scroll instead of clipping.
+   "safe center" keeps it centered when it fits and top-aligns (scrollable)
+   when it doesn't — plain center would clip the top out of reach. */
+#optionsScreen{
+  z-index:120;background:rgba(9,12,9,.93);
+  overflow-y:auto;justify-content:safe center;padding:40px 0;
+}
+/* scanlines pin to the viewport, not the scrolled content height */
+#optionsScreen::before{position:fixed}
 .controls-panel{width:min(560px,92vw);text-align:left}
+/* group separators in the controls list: short, quiet rules — the panel's
+   own line color, not the browser's bright default */
+.controls-panel hr{width:80%;border:none;border-top:1px solid var(--line);margin:6px 0}
 .ctl-row{display:flex;align-items:baseline;gap:16px;font-family:var(--crt);font-size:20px;color:var(--smoke)}
 .ctl-row .key{
   font-family:var(--tiny);font-size:11px;letter-spacing:.12em;color:var(--bulb);

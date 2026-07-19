@@ -104,6 +104,8 @@ const toggleOptions = (on: boolean) => {
   if (on) disarmRecapture(); // an opening menu wants the cursor back
   $("optionsScreen").classList.toggle("active", on);
   $("optionsScreen").classList.toggle("from-menu", !session);
+  // a fresh open always starts at the top, not wherever it was left
+  if (on) $("optionsScreen").scrollTop = 0;
 };
 
 $("optionsBtn").addEventListener("click", () => toggleOptions(!optionsOpen()));
@@ -186,6 +188,9 @@ addEventListener("keydown", (e) => {
   }
   // an engine that DOES deliver the lock-exiting Esc mustn't double-toggle
   if (optionsOpen() && performance.now() - lastLockExit < 350) return;
+  // the mirror fields its own Esc (and stops propagation) — this guard is
+  // the backstop so a close can never double as an options toggle
+  if (mirror.open()) return;
   if (session) {
     const opening = !optionsOpen();
     toggleOptions(opening);

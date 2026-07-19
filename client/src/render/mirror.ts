@@ -34,13 +34,19 @@ export class MirrorView {
     this.camera.position.set(0, 1.05, 2.55);
     this.camera.lookAt(0, 0.82, 0);
 
-    this.scene.add(new THREE.AmbientLight(0x342b1e, 1.5));
-    const bulb = new THREE.PointLight(0xffd9a0, 9, 10, 1.6);
-    bulb.position.set(0.9, 2.4, 1.3);
+    // dressing-room three-point: the shot's whole job is showing the look,
+    // so the FRONT gets the light. Warm key bulb high right-of-camera
+    // (shadow-caster), cool fill from the left, generous ambient floor,
+    // and just a whisper of the bar's red neon rim from behind.
+    this.scene.add(new THREE.AmbientLight(0x46413a, 2.0));
+    const bulb = new THREE.PointLight(0xffe2b0, 13, 12, 1.6);
+    bulb.position.set(1.0, 2.2, 1.7);
     bulb.castShadow = true;
     this.scene.add(bulb);
-    // a whisper of the bar's red neon from behind, so the silhouette pops
-    const neon = new THREE.PointLight(0xe0522b, 2.5, 6, 1.8);
+    const fill = new THREE.PointLight(0xcfd6e0, 5, 9, 1.8);
+    fill.position.set(-1.6, 1.2, 2.0);
+    this.scene.add(fill);
+    const neon = new THREE.PointLight(0xe0522b, 1.5, 6, 1.8);
     neon.position.set(-1.5, 1.3, -1.2);
     this.scene.add(neon);
 
