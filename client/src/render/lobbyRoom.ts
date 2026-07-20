@@ -391,14 +391,11 @@ export class LobbyRoomView {
     const frameMat = new THREE.MeshStandardMaterial({ color: 0x0f0b06, roughness: 0.8 });
     // painted, not wood-grain: the only green surface in a room of plaster
     // and paneling, so the way out reads from anywhere
-    // the dark of the den behind the doorway, with a warm sliver of light
-    // leaking along the open edge — the crack says "there's a room through
-    // here", the sign above says which one
-    // a short dark hallway beyond the (real) opening in the wall — its own
-    // warm bulb makes the doorway glow from inside: an invitation, not a
-    // painting. Standard materials so the light shades the recess walls.
+    // pitch black beyond the (real) opening in the wall — the player never
+    // sees what's through the door. Basic material so no light, room-side or
+    // otherwise, can ever shade the void.
     const RECESS_D = 0.7;
-    const recessMat = new THREE.MeshStandardMaterial({ color: 0x2b1f10, roughness: 0.95 });
+    const recessMat = new THREE.MeshBasicMaterial({ color: 0x000000 });
     const recess = new THREE.Group();
     const rPiece = (
       w: number,
@@ -421,11 +418,8 @@ export class LobbyRoomView {
     rPiece(0.95, RECESS_D, doorX, 2.2, RD2, 0, Math.PI / 2); // ceiling
     rPiece(0.95, RECESS_D, doorX, 0.001, RD2, 0, -Math.PI / 2); // floor
     this.scene.add(recess);
-    const hallGlow = new THREE.PointLight(0xd08a3a, 2.4, 3.2, 2);
-    hallGlow.position.set(doorX, 1.5, halfD + 0.45);
-    this.scene.add(hallGlow);
     // the door itself hangs on the right jamb, standing properly OPEN —
-    // swung out into the lit recess, panels facing the room at an angle
+    // swung out into the dark, panels facing the room at an angle
     const doorGroup = new THREE.Group();
     const door = new THREE.Mesh(
       new THREE.BoxGeometry(0.95, 2.1, 0.06),
