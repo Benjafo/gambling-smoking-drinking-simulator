@@ -26,6 +26,9 @@ const requireCjs = createRequire(import.meta.url);
 
 const DEFAULT_SERVER_URL = "wss://blackjack.benjafo.com/ws";
 const SMOKE = process.argv.includes("--smoke");
+/* --shots: lock the window to 16:9 so F12 captures come out exactly
+   1920×1080 (Steam's preferred screenshot size) after Retina downscale */
+const SHOTS = process.argv.includes("--shots");
 
 function resolveServerUrl() {
   const arg = process.argv.find((a) => a.startsWith("--server="));
@@ -111,8 +114,9 @@ if (steam && process.platform !== "darwin") {
 
 function createWindow() {
   win = new BrowserWindow({
-    width: 1440,
+    width: SHOTS ? 1600 : 1440,
     height: 900,
+    useContentSize: SHOTS,
     minWidth: 960,
     minHeight: 600,
     show: !SMOKE,
@@ -137,11 +141,15 @@ function createWindow() {
     }
   }
 
-  // F11 everywhere (browser convention), plus whatever the OS binds natively
+  if (SHOTS) win.setAspectRatio(16 / 9);
+
+  // F11 everywhere (browser convention), plus whatever the OS binds natively;
+  // F12 saves a store-ready screenshot (see captureShot)
   win.webContents.on("before-input-event", (_e, input) => {
     if (input.type === "keyDown" && input.key === "F11") {
       win.setFullScreen(!win.isFullScreen());
     }
+    if (input.type === "keyDown" && input.key === "F12") captureShot();
   });
 
   // the game never opens windows; anything that tries goes to the OS browser
@@ -156,6 +164,24 @@ function createWindow() {
 
   const devUrl = process.env.ELECTRON_START_URL;
   return devUrl ? win.loadURL(devUrl) : win.loadURL("app://bundle/");
+}
+
+/* F12: store-screenshot hotkey. Captures the page (Retina gives us ≥2x
+   pixels), scales to exactly 1920 wide, drops the PNG in
+   ~/Pictures/joint-liability-shots. Run with --shots for a 16:9-locked
+   window so the result is precisely 1920×1080. */
+async function captureShot() {
+  try {
+    const img = await win.webContents.capturePage();
+    const scaled = img.getSize().width === 1920 ? img : img.resize({ width: 1920 });
+    const dir = path.join(app.getPath("pictures"), "joint-liability-shots");
+    fs.mkdirSync(dir, { recursive: true });
+    const file = path.join(dir, `shot-${new Date().toISOString().replace(/[:.]/g, "-")}.png`);
+    fs.writeFileSync(file, scaled.toPNG());
+    logLine("shot", `${file} (${scaled.getSize().width}×${scaled.getSize().height})`);
+  } catch (err) {
+    logLine("shot-failed", String(err));
+  }
 }
 
 app.on("child-process-gone", (_e, details) => logLine("child-gone", JSON.stringify(details)));

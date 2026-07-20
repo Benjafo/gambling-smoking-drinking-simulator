@@ -67,7 +67,13 @@ SteamPipe kit, store-page kit, healthcheck all staged; see runbook below)
       2026-07-20, waiting on Valve's identity/tax/bank verification.
       When the app ID arrives: swap the 480 default in desktop/main.js
       (one line) and add a `steam_appid.txt` note to the SteamPipe item.
-- [ ] **Final title decision + trademark search** — before any store assets.
+- [x] **Final title decision + trademark search** — "JOINT LIABILITY"
+      cleared 2026-07-20: zero Steam store results for the term, no game on
+      itch.io, no game-class trademark surfaced (the phrase is a generic
+      legal term — which also means our own mark would be weak/hard to
+      enforce; acceptable for an indie launch, revisit only if merch/serious
+      brand plans emerge). Discoverability note: web searches return legal
+      content, so store tags + "blackjack"/"party game" keywords matter.
 - [ ] **Store page assets** — copy, description, feature bullets DRAFTED in
       `steam/STORE_PAGE.md` with exact art-size checklist + shot list.
       Remaining: the art itself and 5+ screenshots (capture guide in file).
@@ -91,9 +97,12 @@ SteamPipe kit, store-page kit, healthcheck all staged; see runbook below)
       60 burst; honest peak ~20/s) in server.ts. Over-budget intents drop
       silently — no disconnect, so a lag-burst can't cost a seat. Covered in
       server test.
-- [ ] **Pricing + launch discount decision**
-- [ ] **Playtest or Next Fest demo decision** — free visibility and a real
-      multiplayer load test.
+- [x] **Pricing + launch discount decision** — $9.99 with 15% launch
+      discount (decided 2026-07-20). Accept Valve's regional-pricing matrix
+      on app-ID day.
+- [ ] **Playtest or Next Fest demo** — DECIDED YES 2026-07-20. Remaining:
+      set up the Playtest app in Steamworks during the Coming Soon window
+      and recruit a friends session (doubles as the multiplayer load test).
 
 ## Post-launch / optional
 

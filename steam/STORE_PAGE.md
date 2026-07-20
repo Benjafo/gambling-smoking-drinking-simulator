@@ -92,7 +92,10 @@ Icons:
       `desktop/build/` — electron-builder picks them up by convention,
       no config change needed.
 
-Shot list (capture at 1920×1080, F11 fullscreen in the desktop build):
+
+Shot list — launch the desktop build with `--shots` (16:9-locked window)
+and press **F12** at each moment; exact 1920×1080 PNGs land in
+`~/Pictures/joint-liability-shots/`:
 1. title screen over the live den (attract mode)
 2. mid-hand at a full table, litter everywhere
 3. an empty in flight at another player's head
