@@ -53,9 +53,12 @@ export class MenuControl {
   /* ---------------- wiring ---------------- */
   private wire(): void {
     const nameInput = $("nameInput") as HTMLInputElement;
+    // a name the player typed here always beats the Steam persona — the
+    // persona is just the first-launch default on desktop
     nameInput.value =
       new URLSearchParams(location.search).get("name") ??
       localStorage.getItem("degen-name") ??
+      window.desktop?.personaName ??
       "";
 
     // in the desktop shell the title screen owes the player a real exit
@@ -186,6 +189,10 @@ export class MenuControl {
       case "lost":
         status.className = "conn bad";
         status.textContent = "LINE WENT DEAD — REDIALING…";
+        break;
+      case "outdated":
+        status.className = "conn bad";
+        status.textContent = "THE HOUSE CHANGED THE RULES — UPDATE THE GAME TO SIT DOWN.";
         break;
     }
 

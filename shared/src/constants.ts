@@ -1,6 +1,13 @@
 /* Tuning + world geometry shared by simulation (colliders) and client (meshes).
    Table sits at the origin; dealer on -Z, player seats fanned across +Z. */
 
+/* wire compatibility: bump whenever ClientMsg/ServerMsg/Intent/Snapshot
+   change shape. The client dials ws://…?v=N and the server hangs up
+   (code 4400) on any mismatch — once Steam auto-updates clients on its own
+   schedule, a stale build must fail loud at the door, not desync at the
+   table. */
+export const PROTOCOL_VERSION = 1;
+
 export const TICK_RATE = 60;
 export const TICK_DT = 1 / TICK_RATE;
 export const SNAPSHOT_EVERY_TICKS = 3; // 20 Hz
@@ -60,6 +67,13 @@ export const LITTER_IMPACT_DELAY_MS = 250;
 /* beaning another player mid-flight — before the empty touches anything —
    pays more than mere littering */
 export const SCORE_PLAYER_HIT = 40;
+/* an EARNED empty (fresh off the thrower's own ritual — never scavenged
+   floor trash or a machine freebie) also burns this off the victim's
+   matching meter. Sized to clear the drift noise floor (JITTER swings a
+   meter ~±5 over a refill cycle) while staying at TOLERANCE_PER_USE — the
+   hit never takes more from the victim than the enabling ritual charged
+   the thrower in tolerance. */
+export const HIT_METER_LOSS = 10;
 /* seated player approximated as a vertical capsule for the direct-hit test:
    torso spans ~0.72-1.34, head center ~1.39 (see client makeFigure and
    AVATAR_SCALE in scene.ts — keep in sync). Max still covers the local eye. */

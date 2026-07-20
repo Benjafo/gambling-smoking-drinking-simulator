@@ -17,10 +17,12 @@
                               screen exists, print console errors, exit */
 import { app, BrowserWindow, ipcMain, net, protocol, session, shell } from "electron";
 import fs from "node:fs";
+import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const requireCjs = createRequire(import.meta.url);
 
 const DEFAULT_SERVER_URL = "wss://blackjack.benjafo.com/ws";
 const SMOKE = process.argv.includes("--smoke");
@@ -69,6 +71,44 @@ protocol.registerSchemesAsPrivileged([
 const serverUrl = resolveServerUrl();
 let win = null;
 
+/* ---------------- Steamworks ----------------
+   Optional at every step: no module, no Steam client, or LAST_CALL_NO_STEAM=1
+   all mean "run like the plain desktop build". Until Valve issues our app ID,
+   STEAM_APP_ID defaults to 480 (Spacewar, Valve's public test app). */
+function initSteam() {
+  if (process.env.LAST_CALL_NO_STEAM) return null;
+  let sw;
+  try {
+    try {
+      sw = requireCjs("steamworks.js"); // repo run: hoisted node_modules
+    } catch {
+      sw = requireCjs(path.join(process.resourcesPath ?? "", "steamworks")); // packaged
+    }
+  } catch (err) {
+    logLine("steam", `steamworks.js unavailable: ${err}`);
+    return null;
+  }
+  try {
+    const appId = Number(process.env.STEAM_APP_ID ?? 480);
+    const client = sw.init(appId);
+    const personaName = client.localplayer.getName();
+    logLine("steam", `initialized appId=${appId} persona="${personaName}"`);
+    return { sw, client, personaName };
+  } catch (err) {
+    logLine("steam", `init failed (Steam client not running?): ${err}`);
+    return null;
+  }
+}
+
+const steam = initSteam();
+
+/* the overlay injects into the GPU process; Steam's Electron guidance is a
+   single GPU process and no direct composition (Windows) */
+if (steam && process.platform !== "darwin") {
+  app.commandLine.appendSwitch("in-process-gpu");
+  app.commandLine.appendSwitch("disable-direct-composition");
+}
+
 function createWindow() {
   win = new BrowserWindow({
     width: 1440,
@@ -82,9 +122,20 @@ function createWindow() {
       preload: path.join(__dirname, "preload.cjs"),
       contextIsolation: true,
       sandbox: true,
-      additionalArguments: [`--last-call-server=${serverUrl}`],
+      additionalArguments: [
+        `--last-call-server=${serverUrl}`,
+        `--last-call-persona=${steam?.personaName ?? ""}`,
+      ],
     },
   });
+
+  if (steam) {
+    try {
+      steam.sw.electronEnableSteamOverlay();
+    } catch (err) {
+      logLine("steam", `overlay hook failed: ${err}`);
+    }
+  }
 
   // F11 everywhere (browser convention), plus whatever the OS binds natively
   win.webContents.on("before-input-event", (_e, input) => {

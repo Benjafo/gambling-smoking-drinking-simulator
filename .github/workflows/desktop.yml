@@ -1,0 +1,37 @@
+name: Desktop builds
+# Windows is the build that matters for Steam (electron-builder can't cross-build reliably), so it runs on every push that touches the shipped code; grab the artifact from the run page. macOS rides along for parity with local dev. Both are unpacked dirs — exactly what a SteamPipe depot wants — not installers.
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "client/**"
+      - "shared/**"
+      - "desktop/**"
+      - "package.json"
+      - "package-lock.json"
+      - ".github/workflows/desktop.yml"
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - os: windows-latest
+            artifact: win-unpacked
+          - os: macos-latest
+            artifact: mac-arm64
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run desktop:pack
+      - uses: actions/upload-artifact@v4
+        with:
+          name: joint-liability-${{ matrix.artifact }}
+          path: desktop/release/${{ matrix.artifact }}/
+          if-no-files-found: error

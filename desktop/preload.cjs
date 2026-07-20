@@ -3,10 +3,15 @@
    client/src/desktop.d.ts); its absence means "running in a browser". */
 const { contextBridge, ipcRenderer } = require("electron");
 
-const serverArg = process.argv.find((a) => a.startsWith("--last-call-server="));
+const arg = (name) => {
+  const hit = process.argv.find((a) => a.startsWith(`--${name}=`));
+  return hit ? hit.slice(name.length + 3) : null;
+};
 
 contextBridge.exposeInMainWorld("desktop", {
-  serverUrl: serverArg ? serverArg.slice("--last-call-server=".length) : null,
+  serverUrl: arg("last-call-server"),
+  /* Steam persona name, or null when Steam isn't running */
+  personaName: arg("last-call-persona") || null,
   quit: () => ipcRenderer.send("desktop:quit"),
   toggleFullscreen: () => ipcRenderer.send("desktop:toggle-fullscreen"),
 });

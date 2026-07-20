@@ -5,6 +5,8 @@ interface Window {
     /* where the shell says the lobby server lives (an app:// page has no
        origin to derive it from) */
     serverUrl: string | null;
+    /* Steam persona name; null when Steam isn't running */
+    personaName: string | null;
     quit(): void;
     toggleFullscreen(): void;
   };

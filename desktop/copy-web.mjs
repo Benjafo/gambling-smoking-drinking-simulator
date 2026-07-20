@@ -16,3 +16,12 @@ if (!fs.existsSync(path.join(src, "index.html"))) {
 fs.rmSync(dst, { recursive: true, force: true });
 fs.cpSync(src, dst, { recursive: true });
 console.log(`staged ${src} → ${dst}`);
+
+/* steamworks.js hoists to the repo root, out of reach of electron-builder's
+   package-dir globs — stage it too (shipped via extraResources, loaded from
+   resources/steamworks by main.js) */
+const swSrc = path.join(here, "../node_modules/steamworks.js");
+const swDst = path.join(here, "vendor/steamworks");
+fs.rmSync(swDst, { recursive: true, force: true });
+fs.cpSync(swSrc, swDst, { recursive: true });
+console.log(`staged ${swSrc} → ${swDst}`);

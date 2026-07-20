@@ -44,6 +44,7 @@ import {
   LITTER_POINTS,
   LITTER_IMPACT_DELAY_MS,
   SCORE_PLAYER_HIT,
+  HIT_METER_LOSS,
   PLAYER_HIT_Y_MIN,
   PLAYER_HIT_Y_MAX,
   PLAYER_HIT_RADIUS,
@@ -1538,8 +1539,10 @@ export class Simulation {
   }
 
   /* a flung empty that beans another player before touching anything pays
-     the flinger a bonus — during the run. Pre-game lobby hits sting (the
-     event fires, the victim yelps) but pay nothing, like all lobby antics.
+     the flinger a bonus — during the run — and, if the empty is earned
+     (straight off the thrower's own ritual), burns HIT_METER_LOSS off the
+     victim's matching meter. Pre-game lobby hits sting (the event fires,
+     the victim yelps) but pay nothing, like all lobby antics.
      Manual point-vs-capsule math — players have no Rapier colliders, and
      plain arithmetic keeps the sim deterministic. */
   private checkPlayerHit(d: Debris): void {
@@ -1564,6 +1567,16 @@ export class Simulation {
       if (!lobby) {
         flinger.score += SCORE_PLAYER_HIT;
         flinger.stats.directHits++;
+        // only a fresh-from-the-ritual empty carries the heat: settling
+        // launders `earned` away, so scavenged trash just bounces off —
+        // no timer needed. The death sweep in tickMetersAndRituals picks
+        // up a meter this empties.
+        if (d.earned && q.alive && !q.waiting) {
+          if (d.kind === "cigar")
+            q.cigarMeter = Math.max(0, q.cigarMeter - HIT_METER_LOSS);
+          else if (d.kind === "beer")
+            q.beerMeter = Math.max(0, q.beerMeter - HIT_METER_LOSS);
+        }
       }
       this.events.push({
         t: "playerHit",

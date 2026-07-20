@@ -4,7 +4,7 @@ Canonical tracker for shipping on Steam. Check items off in the same commit
 that completes them; add notes inline. Review this doc before starting
 Steam-related work and update it after.
 
-**Last reviewed: 2026-07-20**
+**Last reviewed: 2026-07-20** (second pass — protocol gate, notices, CI workflow)
 
 ## Done
 
@@ -16,29 +16,38 @@ Steam-related work and update it after.
       (`--server=` / `LAST_CALL_SERVER`, defaults to prod)
 - [x] Automated boot check — `npm run desktop:smoke` (exit 0/1, CI-able)
 - [x] Packaged macOS arm64 build — `npm run desktop:pack` → `desktop/release/`
+- [x] Third-party notices — `client/public/THIRD-PARTY-NOTICES.txt` (three.js
+      MIT, Rapier Apache-2.0, fonts OFL); ships in every web + desktop build
+- [x] Protocol version gate — client dials `?v=N` (`PROTOCOL_VERSION` in
+      shared/constants.ts, bump on any wire-format change); server hangs up
+      4400 → menu shows "UPDATE THE GAME". Covered in server test.
+      Note: deploy server + web together (docker compose already does) so
+      the gate never strands the site's own client.
 
 ## Code
 
-- [ ] **Windows build via CI** — GitHub Actions `windows-latest` running
-      `desktop:pack`; electron-builder can't cross-build reliably from macOS.
-      Windows depot is effectively mandatory for Steam.
-- [ ] **Third-party license bundle + repo LICENSE** — OFL texts (Pixelify
-      Sans, VT323, Silkscreen), three.js MIT, Rapier Apache-2.0 + NOTICE,
-      shipped in the packaged app; add a LICENSE to the repo itself.
-- [ ] **Steamworks minimum** — `steamworks.js` in the shell: init with app ID,
-      pass Steam persona name through `window.desktop` (replaces typed name),
-      verify overlay renders over the WebGL canvas (test early — Electron +
-      overlay sometimes needs launch flags).
-- [ ] **Protocol version in WS handshake** — server rejects mismatched
-      clients with an "update the game" message. Needed once Steam
-      auto-updates clients on a different cadence than server deploys.
+- [ ] **Windows build via CI** — `.github/workflows/desktop.yml` added
+      (windows + macos matrix, unpacked-dir artifacts, runs on push to main
+      touching shipped code). Remaining: push it and verify the first
+      windows-latest run + artifact, ideally launch the exe once on a real
+      Windows box.
+- [ ] **Repo LICENSE** — decide: all-rights-reserved vs open-sourcing the
+      code (owner's call; third-party notices are already handled above).
+- [ ] **Steamworks minimum** — CODE DONE, VERIFICATION PENDING. steamworks.js
+      wired into the shell: init (STEAM_APP_ID env, default 480/Spacewar;
+      LAST_CALL_NO_STEAM=1 disables), persona name → `window.desktop` → name
+      field default (typed name still wins), overlay hook + GPU switches,
+      module vendored into resources for packaged builds. Degrades cleanly
+      without Steam (verified). Remaining: on a machine with Steam running,
+      confirm persona lands in the name field and shift-tab overlay renders
+      over the canvas; swap 480 for our app ID when Valve issues it.
 - [ ] **App icon** — proper `.icns`/`.ico` for the shell (currently default
       Electron icon); overlaps with store art below.
 
 ## Steam process (longest lead times — start early)
 
-- [ ] **Steamworks account + $100 Steam Direct fee** — identity/tax/bank
-      verification takes days.
+- [ ] **Steamworks account + $100 Steam Direct fee** — IN PROGRESS: submitted
+      2026-07-20, waiting on Valve's identity/tax/bank verification.
 - [ ] **Final title decision + trademark search** — before any store assets.
 - [ ] **Store page assets** — ~6 capsule sizes, 5+ screenshots, trailer,
       description. The most time-consuming non-code item.

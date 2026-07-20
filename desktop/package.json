@@ -31,10 +31,17 @@
       {
         "from": "dist-web",
         "to": "web"
+      },
+      {
+        "from": "vendor/steamworks",
+        "to": "steamworks"
       }
     ],
     "mac": {
       "category": "public.app-category.games"
     }
+  },
+  "dependencies": {
+    "steamworks.js": "^0.4.0"
   }
 }

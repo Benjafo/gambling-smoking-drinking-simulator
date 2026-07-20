@@ -11,12 +11,14 @@
                                or wss://<page host>/ws when the page is https
                                (nginx proxies /ws to the lobby server in prod)
      ?server=8090              ws://<page host>:8090
-     ?server=ws://host:port    exactly that */
+     ?server=ws://host:port    exactly that
+   Every dial carries ?v=<PROTOCOL_VERSION>; a 4400 hangup means the build
+   and the house disagree on the wire format ("outdated"). */
 import type { Appearance } from "@shared/appearance";
-import { WS_PORT_DEFAULT } from "@shared/constants";
+import { PROTOCOL_VERSION, WS_PORT_DEFAULT } from "@shared/constants";
 import type { ClientMsg, Intent, LobbyInfo, ServerMsg, Snapshot } from "@shared/types";
 
-export type ConnStatus = "connecting" | "open" | "unreachable" | "lost";
+export type ConnStatus = "connecting" | "open" | "unreachable" | "lost" | "outdated";
 export type EndReason = "left" | "lost";
 
 /* an active seat at a table — solo worker and remote lobby look identical
@@ -146,7 +148,9 @@ export class ServerConnection {
     if (this.ws) return;
     this.status = "connecting";
     this.emit();
-    const ws = new WebSocket(this.url);
+    // the server hangs up (4400) on any other protocol version
+    const sep = this.url.includes("?") ? "&" : "?";
+    const ws = new WebSocket(`${this.url}${sep}v=${PROTOCOL_VERSION}`);
     this.ws = ws;
     ws.onopen = () => {
       this.status = "open";
@@ -155,8 +159,12 @@ export class ServerConnection {
     ws.onmessage = (e) => this.handle(JSON.parse(e.data as string) as ServerMsg);
     // dead sockets must be LOUD: a client rendering defaults with no room
     // behind it looks exactly like a real game
-    ws.onclose = () => {
-      this.status = this.status === "open" ? "lost" : "unreachable";
+    ws.onclose = (e) => {
+      // 4400 = the house speaks a different protocol; redialing can't fix
+      // a stale build, so this status is terminal (the menu's retry loop
+      // only redials unreachable/lost)
+      if (e.code === 4400) this.status = "outdated";
+      else this.status = this.status === "open" ? "lost" : "unreachable";
       this.ws = null;
       this.pendingJoin?.reject(new Error("CONNECTION LOST."));
       this.pendingJoin = null;
