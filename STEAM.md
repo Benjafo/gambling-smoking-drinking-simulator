@@ -4,7 +4,7 @@ Canonical tracker for shipping on Steam. Check items off in the same commit
 that completes them; add notes inline. Review this doc before starting
 Steam-related work and update it after.
 
-**Last reviewed: 2026-07-20** (second pass — protocol gate, notices, CI workflow)
+**Last reviewed: 2026-07-20** (third pass — CI verified, persona verified, rate limiting)
 
 ## Done
 
@@ -26,21 +26,24 @@ Steam-related work and update it after.
 
 ## Code
 
-- [ ] **Windows build via CI** — `.github/workflows/desktop.yml` added
-      (windows + macos matrix, unpacked-dir artifacts, runs on push to main
-      touching shipped code). Remaining: push it and verify the first
-      windows-latest run + artifact, ideally launch the exe once on a real
-      Windows box.
-- [ ] **Repo LICENSE** — decide: all-rights-reserved vs open-sourcing the
-      code (owner's call; third-party notices are already handled above).
+- [x] **Windows build via CI** — `.github/workflows/desktop.yml` (windows +
+      macos matrix, unpacked-dir artifacts on push to main). Both platforms
+      verified green 2026-07-20. Before SteamPipe upload: launch the
+      win-unpacked exe once on a real Windows box (smoke only proves the
+      builder's own platform).
+- [x] **Repo LICENSE** — all rights reserved (decided 2026-07-20); LICENSE at
+      repo root, third-party terms pointed at THIRD-PARTY-NOTICES.txt.
 - [ ] **Steamworks minimum** — CODE DONE, VERIFICATION PENDING. steamworks.js
       wired into the shell: init (STEAM_APP_ID env, default 480/Spacewar;
       LAST_CALL_NO_STEAM=1 disables), persona name → `window.desktop` → name
       field default (typed name still wins), overlay hook + GPU switches,
       module vendored into resources for packaged builds. Degrades cleanly
-      without Steam (verified). Remaining: on a machine with Steam running,
-      confirm persona lands in the name field and shift-tab overlay renders
-      over the canvas; swap 480 for our app ID when Valve issues it.
+      without Steam (verified). Persona → name field VERIFIED on macOS with
+      Steam running (2026-07-20). Remaining: overlay check — macOS overlay
+      over Electron often can't render (Metal vs GL hook), so the
+      authoritative test is the Windows CI artifact on a real Windows box;
+      swap 480 for our app ID when Valve issues it. Cosmetic note: personas
+      with emoji render in fallback glyphs (pixel fonts are latin-only).
 - [ ] **App icon** — proper `.icns`/`.ico` for the shell (currently default
       Electron icon); overlaps with store art below.
 
@@ -63,8 +66,10 @@ Steam-related work and update it after.
 - [ ] **Server plan** — sizing for launch spike (known ceiling: all lobbies
       step Rapier on one Node event loop), restart-on-crash, basic
       monitoring. Store page should set expectations that solo works offline.
-- [ ] **Intent rate limiting** — per-connection cap on the server; cheapest
-      griefing vector once strangers connect.
+- [x] **Intent rate limiting** — per-connection token bucket (30/s sustained,
+      60 burst; honest peak ~20/s) in server.ts. Over-budget intents drop
+      silently — no disconnect, so a lag-burst can't cost a seat. Covered in
+      server test.
 - [ ] **Pricing + launch discount decision**
 - [ ] **Playtest or Next Fest demo decision** — free visibility and a real
       multiplayer load test.

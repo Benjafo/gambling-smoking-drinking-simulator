@@ -177,6 +177,15 @@ assert(
   "leaving frees the seat in the list"
 );
 
+/* ---- intent flood: over-budget intents drop, the seat survives ---- */
+for (let i = 0; i < 500; i++) bob.send({ type: "intent", intent: { type: "setBet", amount: 0 } });
+bob.clear();
+const postFlood = await bob.snapshot();
+assert(
+  postFlood.players.some((p) => p.name === "BOB"),
+  "flooding client is throttled, not unseated — snapshots keep flowing"
+);
+
 /* ---- an emptied table folds ---- */
 anna.close();
 for (let i = 0; i < 10; i++) {

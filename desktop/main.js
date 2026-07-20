@@ -215,6 +215,8 @@ async function runSmoke() {
       quitShown: document.getElementById("titleQuitBtn")?.style.display !== "none",
       server: window.desktop?.serverUrl ?? null,
       canvas: !!document.querySelector("#stage canvas"),
+      persona: window.desktop?.personaName ?? null,
+      nameField: document.getElementById("nameInput")?.value ?? null,
     })`
   );
   console.log("SMOKE probe:", JSON.stringify(probe));
