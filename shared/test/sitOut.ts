@@ -82,7 +82,7 @@ for (let i = 0; i < Math.floor((BETTING_WINDOW_MS / 1000) * 1.5 * TICK_RATE); i+
 }
 snap = sim.snapshot();
 assert(snap.phase === "betting", "zero bettors: the deal never fires on an empty table");
-assert(snap.bettingEndsIn !== null, "the window re-arms and keeps watch");
+assert(snap.bettingEndsIn === null, "an all-out table idles with no clock to nowhere");
 
 /* ---- ante beats the flag; the window closes on true stragglers ---- */
 topUp();
@@ -113,5 +113,62 @@ for (const id of [P1, P2]) {
   sim.applyIntent(id, { type: "commitBet" });
 }
 assert(sim.snapshot().phase === "dealing", "spectators aren't waited on — instant deal");
+finishRound(5);
+
+/* ---- one of two sitting out pre-ante disarms the clock ---- */
+topUp();
+snap = sim.snapshot();
+assert(snap.bettingEndsIn !== null, "two eligible players: the window arms at open");
+sim.applyIntent(P2, { type: "sitOut", on: true });
+snap = sim.snapshot();
+assert(snap.phase === "betting", "the lone survivor still has a table");
+assert(snap.bettingEndsIn === null, "a lone would-be bettor isn't kept on the clock");
+sim.applyIntent(P2, { type: "sitOut", on: false });
+assert(sim.snapshot().bettingEndsIn === null, "opting back in doesn't start the clock — only an ante does");
+
+/* ---- a lapsed window goes idle; the next ante arms a fresh one ---- */
+for (const id of [P1, P2]) {
+  sim.applyIntent(id, { type: "setBet", amount: 50 });
+  sim.applyIntent(id, { type: "commitBet" });
+}
+finishRound(6);
+topUp();
+assert(sim.snapshot().bettingEndsIn !== null, "round over: the get-your-bets-in clock is running");
+for (let i = 0; i < Math.floor((BETTING_WINDOW_MS / 1000) * 1.5 * TICK_RATE); i++) {
+  sim.step();
+  if (i % 300 === 0) topUp();
+}
+snap = sim.snapshot();
+assert(snap.phase === "betting", "nobody anted: betting stays open");
+assert(snap.bettingEndsIn === null, "the lapsed window idles instead of re-arming");
+sim.applyIntent(P1, { type: "setBet", amount: 50 });
+sim.applyIntent(P1, { type: "commitBet" });
+snap = sim.snapshot();
+assert(snap.phase === "betting", "an undecided player still holds the deal");
+assert(
+  snap.bettingEndsIn !== null && Math.ceil(snap.bettingEndsIn) === BETTING_WINDOW_MS / 1000,
+  "the first ante wakes the idle table with a fresh full window"
+);
+
+/* ---- a solo table never gets a clock at all ---- */
+const solo = await Simulation.create(4242);
+solo.applyIntent(P1, { type: "join", name: "LONER" });
+solo.applyIntent(P1, { type: "startGame" });
+for (let i = 0; i < 60 * 11 && solo.snapshot().phase === "lobby"; i++) solo.step();
+snap = solo.snapshot();
+assert(snap.phase === "betting", "solo run starts into betting");
+assert(snap.bettingEndsIn === null, "a solo table gets no clock — bet whenever");
+for (let i = 0; i < Math.floor((BETTING_WINDOW_MS / 1000) * 1.5 * TICK_RATE); i++) {
+  for (const p of solo.players.values()) {
+    p.cigarMeter = METER_MAX;
+    p.beerMeter = METER_MAX;
+  }
+  solo.step();
+}
+snap = solo.snapshot();
+assert(snap.phase === "betting" && snap.bettingEndsIn === null, "still no rush, however long they stall");
+solo.applyIntent(P1, { type: "setBet", amount: 50 });
+solo.applyIntent(P1, { type: "commitBet" });
+assert(solo.snapshot().phase === "dealing", "the solo ante deals instantly");
 
 console.log("sitOut: all good");

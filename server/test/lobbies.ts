@@ -4,6 +4,7 @@
    Run with: npm run test:server */
 import { WebSocket } from "ws";
 import { startServer } from "../src/server";
+import { PROTOCOL_VERSION } from "../../shared/src/constants";
 import type { ClientMsg, ServerMsg, Snapshot } from "../../shared/src/types";
 
 const PORT = 8191;
@@ -34,7 +35,7 @@ class Client {
 
   static connect(): Promise<Client> {
     return new Promise((resolve, reject) => {
-      const ws = new WebSocket(`ws://localhost:${PORT}`);
+      const ws = new WebSocket(`ws://localhost:${PORT}?v=${PROTOCOL_VERSION}`);
       ws.on("open", () => resolve(new Client(ws)));
       ws.on("error", reject);
     });
@@ -85,6 +86,14 @@ const bail = setTimeout(() => {
   console.error("FAIL: test suite timed out");
   process.exit(1);
 }, 30000);
+
+/* ---- protocol gate: a stale build gets a 4400 hangup at the door ---- */
+const staleClose: number = await new Promise((resolve, reject) => {
+  const stale = new WebSocket(`ws://localhost:${PORT}?v=${PROTOCOL_VERSION + 1}`);
+  stale.on("close", (code) => resolve(code));
+  stale.on("error", reject);
+});
+assert(staleClose === 4400, "mismatched protocol version is hung up with 4400");
 
 /* ---- browse: a fresh connection sees the (empty) floor ---- */
 const anna = await Client.connect();

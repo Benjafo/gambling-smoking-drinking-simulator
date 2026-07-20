@@ -15,6 +15,7 @@ import {
   LOBBY_PASSWORD_MAX,
   MAX_LOBBIES,
   PLAYER_NAME_MAX,
+  PROTOCOL_VERSION,
   SEAT_COUNT,
   SNAPSHOT_EVERY_TICKS,
   TICK_RATE,
@@ -110,7 +111,14 @@ export function startServer(port: number): Server {
 
   const wss = new WebSocketServer({ port });
 
-  wss.on("connection", (ws) => {
+  wss.on("connection", (ws, req) => {
+    // wire-compat gate: a client built against another protocol gets a
+    // clean hangup it can name, not a table that quietly desyncs
+    const v = new URLSearchParams(req.url?.split("?")[1] ?? "").get("v");
+    if (v !== String(PROTOCOL_VERSION)) {
+      ws.close(4400, "PROTOCOL MISMATCH — UPDATE THE GAME");
+      return;
+    }
     const conn: Conn = { lobby: null, playerId: null };
     conns.set(ws, conn);
     send(ws, { type: "lobbies", lobbies: lobbyList() });

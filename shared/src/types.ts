@@ -4,9 +4,10 @@ import type { V3 } from "./constants";
 
 export type ViceKind = "cigar" | "beer";
 /* everything that can lie on a floor, be picked up, and be flung: the vice
-   empties plus the waiting room's toys. Only vices go through dispensers,
-   rituals, and the shop — the toys exist solely as seeded lobby debris. */
-export type PropKind = ViceKind | "plunger" | "stick";
+   empties plus the waiting room's toys and trash. Only vices go through
+   dispensers, rituals, and the shop — the toys and trash exist solely as
+   seeded lobby debris. */
+export type PropKind = ViceKind | "plunger" | "stick" | "paper" | "can" | "ashtray";
 export const isVice = (k: PropKind): k is ViceKind => k === "cigar" || k === "beer";
 export type RoomPhase = "lobby" | "betting" | "dealing" | "acting" | "dealer" | "settle" | "over";
 /* dev bot tiers — skill AND self-preservation. "autonomous" bots never touch

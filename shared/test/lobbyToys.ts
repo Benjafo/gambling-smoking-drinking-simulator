@@ -28,18 +28,28 @@ sim.applyIntent(P1, { type: "join", name: "TOYCOLLECTOR" });
 /* ---- the room comes furnished ---- */
 let s = snap();
 const expectVice =
-  LOBBY_SCATTER.filter((i) => i.kind !== "paper").length + LOBBY_TABLE_CLUTTER.length;
+  LOBBY_SCATTER.filter((i) => isVice(i.kind)).length +
+  LOBBY_TABLE_CLUTTER.filter((i) => isVice(i.kind)).length;
 assert(
   s.debris.filter((d) => isVice(d.kind)).length === expectVice,
   `the scatter's and tables' bottles and butts are real debris (${expectVice} seeded)`
 );
+/* the trash is just as real: every paper ball, can and ashtray on the
+   data lists exists as grabbable debris — nothing on the floor is décor */
+const expectTrash =
+  LOBBY_SCATTER.filter((i) => !isVice(i.kind)).length +
+  LOBBY_TABLE_CLUTTER.filter((i) => !isVice(i.kind)).length;
+assert(
+  s.debris.filter((d) => ["paper", "can", "ashtray"].includes(d.kind)).length === expectTrash,
+  `the paper, cans and ashtrays are real debris too (${expectTrash} seeded)`
+);
 /* the table-top pieces rest at furniture height, not the floor */
-const highSeeds = s.debris.filter((d) => isVice(d.kind) && d.pos.y > 0.3);
+const highSeeds = s.debris.filter((d) => d.pos.y > 0.3);
 assert(
   highSeeds.length === LOBBY_TABLE_CLUTTER.length,
   `${LOBBY_TABLE_CLUTTER.length} pieces sit up on the table tops`
 );
-const toys = s.debris.filter((d) => !isVice(d.kind));
+const toys = s.debris.filter((d) => d.kind === "plunger" || d.kind === "stick");
 assert(toys.length === LOBBY_TOYS.length, "the toys are seeded too");
 assert(toys.filter((d) => d.kind === "plunger").length === 1, "one plunger");
 assert(toys.filter((d) => d.kind === "stick").length === 2, "two cue sticks");
@@ -149,7 +159,7 @@ assert(
   "both sticks are back on the lobby floor — none made it to the den"
 );
 assert(
-  s.debris.filter((d) => !isVice(d.kind)).length === LOBBY_TOYS.length,
+  s.debris.filter((d) => d.kind === "plunger" || d.kind === "stick").length === LOBBY_TOYS.length,
   "the toy census is intact"
 );
 

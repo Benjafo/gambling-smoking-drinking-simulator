@@ -86,14 +86,31 @@ const TUNING: Record<BotDifficulty, Tuning> = {
    hazard for the run's opening stretch */
 export const BOT_FIZZLE_GRACE_S = 20;
 
+/* barfly christening: a random "ADJECTIVE NAME" pair per bot. Both pools
+   stay ≤9 chars a side so the worst pairing (9+1+9) clears the join()
+   24-char cap and the nameplate squeeze with room to spare */
+const BOT_ADJECTIVES = [
+  "SHAKY", "SALTY", "GRIZZLED", "WOOZY", "SURLY", "LUCKY",
+  "JITTERY", "SMOKY", "THIRSTY", "CRUSTY", "BLEARY", "GRUMPY",
+  "SLICK", "RASPY", "DUSTY", "WOBBLY", "SWEATY", "GREASY",
+  "MOODY", "CRANKY", "FOGGY", "SCRAPPY", "WHEEZY", "DAPPER",
+  "SHIFTY", "GROGGY", "LONESOME", "PICKLED", "SOGGY", "HUSKY",
+  "TIPSY", "ORNERY", "HAGGARD", "JADED", "WIRED", "BITTER",
+  "MUMBLY", "SQUINTY", "CROOKED", "UNLUCKY", "RESTLESS", "GRAVELLY",
+  "SLEEPY", "NERVOUS", "STUBBORN", "BRINY", "FRAYED", "RUMPLED",
+];
 const BOT_NAMES = [
   "MURRAY", "SALAZAR", "DOTTIE", "EARL", "VERN", "PEACHES",
   "GUS", "RHONDA", "CLYDE", "MABEL", "BUZZ", "OPAL",
-  "HAROLD", "CARL", "CONSTANCE", "PEEPY"
+  "HAROLD", "CARL", "CONSTANCE", "PEEPY", "WANDA", "FLOYD",
+  "INEZ", "DEWEY", "BLANCHE", "ROSCOE", "MYRTLE", "OTIS",
+  "EUNICE", "LLOYD", "HAZEL", "MARV", "DOLORES", "WILBUR",
+  "AGNES", "RUFUS", "PEARL", "ELMO", "GLADYS", "HORACE",
+  "LUANN", "SEYMOUR", "BERNICE", "DUANE", "FRAN", "LESTER",
+  "TILLY", "MEL", "IRMA", "WOODROW", "SADIE", "ERNIE",
+  "FAY", "HUBERT", "NORMA", "ROLAND", "BETTE", "CECIL",
+  "MAVIS", "ANGUS", "TRIXIE", "LOTTIE", "HANK", "GERT",
 ];
-const DIFF_TAG: Record<BotDifficulty, string> = {
-  easy: "EZ", medium: "MED", hard: "HARD", autonomous: "AUTO",
-};
 
 type Action = "hit" | "stand" | "double";
 
@@ -122,12 +139,14 @@ export class BotBrain {
   constructor(
     readonly id: string,
     readonly difficulty: BotDifficulty,
-    seed: number,
-    botNum: number
+    seed: number
   ) {
     this.tune = TUNING[difficulty];
     this.rng = new Rng(seed);
-    this.name = BOT_NAMES[(botNum - 1) % BOT_NAMES.length] + "·" + DIFF_TAG[difficulty];
+    this.name =
+      BOT_ADJECTIVES[this.rng.int(BOT_ADJECTIVES.length)] +
+      " " +
+      BOT_NAMES[this.rng.int(BOT_NAMES.length)];
     this.appearance = {
       skin: this.rng.int(SKIN_TONES.length),
       shirt: this.rng.int(SHIRT_COLORS.length),

@@ -6,7 +6,7 @@ import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import { MAX_DEBRIS, type V3 } from "@shared/constants";
 import type { DebrisSnap, PropKind, Quat } from "@shared/types";
 
-const PROP_KINDS: PropKind[] = ["beer", "cigar", "plunger", "stick"];
+const PROP_KINDS: PropKind[] = ["beer", "cigar", "plunger", "stick", "paper", "can", "ashtray"];
 
 /* Paint a whole sub-geometry one color so merged parts can share a single
    vertex-colored material — keeps debris at one draw call per kind. */
@@ -68,6 +68,34 @@ function stickGeometry(): THREE.BufferGeometry {
   ])!;
 }
 
+/* Matches the old buildTrash décor: a crumpled ball, squashed a little. */
+function paperGeometry(): THREE.BufferGeometry {
+  return colored(new THREE.IcosahedronGeometry(0.045, 0).scale(1, 0.7, 1), 0xcfc3a4, 0);
+}
+
+/* Matches makeCanMesh; a crushed can, kinked at the shoulder. */
+function canGeometry(): THREE.BufferGeometry {
+  const alu = 0xb6ad9c;
+  return mergeGeometries([
+    colored(new THREE.CylinderGeometry(0.031, 0.033, 0.05, 12).rotateZ(0.1), alu, -0.016),
+    colored(new THREE.CylinderGeometry(0.0335, 0.0335, 0.022, 12).rotateZ(0.1), 0x7a2417, -0.012),
+    colored(new THREE.CylinderGeometry(0.028, 0.031, 0.026, 12).rotateZ(-0.24), alu, 0.02),
+    colored(new THREE.CylinderGeometry(0.026, 0.028, 0.006, 12).rotateZ(-0.24), 0x847d6e, 0.034),
+  ])!;
+}
+
+/* Matches makeAshtrayMesh; heavy glass, ash and a dead butt baked in.
+   Sits at the bottom of its capsule like the bottle does. */
+function ashtrayGeometry(): THREE.BufferGeometry {
+  const g = mergeGeometries([
+    colored(new THREE.CylinderGeometry(0.055, 0.045, 0.04, 14), 0x2e2417, 0.02),
+    colored(new THREE.CylinderGeometry(0.048, 0.048, 0.01, 14), 0x9a958a, 0.036),
+    colored(new THREE.CylinderGeometry(0.008, 0.008, 0.036, 6).rotateZ(1.35), 0x5a2f14, 0.046),
+  ])!;
+  g.translate(0, -0.05, 0);
+  return g;
+}
+
 interface Tracked {
   kind: PropKind;
   phase: "flying" | "settled";
@@ -85,7 +113,15 @@ const _hotColor = new THREE.Color(1.9, 1.5, 0.9); // >1 brightens: amber glow
 export class DebrisView {
   private meshes: Record<PropKind, THREE.InstancedMesh>;
   /* instanceId -> debris id, per mesh, rebuilt every frame for pick-raycasts */
-  private ids: Record<PropKind, number[]> = { beer: [], cigar: [], plunger: [], stick: [] };
+  private ids: Record<PropKind, number[]> = {
+    beer: [],
+    cigar: [],
+    plunger: [],
+    stick: [],
+    paper: [],
+    can: [],
+    ashtray: [],
+  };
   private tracked = new Map<number, Tracked>();
   private highlighted: number | null = null;
 
@@ -120,6 +156,18 @@ export class DebrisView {
       stick: make(
         stickGeometry(),
         new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.55 })
+      ),
+      paper: make(
+        paperGeometry(),
+        new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, flatShading: true })
+      ),
+      can: make(
+        canGeometry(),
+        new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.35, metalness: 0.6 })
+      ),
+      ashtray: make(
+        ashtrayGeometry(),
+        new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.3 })
       ),
     };
   }

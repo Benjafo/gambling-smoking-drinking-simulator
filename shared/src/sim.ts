@@ -44,6 +44,7 @@ import {
   LITTER_POINTS,
   LITTER_IMPACT_DELAY_MS,
   SCORE_PLAYER_HIT,
+  HIT_METER_LOSS,
   PLAYER_HIT_Y_MIN,
   PLAYER_HIT_Y_MAX,
   PLAYER_HIT_RADIUS,
@@ -301,15 +302,21 @@ export class Simulation {
     return new Simulation(seed);
   }
 
-  /* the waiting room starts furnished: the scattered bottles and butts are
-     settled debris from tick zero (pick them up, fling them), and the toys —
-     the plunger and the cue sticks — lean where they always lean. This is
-     the ONLY source of toys; nothing dispenses or spawns them later. */
+  /* the waiting room starts furnished: the scattered bottles, butts, paper
+     and cans are settled debris from tick zero (pick them up, fling them),
+     and the toys — the plunger and the cue sticks — lean where they always
+     lean. This is the ONLY source of toys and trash; nothing dispenses or
+     spawns them later. */
   private seedLobby(): void {
     for (const s of LOBBY_SCATTER) {
-      if (s.kind === "paper") continue; // paper stays client-side decoration
-      const r = DEBRIS_SHAPE[s.kind].radius;
-      this.seedSettled(s.kind, { x: s.x, y: r + 0.002, z: s.z }, lyingQuat(s.roll));
+      const shape = DEBRIS_SHAPE[s.kind];
+      this.seedSettled(
+        s.kind,
+        { x: s.x, y: s.upright ? shape.halfHeight + shape.radius : shape.radius + 0.002, z: s.z },
+        s.upright
+          ? { x: 0, y: Math.sin(s.roll / 2), z: 0, w: Math.cos(s.roll / 2) }
+          : lyingQuat(s.roll)
+      );
     }
     for (const t of LOBBY_TOYS) {
       const shape = DEBRIS_SHAPE[t.kind];
@@ -570,12 +577,7 @@ export class Simulation {
   private addBot(p: Player, difficulty: BotDifficulty): void {
     if (this.phase !== "lobby" || p.id !== this.leaderId) return;
     const id = "bot" + this.nextBotNum;
-    const brain = new BotBrain(
-      id,
-      difficulty,
-      (this.rng.next() * 0xffffffff) >>> 0,
-      this.nextBotNum
-    );
+    const brain = new BotBrain(id, difficulty, (this.rng.next() * 0xffffffff) >>> 0);
     this.join(id, brain.name, brain.appearance);
     if (!this.players.has(id)) return; // no free stool
     this.nextBotNum++;
@@ -613,6 +615,8 @@ export class Simulation {
     }
     // a rage-quit counts as an elimination for the last-alive check
     this.checkWin();
+    // a walk-out mid-betting can leave a lone player on the clock
+    this.maybeDisarmWindow();
   }
 
   /* ---------------- betting / dealing ---------------- */
@@ -620,6 +624,19 @@ export class Simulation {
     return [...this.players.values()]
       .filter((p) => p.alive && p.committed)
       .sort((a, b) => a.seat - b.seat);
+  }
+
+  /* could ante this round: alive, seated for real, opted in, and solvent */
+  private canAnte(q: Player): boolean {
+    return q.alive && !q.waiting && !q.sittingOut && q.money > 0;
+  }
+
+  /* the betting clock only runs when 2+ of these share the table — a lone
+     player bets at whatever pace the night demands */
+  private eligibleBettors(): number {
+    let n = 0;
+    for (const q of this.players.values()) if (this.canAnte(q)) n++;
+    return n;
   }
 
   private commitBet(p: Player): void {
@@ -648,7 +665,19 @@ export class Simulation {
   private sitOut(p: Player, on: boolean): void {
     if (!p.alive || p.sittingOut === on) return;
     p.sittingOut = on;
-    if (on) this.maybeDeal();
+    if (on) {
+      this.maybeDeal();
+      this.maybeDisarmWindow();
+    }
+    // opting back in does NOT start the clock — only an ante does
+  }
+
+  /* an opt-out or a walk-out can leave one lone would-be bettor on an armed
+     clock with no antes down; a lone player isn't rushed, so disarm it */
+  private maybeDisarmWindow(): void {
+    if (this.phase !== "betting" || !this.bettingDeadline) return;
+    if (this.bettors().length === 0 && this.eligibleBettors() < 2)
+      this.bettingDeadline = 0;
   }
 
   /* deal the moment nobody is left deciding: every alive, seated-for-real
@@ -658,14 +687,16 @@ export class Simulation {
   private maybeDeal(): void {
     if (this.phase !== "betting") return;
     const undecided = [...this.players.values()].some(
-      (q) => q.alive && !q.waiting && !q.committed && !q.sittingOut && q.money > 0
+      (q) => this.canAnte(q) && !q.committed
     );
     if (!undecided && this.bettors().length > 0) this.startDealing();
   }
 
   private openBetting(): void {
     this.phase = "betting";
-    this.bettingDeadline = this.tick + msTicks(BETTING_WINDOW_MS);
+    // solo tables get no clock — nobody to deal around, no rush
+    this.bettingDeadline =
+      this.eligibleBettors() >= 2 ? this.tick + msTicks(BETTING_WINDOW_MS) : 0;
   }
 
   private startDealing(): void {
@@ -1218,10 +1249,11 @@ export class Simulation {
     }
 
     // betting window: when it closes the stragglers are left out of the hand.
-    // With nobody anted there's nothing to deal — re-arm and keep watch.
+    // With nobody anted there's nothing to deal — the table goes idle (no
+    // clock counting to nowhere); the next ante arms a fresh window.
     if (this.phase === "betting" && this.bettingDeadline && this.tick >= this.bettingDeadline) {
       if (this.bettors().length > 0) this.startDealing();
-      else this.bettingDeadline = this.tick + msTicks(BETTING_WINDOW_MS);
+      else this.bettingDeadline = 0;
     }
 
     // AFK turn timeout
@@ -1507,8 +1539,10 @@ export class Simulation {
   }
 
   /* a flung empty that beans another player before touching anything pays
-     the flinger a bonus — during the run. Pre-game lobby hits sting (the
-     event fires, the victim yelps) but pay nothing, like all lobby antics.
+     the flinger a bonus — during the run — and, if the empty is earned
+     (straight off the thrower's own ritual), burns HIT_METER_LOSS off the
+     victim's matching meter. Pre-game lobby hits sting (the event fires,
+     the victim yelps) but pay nothing, like all lobby antics.
      Manual point-vs-capsule math — players have no Rapier colliders, and
      plain arithmetic keeps the sim deterministic. */
   private checkPlayerHit(d: Debris): void {
@@ -1533,6 +1567,16 @@ export class Simulation {
       if (!lobby) {
         flinger.score += SCORE_PLAYER_HIT;
         flinger.stats.directHits++;
+        // only a fresh-from-the-ritual empty carries the heat: settling
+        // launders `earned` away, so scavenged trash just bounces off —
+        // no timer needed. The death sweep in tickMetersAndRituals picks
+        // up a meter this empties.
+        if (d.earned && q.alive && !q.waiting) {
+          if (d.kind === "cigar")
+            q.cigarMeter = Math.max(0, q.cigarMeter - HIT_METER_LOSS);
+          else if (d.kind === "beer")
+            q.beerMeter = Math.max(0, q.beerMeter - HIT_METER_LOSS);
+        }
       }
       this.events.push({
         t: "playerHit",

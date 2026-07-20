@@ -5,3 +5,8 @@ dist/
 
 .vite/*
 client/.vite/*
+
+# desktop shell build products
+desktop/dist-web/
+desktop/release/
+desktop/vendor/
