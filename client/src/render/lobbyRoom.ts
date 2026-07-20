@@ -74,6 +74,21 @@ function canvasTexture(
   return tex;
 }
 
+/* dev-bot difficulty: the lobby panel's readout label IS the state, exactly
+   as the old <select> was — T rewrites it, N reads it back */
+const BOT_DIFFS: BotDifficulty[] = ["easy", "medium", "hard", "autonomous"];
+function botDifficulty(): BotDifficulty {
+  const v = document.getElementById("botDiffLabel")?.dataset.value as BotDifficulty | undefined;
+  return v && BOT_DIFFS.includes(v) ? v : "medium";
+}
+function cycleBotDifficulty(): void {
+  const label = document.getElementById("botDiffLabel");
+  if (!label) return;
+  const next = BOT_DIFFS[(BOT_DIFFS.indexOf(botDifficulty()) + 1) % BOT_DIFFS.length];
+  label.dataset.value = next;
+  label.textContent = next.toUpperCase();
+}
+
 function nameSprite(name: string): THREE.Sprite {
   const tex = canvasTexture(256, 64, (ctx) => {
     ctx.font = "700 32px 'Pixelify Sans',sans-serif";
@@ -82,7 +97,8 @@ function nameSprite(name: string): THREE.Sprite {
     ctx.shadowColor = "rgba(0,0,0,0.9)";
     ctx.shadowBlur = 8;
     ctx.fillStyle = "#ffc832";
-    ctx.fillText(name.toUpperCase().slice(0, 14), 128, 34);
+    // condense rather than chop: two-word bot names outgrow a hard slice
+    ctx.fillText(name.toUpperCase().slice(0, 24), 128, 34, 248);
   });
   const sprite = new THREE.Sprite(
     new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false })
@@ -204,15 +220,20 @@ export class LobbyRoomView {
         if (this.latest?.leaderId === this.myId) this.send({ type: "clearLitter" });
         return;
       }
-      if (e.code === "KeyB") {
-        // dev bots — leader-only; difficulty rides the lobby panel's select
-        if (this.latest?.leaderId === this.myId) {
-          const sel = document.getElementById("botDiff") as HTMLSelectElement | null;
-          this.send({
-            type: "addBot",
-            difficulty: (sel?.value ?? "medium") as BotDifficulty,
-          });
-        }
+      // dev bots — leader-only, keyboard-only (the cursor is locked out
+      // here): N seats one, T steps the difficulty readout, K clears the
+      // table. (N, not B: B is the hold-to-drink key in this room too)
+      if (e.code === "KeyN") {
+        if (this.latest?.leaderId === this.myId)
+          this.send({ type: "addBot", difficulty: botDifficulty() });
+        return;
+      }
+      if (e.code === "KeyT") {
+        if (this.latest?.leaderId === this.myId) cycleBotDifficulty();
+        return;
+      }
+      if (e.code === "KeyK") {
+        if (this.latest?.leaderId === this.myId) this.send({ type: "clearBots" });
         return;
       }
       if (e.code === "Space") {

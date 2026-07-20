@@ -2,7 +2,7 @@
    and emitting intents instead of mutating state. */
 import { BETTING_WINDOW_MS, MIN_BET, SEAT_COUNT, TOLERANCE_MAX, TOLERANCE_PER_USE } from "@shared/constants";
 import { handValue } from "@shared/blackjack";
-import type { BotDifficulty, Intent, PlayerSnap, Snapshot } from "@shared/types";
+import type { Intent, PlayerSnap, Snapshot } from "@shared/types";
 import { chipLabel, chipStyle } from "../chips";
 
 const $ = (id: string): HTMLElement => document.getElementById(id)!;
@@ -90,9 +90,8 @@ export class Hud {
     // leader-only intents: the sim ignores them from anyone else.
     // starting the game has no button — the leader walks to the door (E)
     $("lobbyClearBtn").addEventListener("click", () => this.send({ type: "clearLitter" }));
-    // dev bots: leader-only like the janitor button (the sim enforces it)
-    $("botAddBtn").addEventListener("click", () => this.addBot());
-    $("botClearBtn").addEventListener("click", () => this.send({ type: "clearBots" }));
+    // dev bots have no buttons — the waiting room pointer-locks the cursor,
+    // so N/T/K in render/lobbyRoom.ts are the whole interface
     $("retryBtn").addEventListener("click", () => this.send({ type: "restart" }));
 
     $("dealBtn").addEventListener("click", () => {
@@ -137,13 +136,6 @@ export class Hud {
       if (e.key === "Shift") $("chipRack").classList.remove("shifted");
     });
     addEventListener("blur", () => $("chipRack").classList.remove("shifted"));
-  }
-
-  /* seat a bot at the lobby's selected difficulty — the button and the
-     waiting room's B key both land here */
-  addBot(): void {
-    const difficulty = ($("botDiff") as HTMLSelectElement).value as BotDifficulty;
-    this.send({ type: "addBot", difficulty });
   }
 
   /* keys stay dead while a full-screen UI owns the keyboard (title, menu,
@@ -595,10 +587,10 @@ export class Hud {
     const clearBtn = $("lobbyClearBtn") as HTMLButtonElement;
     clearBtn.style.display = amLeader ? "" : "none";
     clearBtn.disabled = !hasLitter;
-    // dev bots: leader-only row; ADD greys out when the stools run out
+    // dev bots: leader-only readout; hints dim when the key would do nothing
     $("botRow").style.display = amLeader ? "" : "none";
-    ($("botAddBtn") as HTMLButtonElement).disabled = snap.players.length >= SEAT_COUNT;
-    ($("botClearBtn") as HTMLButtonElement).disabled = !snap.players.some((p) => p.bot);
+    $("botAddHint").classList.toggle("dim", snap.players.length >= SEAT_COUNT);
+    $("botKickHint").classList.toggle("dim", !snap.players.some((p) => p.bot));
     $("lobbyHint").textContent = counting
       ? "Last call. Finish your business — the table seats you when the count hits zero."
       : amLeader
