@@ -613,6 +613,8 @@ export class Simulation {
     }
     // a rage-quit counts as an elimination for the last-alive check
     this.checkWin();
+    // a walk-out mid-betting can leave a lone player on the clock
+    this.maybeDisarmWindow();
   }
 
   /* ---------------- betting / dealing ---------------- */
@@ -620,6 +622,19 @@ export class Simulation {
     return [...this.players.values()]
       .filter((p) => p.alive && p.committed)
       .sort((a, b) => a.seat - b.seat);
+  }
+
+  /* could ante this round: alive, seated for real, opted in, and solvent */
+  private canAnte(q: Player): boolean {
+    return q.alive && !q.waiting && !q.sittingOut && q.money > 0;
+  }
+
+  /* the betting clock only runs when 2+ of these share the table — a lone
+     player bets at whatever pace the night demands */
+  private eligibleBettors(): number {
+    let n = 0;
+    for (const q of this.players.values()) if (this.canAnte(q)) n++;
+    return n;
   }
 
   private commitBet(p: Player): void {
@@ -648,7 +663,19 @@ export class Simulation {
   private sitOut(p: Player, on: boolean): void {
     if (!p.alive || p.sittingOut === on) return;
     p.sittingOut = on;
-    if (on) this.maybeDeal();
+    if (on) {
+      this.maybeDeal();
+      this.maybeDisarmWindow();
+    }
+    // opting back in does NOT start the clock — only an ante does
+  }
+
+  /* an opt-out or a walk-out can leave one lone would-be bettor on an armed
+     clock with no antes down; a lone player isn't rushed, so disarm it */
+  private maybeDisarmWindow(): void {
+    if (this.phase !== "betting" || !this.bettingDeadline) return;
+    if (this.bettors().length === 0 && this.eligibleBettors() < 2)
+      this.bettingDeadline = 0;
   }
 
   /* deal the moment nobody is left deciding: every alive, seated-for-real
@@ -658,14 +685,16 @@ export class Simulation {
   private maybeDeal(): void {
     if (this.phase !== "betting") return;
     const undecided = [...this.players.values()].some(
-      (q) => q.alive && !q.waiting && !q.committed && !q.sittingOut && q.money > 0
+      (q) => this.canAnte(q) && !q.committed
     );
     if (!undecided && this.bettors().length > 0) this.startDealing();
   }
 
   private openBetting(): void {
     this.phase = "betting";
-    this.bettingDeadline = this.tick + msTicks(BETTING_WINDOW_MS);
+    // solo tables get no clock — nobody to deal around, no rush
+    this.bettingDeadline =
+      this.eligibleBettors() >= 2 ? this.tick + msTicks(BETTING_WINDOW_MS) : 0;
   }
 
   private startDealing(): void {
@@ -1218,10 +1247,11 @@ export class Simulation {
     }
 
     // betting window: when it closes the stragglers are left out of the hand.
-    // With nobody anted there's nothing to deal — re-arm and keep watch.
+    // With nobody anted there's nothing to deal — the table goes idle (no
+    // clock counting to nowhere); the next ante arms a fresh window.
     if (this.phase === "betting" && this.bettingDeadline && this.tick >= this.bettingDeadline) {
       if (this.bettors().length > 0) this.startDealing();
-      else this.bettingDeadline = this.tick + msTicks(BETTING_WINDOW_MS);
+      else this.bettingDeadline = 0;
     }
 
     // AFK turn timeout

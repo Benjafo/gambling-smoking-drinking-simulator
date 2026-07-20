@@ -306,12 +306,13 @@ export class Hud {
       }
     } else this.startSecs = -1;
 
-    // betting countdown: the sim opens a fresh window the moment the last
-    // hand settles out (and re-arms it while nobody antes), so this banner IS
-    // the "next round starts in" clock — shown until my bet is committed
+    // betting countdown: the sim arms the window only when 2+ players share
+    // the table and lets it go idle if nobody antes (bettingEndsIn null in
+    // both cases), so this banner IS the "next round starts in" clock —
+    // shown until my bet is committed
     const betsOpen =
       snap.phase === "betting" && snap.bettingEndsIn !== null &&
-      me.alive && !me.waiting && !me.committed && !me.sittingOut;
+      me.alive && !me.waiting && !me.committed && !me.sittingOut && me.money > 0;
     $("betsBanner").classList.toggle("show", betsOpen);
     if (betsOpen) {
       const left = snap.bettingEndsIn!;
