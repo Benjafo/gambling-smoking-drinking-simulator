@@ -1,0 +1,11 @@
+"DepotBuild"
+{
+	"DepotID" "YOUR_APP_ID_PLUS_1"
+	"FileMapping"
+	{
+		// unzip the CI artifact joint-liability-win-unpacked into content/windows/
+		"LocalPath" "windows\*"
+		"DepotPath" "."
+		"recursive" "1"
+	}
+}

@@ -8,6 +8,7 @@
    The in-sim "lobby" phase (players seated, leader starts) is unchanged —
    when the walkable 3D lobby lands later it replaces that phase's rendering
    and adds movement intents; this container layer stays as-is. */
+import { createServer } from "node:http";
 import { WebSocketServer, WebSocket } from "ws";
 import { Simulation } from "../../shared/src/sim";
 import {
@@ -120,7 +121,20 @@ export function startServer(port: number): Server {
     broadcastLobbies();
   };
 
-  const wss = new WebSocketServer({ port });
+  /* the socket rides an http server so ops can probe it: /healthz answers
+     with live counts (docker healthcheck, uptime monitors), everything else
+     404s — game traffic is websocket-only */
+  const http = createServer((req, res) => {
+    if (req.url === "/healthz") {
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify({ ok: true, lobbies: lobbies.size, connections: conns.size }));
+      return;
+    }
+    res.writeHead(404);
+    res.end();
+  });
+  const wss = new WebSocketServer({ server: http });
+  http.listen(port);
 
   wss.on("connection", (ws, req) => {
     // wire-compat gate: a client built against another protocol gets a
@@ -273,6 +287,7 @@ export function startServer(port: number): Server {
       clearInterval(listBeat);
       for (const ws of conns.keys()) ws.close();
       wss.close();
+      http.close();
     },
   };
 }

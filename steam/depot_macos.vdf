@@ -1,0 +1,12 @@
+"DepotBuild"
+{
+	"DepotID" "YOUR_APP_ID_PLUS_2"
+	"FileMapping"
+	{
+		// unzip the CI artifact joint-liability-mac-arm64 into content/macos/
+		// (keep "Joint Liability.app" as the top-level entry)
+		"LocalPath" "macos\*"
+		"DepotPath" "."
+		"recursive" "1"
+	}
+}
