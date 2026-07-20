@@ -1,12 +1,15 @@
 /* Direct-hit rules: a flung empty that beans another player before touching
    anything pays the flinger SCORE_PLAYER_HIT exactly once, on top of the
-   normal litter payout; misses and self-flings pay nothing extra.
+   normal litter payout; misses and self-flings pay nothing extra. An EARNED
+   empty (fresh off the thrower's ritual) also burns HIT_METER_LOSS off the
+   victim's matching meter; scavenged floor trash hits score but don't burn.
    Deterministic under the fixed seed.
    Run with: npm run test:sim */
 import { Simulation } from "../src/sim";
 import {
   SCORE_PLAYER_HIT,
   LITTER_POINTS,
+  HIT_METER_LOSS,
   seatEye,
   seatPosition,
 } from "../src/constants";
@@ -43,6 +46,28 @@ for (let i = 0; i < 60 * 11 && sim.snapshot().phase === "lobby"; i++) sim.step()
 
 function me(): Snapshot["players"][number] {
   return snap().players.find((q) => q.id === FLINGER)!;
+}
+
+function victim(): Snapshot["players"][number] {
+  return snap().players.find((q) => q.id === VICTIM)!;
+}
+
+/* run the flight only — stop the moment the hit registers, so meter reads
+   aren't polluted by long settle-time passive drain */
+function stepUntilHit(prevHits: number): void {
+  for (let i = 0; i < 60 * 3 && hits.length === prevHits; i++) {
+    sim.step();
+    snap(); // drains the event queue into `hits`
+  }
+  assert(hits.length === prevHits + 1, "the fling connected mid-flight");
+}
+
+/* both meters drain passively (with independent drift) while the empty
+   flies; the beer meter alone additionally eats the hit, so the drop
+   DIFFERENCE isolates the hit's effect to within drift slop */
+function hitBurn(before: { cigar: number; beer: number }): number {
+  const v = victim();
+  return before.beer - v.beerMeter - (before.cigar - v.cigarMeter);
 }
 
 const mySeat = me().seat;
@@ -88,12 +113,20 @@ function aimAtVictim(speed: number): { x: number; y: number; z: number } {
   return { x: (d.x / len) * speed, y: (d.y / len) * speed, z: (d.z / len) * speed };
 }
 
-/* ---- direct hit: bonus fires once, litter still pays independently ---- */
+/* ---- direct hit: bonus fires once, litter still pays independently,
+   and the earned empty burns the victim's matching (beer) meter ---- */
 {
   const held = ritualUntilHeld();
   const scoreBefore = me().score;
   const littersBefore = litters.length;
+  const v = victim();
+  const metersBefore = { cigar: v.cigarMeter, beer: v.beerMeter };
   fling(held.id, aimAtVictim(8));
+  stepUntilHit(0);
+  assert(
+    Math.abs(hitBurn(metersBefore) - HIT_METER_LOSS) < 1,
+    "an earned hit burns HIT_METER_LOSS off the victim's beer meter"
+  );
   stepUntilAllSettled();
 
   assert(hits.length === 1, "exactly one playerHit event for a direct hit");
@@ -107,6 +140,34 @@ function aimAtVictim(speed: number): { x: number; y: number; z: number } {
   assert(
     me().score === scoreBefore + SCORE_PLAYER_HIT + LITTER_POINTS,
     "flinger scored hit bonus + litter points"
+  );
+}
+
+/* ---- scavenged re-fling: the hit still scores, but settling laundered
+   `earned` away, so the victim's meter is untouched ---- */
+{
+  // the beer empty from the last block is on the floor — latest-spawned wins
+  const trash = snap()
+    .debris.filter((d) => d.kind === "beer" && d.phase === "settled")
+    .sort((a, b) => b.id - a.id)[0];
+  assert(trash !== undefined, "the settled beer empty is on the floor");
+  sim.applyIntent(FLINGER, { type: "pickup", itemId: trash.id });
+  const held = me().held;
+  assert(held !== null, "scavenged the settled empty off the floor");
+
+  const scoreBefore = me().score;
+  const v = victim();
+  const metersBefore = { cigar: v.cigarMeter, beer: v.beerMeter };
+  fling(held!.id, aimAtVictim(8));
+  stepUntilHit(1);
+  assert(
+    Math.abs(hitBurn(metersBefore)) < 1,
+    "a scavenged hit burns nothing off the victim's meters"
+  );
+  stepUntilAllSettled();
+  assert(
+    me().score === scoreBefore + SCORE_PLAYER_HIT,
+    "a scavenged hit still pays the hit bonus, but no litter points"
   );
 }
 
