@@ -58,6 +58,13 @@ export class MenuControl {
       localStorage.getItem("degen-name") ??
       "";
 
+    // in the desktop shell the title screen owes the player a real exit
+    if (window.desktop) {
+      const quitBtn = $("titleQuitBtn");
+      quitBtn.style.display = "";
+      quitBtn.addEventListener("click", () => window.desktop!.quit());
+    }
+
     $("titlePlayBtn").addEventListener("click", () => this.showBrowse());
     $("titleSoloBtn").addEventListener("click", () => {
       if (this.busy) return;

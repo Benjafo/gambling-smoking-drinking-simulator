@@ -36,6 +36,9 @@ export interface Session {
 export function resolveServerUrl(): string {
   const raw = new URLSearchParams(location.search).get("server") ?? "auto";
   if (raw === "" || raw === "auto") {
+    // desktop shell: an app:// page has no meaningful host to derive the
+    // server from, so the shell hands us the house address instead
+    if (window.desktop?.serverUrl) return window.desktop.serverUrl;
     if (location.protocol === "https:") return `wss://${location.host}/ws`;
     return `ws://${location.hostname}:${WS_PORT_DEFAULT}`;
   }

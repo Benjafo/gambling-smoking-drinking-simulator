@@ -1,0 +1,40 @@
+{
+  "name": "@degen/desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Desktop shell: wraps the built client for Steam distribution",
+  "author": "Ben Foley",
+  "type": "module",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "smoke": "electron . --smoke",
+    "pack": "node copy-web.mjs && electron-builder --dir"
+  },
+  "devDependencies": {
+    "electron": "^34.0.0",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "com.benjafo.jointliability",
+    "productName": "Joint Liability",
+    "electronVersion": "34.5.8",
+    "npmRebuild": false,
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "main.js",
+      "preload.cjs"
+    ],
+    "extraResources": [
+      {
+        "from": "dist-web",
+        "to": "web"
+      }
+    ],
+    "mac": {
+      "category": "public.app-category.games"
+    }
+  }
+}

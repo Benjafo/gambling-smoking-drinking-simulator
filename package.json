@@ -4,13 +4,17 @@
   "workspaces": [
     "shared",
     "client",
-    "server"
+    "server",
+    "desktop"
   ],
   "scripts": {
     "dev": "npm --workspace client run dev",
     "build": "npm --workspace client run build",
     "typecheck": "npm --workspace client run typecheck && npm --workspace server run typecheck",
     "server": "npm --workspace server run start",
+    "desktop": "npm --workspace client run build && npm --workspace desktop run start",
+    "desktop:smoke": "npm --workspace client run build && npm --workspace desktop run smoke",
+    "desktop:pack": "npm --workspace client run build && npm --workspace desktop run pack",
     "test:sim": "npm --workspace shared run test",
     "test:server": "npm --workspace server run test"
   }
