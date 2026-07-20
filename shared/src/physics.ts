@@ -28,6 +28,11 @@ export const DEBRIS_SHAPE: Record<
   /* the toys: a rubber cup bounces, a wooden cue mostly doesn't */
   plunger: { halfHeight: 0.175, radius: 0.07, density: 250, restitution: 0.45 },
   stick: { halfHeight: 0.43, radius: 0.018, density: 500, restitution: 0.25 },
+  /* the trash: paper barely has mass and flies like an apology, a crushed
+     can skitters, the glass ashtray lands like a verdict */
+  paper: { halfHeight: 0.002, radius: 0.033, density: 30, restitution: 0.3 },
+  can: { halfHeight: 0.022, radius: 0.032, density: 120, restitution: 0.5 },
+  ashtray: { halfHeight: 0.005, radius: 0.045, density: 850, restitution: 0.08 },
 };
 
 /* capsules have no rolling resistance and would roll forever; damping
