@@ -309,7 +309,6 @@ export class LobbyRoomView {
     const WAIN_H = 0.85;
     const walls: { w: number; x: number; z: number; ry: number }[] = [
       { w: halfW * 2, x: 0, z: -halfD, ry: 0 },
-      { w: halfW * 2, x: 0, z: halfD, ry: Math.PI },
       { w: halfD * 2, x: -halfW, z: 0, ry: Math.PI / 2 },
       { w: halfD * 2, x: halfW, z: 0, ry: -Math.PI / 2 },
     ];
@@ -327,6 +326,35 @@ export class LobbyRoomView {
       base.rotation.y = s.ry;
       base.translateZ(0.02);
       this.scene.add(wall, wain, base);
+    }
+    // the +Z wall is built in pieces around a REAL doorway opening — the
+    // way out is a hole in the drywall, not paint on it. The door build
+    // below hangs the door open inside the recess.
+    const DOOR_W = 0.95;
+    const DOOR_H = 2.2;
+    const doorLx = LOBBY_DOOR.x - DOOR_W / 2;
+    const doorRx = LOBBY_DOOR.x + DOOR_W / 2;
+    const zWallPiece = (w: number, cx: number, cy: number, h: number): void => {
+      const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), plaster);
+      m.position.set(cx, cy, halfD);
+      m.rotation.y = Math.PI;
+      m.receiveShadow = true;
+      this.scene.add(m);
+    };
+    zWallPiece(doorLx + halfW, (doorLx - halfW) / 2, height / 2, height);
+    zWallPiece(halfW - doorRx, (doorRx + halfW) / 2, height / 2, height);
+    zWallPiece(DOOR_W, LOBBY_DOOR.x, DOOR_H + (height - DOOR_H) / 2, height - DOOR_H);
+    for (const [cx, w] of [
+      [(doorLx - halfW) / 2, doorLx + halfW],
+      [(doorRx + halfW) / 2, halfW - doorRx],
+    ] as const) {
+      const wain = new THREE.Mesh(new THREE.PlaneGeometry(w, WAIN_H), wainscotMat);
+      wain.position.set(cx, WAIN_H / 2, halfD - 0.012);
+      wain.rotation.y = Math.PI;
+      const base = new THREE.Mesh(new THREE.PlaneGeometry(w, 0.09), baseboardMat);
+      base.position.set(cx, 0.045, halfD - 0.02);
+      base.rotation.y = Math.PI;
+      this.scene.add(wain, base);
     }
 
     /* light: one honest bulb (it flickers), one steadier mate, and whatever
@@ -363,22 +391,35 @@ export class LobbyRoomView {
     const frameMat = new THREE.MeshStandardMaterial({ color: 0x0f0b06, roughness: 0.8 });
     // painted, not wood-grain: the only green surface in a room of plaster
     // and paneling, so the way out reads from anywhere
-    // the dark of the den behind the doorway, with a warm sliver of light
-    // leaking along the open edge — the crack says "there's a room through
-    // here", the sign above says which one
-    const voidPlane = new THREE.Mesh(
-      new THREE.PlaneGeometry(0.95, 2.1),
-      new THREE.MeshBasicMaterial({ color: 0x020402, side: THREE.DoubleSide })
-    );
-    voidPlane.position.set(doorX, 1.05, halfD - 0.01);
-    const leak = new THREE.Mesh(
-      new THREE.PlaneGeometry(0.11, 2.02),
-      new THREE.MeshBasicMaterial({ color: 0x8a5a20, side: THREE.DoubleSide })
-    );
-    leak.position.set(doorX - 0.42, 1.05, halfD - 0.015);
-    this.scene.add(voidPlane, leak);
-    // the door itself hangs on the right jamb and stands a touch ajar,
-    // swung OUT toward the den — knob-side gap facing the room
+    // pitch black beyond the (real) opening in the wall — the player never
+    // sees what's through the door. Basic material so no light, room-side or
+    // otherwise, can ever shade the void.
+    const RECESS_D = 0.7;
+    const recessMat = new THREE.MeshBasicMaterial({ color: 0x000000 });
+    const recess = new THREE.Group();
+    const rPiece = (
+      w: number,
+      h: number,
+      px: number,
+      py: number,
+      pz: number,
+      ry: number,
+      rx = 0
+    ): void => {
+      const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), recessMat);
+      m.position.set(px, py, pz);
+      m.rotation.set(rx, ry, 0);
+      recess.add(m);
+    };
+    const RD2 = halfD + RECESS_D / 2;
+    rPiece(0.95, 2.2, doorX, 1.1, halfD + RECESS_D, Math.PI); // back
+    rPiece(RECESS_D, 2.2, doorX - 0.475, 1.1, RD2, Math.PI / 2); // left cheek
+    rPiece(RECESS_D, 2.2, doorX + 0.475, 1.1, RD2, -Math.PI / 2); // right cheek
+    rPiece(0.95, RECESS_D, doorX, 2.2, RD2, 0, Math.PI / 2); // ceiling
+    rPiece(0.95, RECESS_D, doorX, 0.001, RD2, 0, -Math.PI / 2); // floor
+    this.scene.add(recess);
+    // the door itself hangs on the right jamb, standing properly OPEN —
+    // swung out into the dark, panels facing the room at an angle
     const doorGroup = new THREE.Group();
     const door = new THREE.Mesh(
       new THREE.BoxGeometry(0.95, 2.1, 0.06),
@@ -406,8 +447,8 @@ export class LobbyRoomView {
     const kick = new THREE.Mesh(new THREE.BoxGeometry(0.86, 0.2, 0.02), brassDoorMat);
     kick.position.set(-0.475, 0.14, -0.04);
     doorGroup.add(knob, kick);
-    doorGroup.position.set(doorX + 0.475, 0, halfD - 0.02); // hinge at the right jamb
-    doorGroup.rotation.y = 0.14; // cracked open, outward
+    doorGroup.position.set(doorX + 0.475, 0, halfD - 0.01); // hinge at the right jamb
+    doorGroup.rotation.y = 0.7; // standing open into the hallway
     this.scene.add(doorGroup);
     // a full frame, not just a lintel — jambs make it a doorway, not wallpaper
     const lintel = new THREE.Mesh(new THREE.BoxGeometry(1.19, 0.1, 0.12), frameMat);
