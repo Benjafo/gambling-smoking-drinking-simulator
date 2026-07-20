@@ -570,12 +570,7 @@ export class Simulation {
   private addBot(p: Player, difficulty: BotDifficulty): void {
     if (this.phase !== "lobby" || p.id !== this.leaderId) return;
     const id = "bot" + this.nextBotNum;
-    const brain = new BotBrain(
-      id,
-      difficulty,
-      (this.rng.next() * 0xffffffff) >>> 0,
-      this.nextBotNum
-    );
+    const brain = new BotBrain(id, difficulty, (this.rng.next() * 0xffffffff) >>> 0);
     this.join(id, brain.name, brain.appearance);
     if (!this.players.has(id)) return; // no free stool
     this.nextBotNum++;

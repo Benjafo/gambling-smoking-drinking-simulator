@@ -37,8 +37,8 @@ const [HARD, AUTO] = [...sim.bots.keys()];
   assert(bots.length === 2, "snapshot flags bots");
   assert(!snap.players.find((p) => p.id === ME)!.bot, "the human is not flagged");
   assert(
-    bots.some((p) => p.name.endsWith("HARD")) && bots.some((p) => p.name.endsWith("AUTO")),
-    "bot names carry their difficulty tag"
+    bots.every((p) => /^[A-Z]+ [A-Z]+$/.test(p.name)),
+    "bot names are an ADJECTIVE NAME pair"
   );
 }
 

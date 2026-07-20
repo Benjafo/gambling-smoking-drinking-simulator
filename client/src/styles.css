@@ -328,15 +328,10 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--open);outline-o
 #lobbyClearBtn{font-size:15px;padding:9px 20px}
 #lobbyClearBtn:disabled{opacity:.4;cursor:not-allowed;transform:none}
 /* dev bots: the leader's test-opponent rack */
-.bot-row{display:flex;align-items:stretch;gap:10px}
-.bot-row .big-btn{font-size:15px;padding:9px 20px}
-.bot-row .big-btn:disabled{opacity:.4;cursor:not-allowed;transform:none}
-#botDiff{
-  background:var(--night-2);color:var(--paper);border:2px solid var(--ink);
-  border-radius:0;box-shadow:inset 0 0 0 1px var(--bulb-deep);
-  font-family:var(--crt);font-size:18px;letter-spacing:.06em;padding:6px 10px;
-}
-#botDiff:focus{outline:2px solid var(--open);outline-offset:2px}
+/* dev-bot readout: keyboard hints, not widgets — the difficulty value is
+   the one bright word so a T press visibly lands */
+.bot-row #botDiffLabel{color:var(--paper);font-weight:700}
+.bot-row .dim{opacity:.4}
 .lobby-controls{
   display:flex;flex-direction:column;align-items:flex-start;gap:7px;
   font-family:var(--tiny);font-size:11px;letter-spacing:.14em;color:var(--open);
