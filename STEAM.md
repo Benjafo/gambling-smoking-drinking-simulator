@@ -58,8 +58,10 @@ SteamPipe kit, store-page kit, healthcheck all staged; see runbook below)
       2026-07-20: persona on macOS + Windows, shift-tab overlay renders on
       Windows. Cosmetic note: emoji personas render as fallback glyphs
       (pixel fonts are latin-only).
-- [ ] **App icon** — proper `.icns`/`.ico` for the shell (currently default
-      Electron icon); overlaps with store art below.
+- [x] **App icon** — JL-monogram sign icon generated (steam/art/icon.html →
+      icon-1024) and wired into `desktop/build/` (icon.png + icon.ico);
+      electron-builder converts per-platform. Ships with the next pack/CI
+      build.
 
 ## Steam process (longest lead times — start early)
 
@@ -74,9 +76,10 @@ SteamPipe kit, store-page kit, healthcheck all staged; see runbook below)
       enforce; acceptable for an indie launch, revisit only if merch/serious
       brand plans emerge). Discoverability note: web searches return legal
       content, so store tags + "blackjack"/"party game" keywords matter.
-- [ ] **Store page assets** — copy, description, feature bullets DRAFTED in
-      `steam/STORE_PAGE.md` with exact art-size checklist + shot list.
-      Remaining: the art itself and 5+ screenshots (capture guide in file).
+- [ ] **Store page assets** — copy + ALL capsule/library/icon art DONE
+      2026-07-20 (`steam/art/out/`, regenerable via the scripts in
+      `steam/art/`). Remaining: 5+ screenshots (F12 session, shot list in
+      STORE_PAGE.md; backdrop-b/c count for two) and optional trailer.
 - [ ] **Content questionnaire** — answers DRAFTED in `steam/STORE_PAGE.md`
       (mature-content description + which boxes). Remaining: paste on
       app-ID day.

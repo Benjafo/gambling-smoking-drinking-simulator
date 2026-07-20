@@ -72,25 +72,31 @@ macOS — Minimum: macOS 12 · Apple Silicon · 4 GB RAM · 500 MB disk.
 
 ## Art checklist (make in one batch — same key art, many crops)
 
+All generated 2026-07-20 into `steam/art/out/` from three masters
+(backdrop-a + wordmark-glow + icon-1024; regenerate any time with
+capture-art.mjs / capture-backdrop.mjs / compose.mjs — no design tools,
+no AI-generated imagery):
+
 Store:
-- [ ] Header capsule 460×215
-- [ ] Small capsule 231×87
-- [ ] Main capsule 616×353
-- [ ] Vertical capsule 374×448
-- [ ] Screenshots: 5+ at 1920×1080 (see shot list below)
+- [x] Header capsule 460×215 — header_capsule_460x215.png
+- [x] Small capsule 231×87 — small_capsule_231x87.png
+- [x] Main capsule 616×353 — main_capsule_616x353.png
+- [x] Vertical capsule 374×448 — vertical_capsule_374x448.png
+- [ ] Screenshots: 5+ at 1920×1080 (shot list below; backdrop-b/c are
+      usable as two of them)
 - [ ] Trailer (strongly recommended, not strictly required)
 
 Library:
-- [ ] Library capsule 600×900
-- [ ] Library hero 3840×1240
-- [ ] Library logo 1280×720 (transparent PNG)
+- [x] Library capsule 600×900 — library_capsule_600x900.png
+- [x] Library hero 3840×1240 — library_hero_3840x1240.png (art only;
+      Steam overlays the logo)
+- [x] Library logo 1280×720 — library_logo_1280x720.png (transparent)
 
 Icons:
-- [ ] Community icon 184×184 (JPG)
-- [ ] Client icon (multi-size .ico)
-- [ ] App icons for the build itself: drop `icon.icns` + `icon.ico` into
-      `desktop/build/` — electron-builder picks them up by convention,
-      no config change needed.
+- [x] Community icon 184×184 — community_icon_184.jpg
+- [x] Client icon — icon.ico (256/64/48/32/16)
+- [x] App icon wired into the build — desktop/build/icon.png + icon.ico
+      (electron-builder converts per-platform automatically)
 
 
 Shot list — launch the desktop build with `--shots` (16:9-locked window)
