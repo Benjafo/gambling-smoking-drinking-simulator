@@ -301,15 +301,21 @@ export class Simulation {
     return new Simulation(seed);
   }
 
-  /* the waiting room starts furnished: the scattered bottles and butts are
-     settled debris from tick zero (pick them up, fling them), and the toys —
-     the plunger and the cue sticks — lean where they always lean. This is
-     the ONLY source of toys; nothing dispenses or spawns them later. */
+  /* the waiting room starts furnished: the scattered bottles, butts, paper
+     and cans are settled debris from tick zero (pick them up, fling them),
+     and the toys — the plunger and the cue sticks — lean where they always
+     lean. This is the ONLY source of toys and trash; nothing dispenses or
+     spawns them later. */
   private seedLobby(): void {
     for (const s of LOBBY_SCATTER) {
-      if (s.kind === "paper") continue; // paper stays client-side decoration
-      const r = DEBRIS_SHAPE[s.kind].radius;
-      this.seedSettled(s.kind, { x: s.x, y: r + 0.002, z: s.z }, lyingQuat(s.roll));
+      const shape = DEBRIS_SHAPE[s.kind];
+      this.seedSettled(
+        s.kind,
+        { x: s.x, y: s.upright ? shape.halfHeight + shape.radius : shape.radius + 0.002, z: s.z },
+        s.upright
+          ? { x: 0, y: Math.sin(s.roll / 2), z: 0, w: Math.cos(s.roll / 2) }
+          : lyingQuat(s.roll)
+      );
     }
     for (const t of LOBBY_TOYS) {
       const shape = DEBRIS_SHAPE[t.kind];

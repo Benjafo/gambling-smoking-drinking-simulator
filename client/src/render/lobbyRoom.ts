@@ -24,7 +24,6 @@ import {
   LOBBY_OBSTACLES,
   LOBBY_REACH,
   LOBBY_ROOM,
-  LOBBY_SCATTER,
   stepLobbyMove,
   type LobbyMotion,
 } from "@shared/lobbyRoom";
@@ -191,7 +190,6 @@ export class LobbyRoomView {
     this.buildRoom();
     this.buildFurniture();
     this.buildCloset();
-    this.buildTrash();
     this.debris = new DebrisView(this.scene);
     this.held = new HeldItemControl(this.scene, this.camera, send);
     this.smoke = new SmokeSystem(this.scene);
@@ -659,12 +657,9 @@ export class LobbyRoomView {
       leg.position.set(lx, 0.19, lz);
       coffee.add(leg);
     }
-    /* the bottles and butts that used to be baked in here are REAL now —
-       seeded via LOBBY_TABLE_CLUTTER so they can be grabbed and flung;
-       only the ashtray stays furniture */
-    const tray = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.06, 0.03, 14), darkMat);
-    tray.position.set(0.33, 0.44, -0.08);
-    coffee.add(tray);
+    /* the bottles, butts AND the ashtray that used to be baked in here are
+       REAL now — seeded via LOBBY_TABLE_CLUTTER so they can be grabbed and
+       flung; nothing on this table is furniture */
     // a dead hand of cards, face up, nobody won
     for (let i = 0; i < 5; i++) {
       const card = new THREE.Mesh(
@@ -860,26 +855,6 @@ export class LobbyRoomView {
     const ashBowl = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.07, 0.06, 12), darkMat);
     ashBowl.position.set(0.62, 0.76, -2.9);
     this.scene.add(ashPole, ashBowl);
-  }
-
-  /* the floor is part of the décor — but only the paper is décor now. The
-     scattered bottles and butts (and the plunger and cue sticks) are real
-     debris the sim seeds from the same LOBBY_SCATTER list, arriving through
-     snapshots like any flung empty, so they can be picked up and thrown. */
-  private buildTrash(): void {
-    const paperMat = new THREE.MeshStandardMaterial({
-      color: 0xcfc3a4,
-      roughness: 0.95,
-      flatShading: true,
-    });
-    for (const s of LOBBY_SCATTER) {
-      if (s.kind !== "paper") continue;
-      const p = new THREE.Mesh(new THREE.IcosahedronGeometry(0.045, 0), paperMat);
-      p.scale.y = 0.7;
-      p.position.set(s.x, 0.03, s.z);
-      p.rotation.y = s.roll;
-      this.scene.add(p);
-    }
   }
 
   /* ---------------- the closet (LOBBY_CLOSET): walk in, press E ----------------

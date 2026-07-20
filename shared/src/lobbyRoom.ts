@@ -91,20 +91,22 @@ export const CLOSET_RADIUS = 1.15;
 export const LOBBY_REACH = 2.2;
 
 /* the floor's pre-strewn filth, scattered deterministically (the same dump
-   every visit), kept off the spawn clearing and out of the furniture. The
-   bottles and butts are REAL: the sim seeds them as settled debris, so they
-   can be picked up and flung like anything else — but they came with the
-   room, so the janitor's clear-litter never touches them (only litter the
-   players spawned gets swept). Paper stays client-only decoration. The
-   generator mirrors the client's old buildTrash() LCG so the room looks
-   exactly like it always did. */
-export type LobbyScatterKind = ViceKind | "paper";
+   every visit), kept off the spawn clearing and out of the furniture.
+   ALL of it is REAL — bottles, butts, paper, cans, the fallen ashtray:
+   the sim seeds every entry as settled debris, so anything on this floor
+   can be picked up and flung — but it came with the room, so the janitor's
+   clear-litter never touches it (only litter the players spawned gets
+   swept). The generator mirrors the client's old buildTrash() LCG so the
+   room looks exactly like it always did. */
+export type LobbyScatterKind = ViceKind | "paper" | "can" | "ashtray";
 export interface LobbyScatterItem {
   kind: LobbyScatterKind;
   x: number;
   z: number;
-  /* the lie's heading — how far it rolled before it stopped */
+  /* upright: spun by `roll` where it stands; otherwise the lie's heading —
+     how far it rolled before it stopped */
   roll: number;
+  upright?: boolean;
 }
 export const LOBBY_SCATTER: LobbyScatterItem[] = (() => {
   let s = 0xdeadbeef >>> 0;
@@ -116,13 +118,25 @@ export const LOBBY_SCATTER: LobbyScatterItem[] = (() => {
     if (Math.hypot(x, z) < 1.15) continue; // keep the spawn clearing walkable-looking
     if (LOBBY_OBSTACLES.some((o) => Math.hypot(x - o.x, z - o.z) < o.r + 0.15)) continue;
     const k = rnd();
+    const kind = k < 0.4 ? "beer" : k < 0.7 ? "cigar" : "paper";
     items.push({
-      kind: k < 0.4 ? "beer" : k < 0.7 ? "cigar" : "paper",
+      kind,
       x,
       z,
       roll: rnd() * Math.PI * 2,
+      // a crumpled ball has no lie — it sits where it landed, spun a little
+      upright: kind === "paper" || undefined,
     });
   }
+  /* hand-placed extras the LCG never dealt: crushed cans kicked toward the
+     edges, and the ashtray somebody knocked off the standing pole */
+  items.push(
+    { kind: "can", x: 1.6, z: -2.1, roll: 2.4 },
+    { kind: "can", x: -0.9, z: 1.9, roll: 0.7 },
+    { kind: "can", x: 2.4, z: -0.7, roll: 4.9 },
+    { kind: "can", x: -3.1, z: -0.4, roll: 1.3 },
+    { kind: "ashtray", x: 1.05, z: -2.65, roll: 0.9, upright: true }
+  );
   return items;
 })();
 
@@ -143,13 +157,13 @@ export const LOBBY_TOYS: LobbyToy[] = [
   { kind: "stick", x: -3.68, z: -1.5, yaw: -0.35 },
 ];
 
-/* the bottles and butts abandoned on the TABLE TOPS — real, pickable
-   debris like the floor scatter (nothing in this room is grab-proof), just
-   seeded at furniture height. `y` is the tabletop surface; the sim lifts
-   each piece by its own shape. Like all seeded filth, the janitor spares
-   them. */
+/* the bottles, butts and the coffee table's ashtray abandoned on the TABLE
+   TOPS — real, pickable debris like the floor scatter (nothing in this
+   room is grab-proof), just seeded at furniture height. `y` is the tabletop
+   surface; the sim lifts each piece by its own shape. Like all seeded
+   filth, the janitor spares them. */
 export interface LobbyTableItem {
-  kind: ViceKind;
+  kind: ViceKind | "ashtray";
   x: number;
   y: number;
   z: number;
@@ -165,6 +179,7 @@ export const LOBBY_TABLE_CLUTTER: LobbyTableItem[] = [
   { kind: "cigar", x: -1.62, y: 0.425, z: -1.44, roll: 0.8 },
   { kind: "cigar", x: -1.57, y: 0.425, z: -1.38, roll: 2.7 },
   { kind: "cigar", x: -1.66, y: 0.425, z: -1.52, roll: 4.5 },
+  { kind: "ashtray", x: -1.52, y: 0.425, z: -1.53, roll: 0.5, upright: true },
   /* one abandoned on each round bar table (surface 1.025) */
   { kind: "beer", x: -2.28, y: 1.025, z: 2.4, roll: 0.9, upright: true },
   { kind: "beer", x: 3.02, y: 1.025, z: 0.55, roll: 2.1, upright: true },

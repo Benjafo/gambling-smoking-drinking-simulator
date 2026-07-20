@@ -104,6 +104,68 @@ export function makeStickMesh(): THREE.Group {
   return g;
 }
 
+/* the lobby's trash, same silhouettes as the instanced debris. A ball of
+   crumpled paper — somebody's IOU, probably. */
+export function makePaperMesh(): THREE.Group {
+  const g = new THREE.Group();
+  const ball = new THREE.Mesh(
+    new THREE.IcosahedronGeometry(0.045, 0),
+    new THREE.MeshStandardMaterial({ color: 0xcfc3a4, roughness: 0.95, flatShading: true })
+  );
+  ball.scale.y = 0.7;
+  g.add(ball);
+  return g;
+}
+
+/* a crushed can, kinked at the shoulder */
+export function makeCanMesh(): THREE.Group {
+  const g = new THREE.Group();
+  const alu = new THREE.MeshStandardMaterial({ color: 0xb6ad9c, roughness: 0.35, metalness: 0.6 });
+  const body = new THREE.Mesh(new THREE.CylinderGeometry(0.031, 0.033, 0.05, 12), alu);
+  body.position.y = -0.016;
+  body.rotation.z = 0.1;
+  const label = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.0335, 0.0335, 0.022, 12),
+    new THREE.MeshStandardMaterial({ color: 0x7a2417, roughness: 0.5 })
+  );
+  label.position.y = -0.012;
+  label.rotation.z = 0.1;
+  const shoulder = new THREE.Mesh(new THREE.CylinderGeometry(0.028, 0.031, 0.026, 12), alu);
+  shoulder.position.y = 0.02;
+  shoulder.rotation.z = -0.24;
+  const lid = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.026, 0.028, 0.006, 12),
+    new THREE.MeshStandardMaterial({ color: 0x847d6e, roughness: 0.4, metalness: 0.5 })
+  );
+  lid.position.y = 0.034;
+  lid.rotation.z = -0.24;
+  g.add(body, label, shoulder, lid);
+  return g;
+}
+
+/* a heavy glass ashtray, ash and a dead butt still in it */
+export function makeAshtrayMesh(): THREE.Group {
+  const g = new THREE.Group();
+  const bowl = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.055, 0.045, 0.04, 14),
+    new THREE.MeshStandardMaterial({ color: 0x2e2417, roughness: 0.3 })
+  );
+  bowl.position.y = -0.03;
+  const ash = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.048, 0.048, 0.01, 14),
+    new THREE.MeshStandardMaterial({ color: 0x9a958a, roughness: 1 })
+  );
+  ash.position.y = -0.014;
+  const butt = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.008, 0.008, 0.036, 6),
+    new THREE.MeshStandardMaterial({ color: 0x5a2f14, roughness: 0.85 })
+  );
+  butt.position.y = -0.004;
+  butt.rotation.z = 1.35;
+  g.add(bowl, ash, butt);
+  return g;
+}
+
 /* the mesh for anything that can sit in a hand. Spent by default (the lit
    ritual cigar is built directly where the ritual renders); `fresh` is the
    machine's unopened freebie — capped bottle, pristine cigar — so a glance
@@ -129,6 +191,12 @@ export function makeHeldMesh(kind: PropKind, fresh = false): THREE.Group {
       return makePlungerMesh();
     case "stick":
       return makeStickMesh();
+    case "paper":
+      return makePaperMesh();
+    case "can":
+      return makeCanMesh();
+    case "ashtray":
+      return makeAshtrayMesh();
   }
 }
 
