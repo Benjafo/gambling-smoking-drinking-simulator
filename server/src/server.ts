@@ -39,7 +39,18 @@ interface Lobby {
 interface Conn {
   lobby: Lobby | null;
   playerId: string | null;
+  /* intent flood gate (token bucket) — see INTENT_PER_SEC */
+  tokens: number;
+  lastRefill: number;
 }
+
+/* Per-connection intent budget. An honest client peaks around 20/s (look
+   beats every 100ms, move on direction change + a 150ms yaw beat, plus
+   clicks); a modified client can babble thousands. Over-budget intents are
+   dropped, not disconnected — a laggy client flushing a burst after a stall
+   must not lose its seat. */
+const INTENT_PER_SEC = 30;
+const INTENT_BURST = 60;
 
 export interface Server {
   port: number;
@@ -119,7 +130,12 @@ export function startServer(port: number): Server {
       ws.close(4400, "PROTOCOL MISMATCH — UPDATE THE GAME");
       return;
     }
-    const conn: Conn = { lobby: null, playerId: null };
+    const conn: Conn = {
+      lobby: null,
+      playerId: null,
+      tokens: INTENT_BURST,
+      lastRefill: performance.now(),
+    };
     conns.set(ws, conn);
     send(ws, { type: "lobbies", lobbies: lobbyList() });
 
@@ -132,10 +148,19 @@ export function startServer(port: number): Server {
       }
 
       switch (msg.type) {
-        case "intent":
-          if (conn.lobby && conn.playerId && msg.intent)
-            conn.lobby.sim.applyIntent(conn.playerId, msg.intent);
+        case "intent": {
+          if (!conn.lobby || !conn.playerId || !msg.intent) break;
+          const now = performance.now();
+          conn.tokens = Math.min(
+            INTENT_BURST,
+            conn.tokens + ((now - conn.lastRefill) / 1000) * INTENT_PER_SEC
+          );
+          conn.lastRefill = now;
+          if (conn.tokens < 1) break; // over budget — dropped on the floor
+          conn.tokens -= 1;
+          conn.lobby.sim.applyIntent(conn.playerId, msg.intent);
           break;
+        }
 
         case "createLobby": {
           if (conn.lobby) return; // already seated
