@@ -4,8 +4,10 @@ Canonical tracker for shipping on Steam. Check items off in the same commit
 that completes them; add notes inline. Review this doc before starting
 Steam-related work and update it after.
 
-**Last reviewed: 2026-07-20** (fourth pass — overlay verified on Windows;
-SteamPipe kit, store-page kit, healthcheck all staged; see runbook below)
+**Last reviewed: 2026-07-20** (fifth pass — all capsule/library/icon art
+generated in steam/art/out; app icon wired into the build; /healthz exposed
+via nginx for uptime monitoring; dedicated-droplet spec decided. See
+runbook below for app-ID day.)
 
 ## App-ID day runbook (do in this order, same day)
 
@@ -91,11 +93,15 @@ SteamPipe kit, store-page kit, healthcheck all staged; see runbook below)
 
 ## Operational (before launch day)
 
-- [ ] **Server plan** — `/healthz` endpoint (live lobby/conn counts) + docker
-      healthcheck DONE 2026-07-20; restart-on-crash already in compose.
-      Remaining: point an uptime monitor at /healthz, and a sizing gut-check
-      before launch (known ceiling: all lobbies step Rapier on one Node
-      event loop). Store page already notes solo works offline.
+- [ ] **Server plan** — `/healthz` endpoint + docker healthcheck DONE
+      2026-07-20; nginx now proxies it externally (https://<host>/healthz)
+      for uptime monitors; restart-on-crash already in compose.
+      DECIDED: dedicated droplet, separate from the portfolio box —
+      DO Premium AMD 2 vCPU / 2 GB / NVMe (~$21/mo; single-threaded sim
+      wants clock speed not cores; 2 GB because deploys build on-droplet).
+      Remaining: provision it, update DROPLET_* repo secrets, repoint DNS,
+      add a 2 GB swapfile, point UptimeRobot (or similar) at /healthz —
+      all before the Coming Soon page goes live.
 - [x] **Intent rate limiting** — per-connection token bucket (30/s sustained,
       60 burst; honest peak ~20/s) in server.ts. Over-budget intents drop
       silently — no disconnect, so a lag-burst can't cost a seat. Covered in
