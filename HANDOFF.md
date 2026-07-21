@@ -15,12 +15,27 @@ Claude's job on request.
    bots (N seats them), press **F12** at the six moments listed in
    steam/STORE_PAGE.md. Keep the best 4 — backdrop-b and backdrop-c already
    count as two. Park them in steam/art/screenshots/.
-3. **Game server droplet (~1 evening):** DO Premium AMD 2 vCPU / 2 GB /
-   NVMe (~$21/mo). Docker + compose + your traefik stack, 2 GB swapfile,
-   update DROPLET_HOST / DROPLET_USER / DROPLET_SSH_KEY repo secrets,
-   repoint blackjack.benjafo.com DNS, push to deploy, then point
-   UptimeRobot (free) at https://blackjack.benjafo.com/healthz.
+3. **Pick the provider (~10 min reading):** DO Premium AMD 2 vCPU / 2 GB
+   (~$21/mo) vs Hetzner (2-3x the CPU per dollar, ~20 TB included
+   transfer vs DO's ~4 TB — and the first load-test numbers say bandwidth
+   is our binding constraint). TRADEOFF.md has the full argument. If
+   Hetzner: create the account NOW — their identity check can eat days.
+4. **Game server box (~1 evening):** Docker + compose + your traefik
+   stack, 2 GB swapfile, update DROPLET_HOST / DROPLET_USER /
+   DROPLET_SSH_KEY repo secrets, repoint blackjack.benjafo.com DNS, and
+   write the box's capacity file (the server now REQUIRES it — without
+   it the prod container crash-loops):
+   `echo "MAX_LOBBIES=50" > /var/www/projects/blackjack/.env`
+   Push to deploy, then point UptimeRobot (free) at
+   https://blackjack.benjafo.com/healthz.
    Deadline: before the Coming Soon page goes live.
+5. **Load test the box (~30 min, same evening):** from your laptop,
+   `npm run loadtest -- --url wss://blackjack.benjafo.com/ws --tables 10,25,50 --hold 90`
+   and read the report: the highest stage where sim rate holds ~60 is the
+   box's table capacity — write that number into the droplet's .env
+   (replacing the 50) and tell Claude so the docs match. Watch the
+   snapshot-KB and egress lines: if egress at 50 tables looks scary,
+   snapshot slimming moves up the queue (Claude's job, ask any time).
 
 ## When Valve's email arrives (app-ID day — ~1 focused day)
 

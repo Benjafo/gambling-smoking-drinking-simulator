@@ -81,7 +81,7 @@ class Client {
   }
 }
 
-const server = startServer(PORT);
+const server = startServer(PORT, 50);
 const bail = setTimeout(() => {
   console.error("FAIL: test suite timed out");
   process.exit(1);
