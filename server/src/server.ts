@@ -8,12 +8,12 @@
    The in-sim "lobby" phase (players seated, leader starts) is unchanged —
    when the walkable 3D lobby lands later it replaces that phase's rendering
    and adds movement intents; this container layer stays as-is. */
+import { createServer } from "node:http";
 import { WebSocketServer, WebSocket } from "ws";
 import { Simulation } from "../../shared/src/sim";
 import {
   LOBBY_NAME_MAX,
   LOBBY_PASSWORD_MAX,
-  MAX_LOBBIES,
   PLAYER_NAME_MAX,
   PROTOCOL_VERSION,
   SEAT_COUNT,
@@ -52,12 +52,44 @@ interface Conn {
 const INTENT_PER_SEC = 30;
 const INTENT_BURST = 60;
 
+/* rolling minute of pump-health samples for /healthz. Saturation here is
+   silent by design — the 250ms accumulator cap makes overloaded sims run
+   SLOW rather than crash — so ops need `busy` (ms spent stepping sims per
+   pump run, budget ~8) and `gap` (ms between pump runs, ideal 8; spikes =
+   event-loop stalls) to see the ceiling coming. */
+class PumpStats {
+  private cur: number[] = [];
+  private prev: number[] = [];
+  private rotatedAt = performance.now();
+  push(v: number): void {
+    const now = performance.now();
+    if (now - this.rotatedAt > 60_000) {
+      this.prev = this.cur;
+      this.cur = [];
+      this.rotatedAt = now;
+    }
+    this.cur.push(v);
+  }
+  report(): { p50: number; p95: number; max: number } | null {
+    const all = this.prev.concat(this.cur);
+    if (all.length === 0) return null;
+    const s = [...all].sort((a, b) => a - b);
+    const at = (p: number) => s[Math.min(s.length - 1, Math.floor(p * s.length))];
+    const round = (v: number) => Math.round(v * 100) / 100;
+    return { p50: round(at(0.5)), p95: round(at(0.95)), max: round(s[s.length - 1]) };
+  }
+}
+
 export interface Server {
   port: number;
   close(): void;
 }
 
-export function startServer(port: number): Server {
+/* maxLobbies is the box's measured table capacity — deliberately a required
+   argument (and a required MAX_LOBBIES env var in index.ts), not a shared
+   constant: the number belongs to the hardware, and the load test
+   (src/loadtest.ts) is how you find it */
+export function startServer(port: number, maxLobbies: number): Server {
   const lobbies = new Map<string, Lobby>();
   const conns = new Map<WebSocket, Conn>();
   let nextLobbyId = 1;
@@ -120,7 +152,35 @@ export function startServer(port: number): Server {
     broadcastLobbies();
   };
 
-  const wss = new WebSocketServer({ port });
+  /* the socket rides an http server so ops can probe it: /healthz answers
+     with live counts (docker healthcheck, uptime monitors), everything else
+     404s — game traffic is websocket-only */
+  const pumpBusy = new PumpStats();
+  const pumpGap = new PumpStats();
+
+  const http = createServer((req, res) => {
+    if (req.url === "/healthz") {
+      let players = 0;
+      for (const l of lobbies.values()) players += l.clients.size;
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(
+        JSON.stringify({
+          ok: true,
+          lobbies: lobbies.size,
+          maxLobbies,
+          connections: conns.size,
+          players,
+          tickRate: TICK_RATE,
+          pump: { busyMs: pumpBusy.report(), gapMs: pumpGap.report() },
+        })
+      );
+      return;
+    }
+    res.writeHead(404);
+    res.end();
+  });
+  const wss = new WebSocketServer({ server: http });
+  http.listen(port);
 
   wss.on("connection", (ws, req) => {
     // wire-compat gate: a client built against another protocol gets a
@@ -164,7 +224,7 @@ export function startServer(port: number): Server {
 
         case "createLobby": {
           if (conn.lobby) return; // already seated
-          if (lobbies.size >= MAX_LOBBIES) {
+          if (lobbies.size >= maxLobbies) {
             send(ws, { type: "joinError", reason: "THE HOUSE IS FULL — NO NEW TABLES." });
             return;
           }
@@ -237,6 +297,7 @@ export function startServer(port: number): Server {
     const now = performance.now();
     const dt = now - last;
     last = now;
+    pumpGap.push(dt);
     for (const lobby of lobbies.values()) {
       lobby.acc = Math.min(lobby.acc + dt, 250);
       while (lobby.acc >= stepMs) {
@@ -252,6 +313,7 @@ export function startServer(port: number): Server {
         }
       }
     }
+    pumpBusy.push(performance.now() - now);
   }, 8);
 
   /* browsers also want to see phase/count drift (a table starting its game,
@@ -273,6 +335,7 @@ export function startServer(port: number): Server {
       clearInterval(listBeat);
       for (const ws of conns.keys()) ws.close();
       wss.close();
+      http.close();
     },
   };
 }

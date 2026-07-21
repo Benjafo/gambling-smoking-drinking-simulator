@@ -81,7 +81,7 @@ class Client {
   }
 }
 
-const server = startServer(PORT);
+const server = startServer(PORT, 50);
 const bail = setTimeout(() => {
   console.error("FAIL: test suite timed out");
   process.exit(1);
@@ -94,6 +94,10 @@ const staleClose: number = await new Promise((resolve, reject) => {
   stale.on("error", reject);
 });
 assert(staleClose === 4400, "mismatched protocol version is hung up with 4400");
+
+/* ---- ops probe: /healthz reports live counts over plain http ---- */
+const health = await fetch(`http://localhost:${PORT}/healthz`).then((r) => r.json());
+assert(health.ok === true && health.lobbies === 0, "/healthz answers with live counts");
 
 /* ---- browse: a fresh connection sees the (empty) floor ---- */
 const anna = await Client.connect();

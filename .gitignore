@@ -10,3 +10,7 @@ client/.vite/*
 desktop/dist-web/
 desktop/release/
 desktop/vendor/
+
+# steampipe staging
+steam/content/
+steam/output/

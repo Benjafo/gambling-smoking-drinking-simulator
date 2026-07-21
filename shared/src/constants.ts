@@ -13,8 +13,9 @@ export const TICK_DT = 1 / TICK_RATE;
 export const SNAPSHOT_EVERY_TICKS = 3; // 20 Hz
 /* default room port: the server binds it, ?server=auto dials it */
 export const WS_PORT_DEFAULT = 8081;
-/* lobby browsing: shared limits so client validation matches the server's */
-export const MAX_LOBBIES = 50;
+/* lobby browsing: shared limits so client validation matches the server's.
+   (The table cap is NOT here — it's the server's required MAX_LOBBIES env
+   var, per-box, set from load-test measurement.) */
 export const LOBBY_NAME_MAX = 32;
 export const PLAYER_NAME_MAX = 24;
 export const LOBBY_PASSWORD_MAX = 32;

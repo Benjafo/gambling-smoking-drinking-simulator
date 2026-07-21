@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<!-- App/community icon: the marquee sign boiled down to a "JL" monogram —
+     the full wordmark is illegible at 32px. Same tokens as styles.css. -->
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+  @font-face{
+    font-family:"Pixelify Sans";font-style:normal;font-weight:400 700;
+    src:url("../../client/public/fonts/pixelify-sans-latin.woff2") format("woff2");
+  }
+  html,body{margin:0}
+  #tile{
+    width:1024px;height:1024px;position:relative;overflow:hidden;
+    background:radial-gradient(circle at 50% 42%, #1c2418 0%, #0d120e 62%, #070907 100%);
+    display:flex;align-items:center;justify-content:center;
+  }
+  #jl{
+    font-family:"Pixelify Sans",sans-serif;font-weight:700;
+    font-size:560px;line-height:1;color:#ffc832;letter-spacing:-.02em;
+    text-shadow:
+      0 0 .03em rgba(255,225,130,.85),0 0 .1em rgba(255,83,70,.3),
+      .045em .045em 0 #7a1710,.09em .09em 0 #070907;
+    transform:translateY(-3%);
+  }
+  /* the bar sign's red neon underline — reads as a stripe even at 16px */
+  #bar{
+    position:absolute;left:16%;right:16%;bottom:15.5%;height:3.4%;
+    background:#ff5346;box-shadow:0 0 40px rgba(255,83,70,.85),0 10px 0 #070907;
+  }
+</style>
+</head>
+<body>
+<div id="tile"><span id="jl">JL</span><div id="bar"></div></div>
+</body>
+</html>
