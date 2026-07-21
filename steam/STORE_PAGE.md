@@ -82,8 +82,17 @@ Store:
 - [x] Small capsule 231×87 — small_capsule_231x87.png
 - [x] Main capsule 616×353 — main_capsule_616x353.png
 - [x] Vertical capsule 374×448 — vertical_capsule_374x448.png
-- [ ] Screenshots: 5+ at 1920×1080 (shot list below; backdrop-b/c are
-      usable as two of them)
+- [x] Screenshots: 8 captured 2026-07-21 at exact 1920×1080 →
+      `steam/screenshots/` (backdrop-b/c no longer needed as filler).
+      Suggested upload order: In Game → Delivering Direct Hit in Game →
+      Lighting Cigar in Game → On the Couch in the Lobby → Receiving
+      Direct Hit in Lobby → Title Screen (Valve favors gameplay-first
+      ordering; the two remaining lobby shots are spares).
+      Optional re-shoot if the mood strikes: shot-list items 5 (THE
+      MIRROR) and 6 (cause-of-death screen) went uncaptured — the
+      game-over screen especially is a strong differentiator. Lobby
+      shots show the "Testing" lobby name + dev bot-control panel;
+      re-shooting with a diegetic lobby name would read less debug-y.
 - [ ] Trailer (strongly recommended, not strictly required)
 
 Library:

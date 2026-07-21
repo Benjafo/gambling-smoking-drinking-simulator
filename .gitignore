@@ -3,6 +3,11 @@ dist/
 *.log
 .DS_Store
 
+# per-box config (compose reads it; template in .env.example)
+.env
+.env.*
+!.env.example
+
 .vite/*
 client/.vite/*
 

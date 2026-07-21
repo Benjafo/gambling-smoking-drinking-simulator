@@ -6,15 +6,10 @@ Claude's job on request.
 
 ## Now (this week — none of this waits on Valve)
 
-1. **Push + merge to main** (you said you'd do this later — it gates the
-   rest): puts the app icon into CI artifacts, deploys the hardened server
-   (rate limit, protocol gate, /healthz) and the healthz nginx proxy to
-   prod, and gets the art/steam kit off this one laptop.
-2. **Screenshot session (~1 hour):** `npm run build`, then
-   `cd desktop && ../node_modules/.bin/electron . --shots`, play solo with
-   bots (N seats them), press **F12** at the six moments listed in
-   steam/STORE_PAGE.md. Keep the best 4 — backdrop-b and backdrop-c already
-   count as two. Park them in steam/art/screenshots/.
+1. ~~Push + merge to main~~ DONE 2026-07-21.
+2. ~~Screenshot session~~ DONE 2026-07-21 — 8 shots in
+   `steam/screenshots/`, suggested upload order + optional re-shoot notes
+   (MIRROR, cause-of-death screen) in steam/STORE_PAGE.md.
 3. **Pick the provider (~10 min reading):** DO Premium AMD 2 vCPU / 2 GB
    (~$21/mo) vs Hetzner (2-3x the CPU per dollar, ~20 TB included
    transfer vs DO's ~4 TB — and the first load-test numbers say bandwidth
@@ -24,8 +19,8 @@ Claude's job on request.
    stack, 2 GB swapfile, update DROPLET_HOST / DROPLET_USER /
    DROPLET_SSH_KEY repo secrets, repoint blackjack.benjafo.com DNS, and
    write the box's capacity file (the server now REQUIRES it — without
-   it the prod container crash-loops):
-   `echo "MAX_LOBBIES=50" > /var/www/projects/blackjack/.env`
+   it the prod container crash-loops): in the repo checkout on the box,
+   `cp .env.example .env` (gitignored; template documents the value).
    Push to deploy, then point UptimeRobot (free) at
    https://blackjack.benjafo.com/healthz.
    Deadline: before the Coming Soon page goes live.
