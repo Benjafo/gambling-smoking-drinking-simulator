@@ -79,9 +79,10 @@ recorded under Operational. See runbook below for app-ID day.)
       brand plans emerge). Discoverability note: web searches return legal
       content, so store tags + "blackjack"/"party game" keywords matter.
 - [ ] **Store page assets** — copy + ALL capsule/library/icon art DONE
-      2026-07-20 (`steam/art/out/`, regenerable via the scripts in
-      `steam/art/`). Remaining: 5+ screenshots (F12 session, shot list in
-      STORE_PAGE.md; backdrop-b/c count for two) and optional trailer.
+      2026-07-20 (`steam/art/out/`); 8 screenshots CAPTURED 2026-07-21
+      (`steam/screenshots/`, all exact 1920×1080 — suggested upload set +
+      optional re-shoot notes in STORE_PAGE.md). Remaining: optional
+      trailer, optional MIRROR/cause-of-death re-shoot.
 - [ ] **Content questionnaire** — answers DRAFTED in `steam/STORE_PAGE.md`
       (mature-content description + which boxes). Remaining: paste on
       app-ID day.
