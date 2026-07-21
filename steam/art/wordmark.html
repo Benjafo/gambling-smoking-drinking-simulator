@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<!-- The game's title marquee rebuilt at poster scale for store art.
+     Faithful to client/src/styles.css (.marquee): Pixelify Sans bulb-gold
+     with hard slab shadows, Silkscreen OPEN-blue subtitle.
+     Rendered → transparent PNG by capture-art.mjs (two variants: flat =
+     game-accurate, glow = extra neon halo for dark key-art backdrops). -->
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+  @font-face{
+    font-family:"Pixelify Sans";font-style:normal;font-weight:400 700;
+    src:url("../../client/public/fonts/pixelify-sans-latin.woff2") format("woff2");
+  }
+  @font-face{
+    font-family:"Silkscreen";font-style:normal;font-weight:400;
+    src:url("../../client/public/fonts/silkscreen-400-latin.woff2") format("woff2");
+  }
+  html,body{margin:0;background:transparent}
+  #mark{
+    display:inline-block;padding:60px 80px 80px;
+    font-family:"Pixelify Sans",sans-serif;font-weight:700;
+    font-size:340px;letter-spacing:.02em;line-height:1.05;color:#ffc832;
+    text-shadow:.045em .045em 0 #7a1710,.09em .09em 0 #070907;
+  }
+  #mark small{
+    display:block;font-family:"Silkscreen",monospace;font-weight:400;
+    font-size:.18em;letter-spacing:.34em;color:#49c6ff;
+    text-shadow:.2em .2em 0 #070907;margin-top:.14em;
+  }
+  /* key-art variant: same sign, switched on after dark — a soft neon halo
+     under the hard shadows so it carries over a moody backdrop */
+  body.glow #mark{
+    text-shadow:
+      0 0 .02em rgba(255,225,130,.9),0 0 .07em rgba(255,83,70,.28),
+      .045em .045em 0 #7a1710,.09em .09em 0 #070907;
+  }
+  body.glow #mark small{
+    text-shadow:0 0 .1em rgba(73,198,255,.55),.2em .2em 0 #070907;
+  }
+</style>
+</head>
+<body>
+<div id="mark">JOINT<br>LIABILITY<small>SMOKE &#183; DRINK &#183; GO BROKE</small></div>
+</body>
+</html>

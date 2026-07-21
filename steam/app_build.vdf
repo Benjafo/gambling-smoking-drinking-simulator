@@ -1,0 +1,18 @@
+// SteamPipe app build. Replace the three YOUR_APP_ID* placeholders the day
+// Valve issues the app ID (depot IDs are conventionally appid+1, appid+2 —
+// confirm them in App Admin > SteamPipe > Depots).
+// Upload:  steamcmd +login <account> +run_app_build <absolute path to this file> +quit
+"AppBuild"
+{
+	"AppID" "YOUR_APP_ID"
+	"Desc" "joint liability — set a real note per upload (git sha)"
+	// leave empty: promote builds to default via the dashboard, never blind
+	"SetLive" ""
+	"ContentRoot" "content"
+	"BuildOutput" "output"
+	"Depots"
+	{
+		"YOUR_APP_ID_PLUS_1" "depot_windows.vdf"
+		"YOUR_APP_ID_PLUS_2" "depot_macos.vdf"
+	}
+}
