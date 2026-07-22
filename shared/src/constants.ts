@@ -6,7 +6,7 @@
    (code 4400) on any mismatch — once Steam auto-updates clients on its own
    schedule, a stale build must fail loud at the door, not desync at the
    table. */
-export const PROTOCOL_VERSION = 1;
+export const PROTOCOL_VERSION = 2; // v2: settled debris split out of snapshots
 
 export const TICK_RATE = 60;
 export const TICK_DT = 1 / TICK_RATE;

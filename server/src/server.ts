@@ -34,6 +34,9 @@ interface Lobby {
      share a backlog */
   acc: number;
   sinceSnap: number;
+  /* last settled-debris version broadcast to this table — the settled set
+     is re-shipped only when the sim's version moves (see types.ts) */
+  sentDebrisV: number;
 }
 
 interface Conn {
@@ -132,6 +135,9 @@ export function startServer(port: number, maxLobbies: number): Server {
     // appearance rides through unchecked — the sim sanitizes it at join
     lobby.sim.applyIntent(playerId, { type: "join", name, appearance });
     send(ws, { type: "joined", lobbyId: lobby.id, lobbyName: lobby.name, playerId });
+    // the settled floor, before the first (flying-only) snapshot arrives
+    const settled = lobby.sim.settledDebris();
+    send(ws, { type: "debris", v: settled.v, items: settled.items });
     console.log(`${playerId} "${name}" joined ${lobby.id} "${lobby.name}" (${lobby.clients.size} seated)`);
     broadcastLobbies();
   };
@@ -246,6 +252,7 @@ export function startServer(port: number, maxLobbies: number): Server {
             nextPlayer: 1,
             acc: 0,
             sinceSnap: 0,
+            sentDebrisV: sim.settledV,
           };
           lobbies.set(id, lobby);
           console.log(`${id} "${name}" opened${password ? " (private)" : ""}`);
@@ -306,7 +313,16 @@ export function startServer(port: number, maxLobbies: number): Server {
         if (++lobby.sinceSnap >= SNAPSHOT_EVERY_TICKS) {
           lobby.sinceSnap = 0;
           if (lobby.clients.size > 0) {
-            const payload = JSON.stringify({ type: "snapshot", snap: lobby.sim.snapshot() });
+            // settled set first when it changed, so no client ever holds a
+            // snapshot whose settledV it hasn't seen (ws delivery is ordered)
+            if (lobby.sim.settledV !== lobby.sentDebrisV) {
+              const settled = lobby.sim.settledDebris();
+              lobby.sentDebrisV = settled.v;
+              const dPayload = JSON.stringify({ type: "debris", v: settled.v, items: settled.items });
+              for (const ws of lobby.clients.keys())
+                if (ws.readyState === WebSocket.OPEN) ws.send(dPayload);
+            }
+            const payload = JSON.stringify({ type: "snapshot", snap: lobby.sim.snapshot(true) });
             for (const ws of lobby.clients.keys())
               if (ws.readyState === WebSocket.OPEN) ws.send(payload);
           }

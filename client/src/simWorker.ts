@@ -32,6 +32,8 @@ function startLoop(): void {
   let last = performance.now();
   let acc = 0;
   let sinceSnap = 0;
+  // 0 forces the settled set out before the first snapshot (sim starts at 1)
+  let sentDebrisV = 0;
   setInterval(() => {
     const now = performance.now();
     acc += now - last;
@@ -44,7 +46,13 @@ function startLoop(): void {
       acc -= stepMs;
       if (++sinceSnap >= SNAPSHOT_EVERY_TICKS) {
         sinceSnap = 0;
-        post({ type: "snapshot", snap: sim!.snapshot() });
+        // same order the server keeps: settled set first when it changed
+        if (sim!.settledV !== sentDebrisV) {
+          const settled = sim!.settledDebris();
+          sentDebrisV = settled.v;
+          post({ type: "debris", v: settled.v, items: settled.items });
+        }
+        post({ type: "snapshot", snap: sim!.snapshot(true) });
       }
     }
   }, 8);
