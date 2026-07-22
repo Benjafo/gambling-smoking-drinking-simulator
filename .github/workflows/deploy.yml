@@ -18,7 +18,7 @@ jobs:
           command_timeout: 30m
           script: |
             set -e
-            cd /var/www/projects/blackjack
+            cd /var/www/projects/joint-liability
             git pull
             docker compose --profile prod build
             docker compose --profile prod up -d
