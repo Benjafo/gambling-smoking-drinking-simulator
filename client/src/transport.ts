@@ -16,7 +16,21 @@
    and the house disagree on the wire format ("outdated"). */
 import type { Appearance } from "@shared/appearance";
 import { PROTOCOL_VERSION, WS_PORT_DEFAULT } from "@shared/constants";
-import type { ClientMsg, Intent, LobbyInfo, ServerMsg, Snapshot } from "@shared/types";
+import type { ClientMsg, DebrisSnap, Intent, LobbyInfo, ServerMsg, Snapshot } from "@shared/types";
+
+/* wire snapshots carry only FLYING debris; the settled floor arrives as a
+   versioned "debris" message, re-sent only when it changes. This cache is
+   the reassembly point: everything above the Session (scene, HUD) keeps
+   seeing one complete debris list, exactly as before the split. */
+class SettledDebris {
+  private items: DebrisSnap[] = [];
+  apply(items: DebrisSnap[]): void {
+    this.items = items;
+  }
+  merge(snap: Snapshot): Snapshot {
+    return { ...snap, debris: [...this.items, ...snap.debris] };
+  }
+}
 
 export type ConnStatus = "connecting" | "open" | "unreachable" | "lost" | "outdated";
 export type EndReason = "left" | "lost";
@@ -56,11 +70,13 @@ export class LocalSession implements Session {
   private worker: Worker;
   private snapCb: ((snap: Snapshot) => void) | null = null;
   private endCb: ((reason: EndReason) => void) | null = null;
+  private settled = new SettledDebris();
 
   constructor(name: string, appearance?: Appearance) {
     this.worker = new Worker(new URL("./simWorker.ts", import.meta.url), { type: "module" });
     this.worker.onmessage = (e: MessageEvent<ServerMsg>) => {
-      if (e.data.type === "snapshot") this.snapCb?.(e.data.snap);
+      if (e.data.type === "debris") this.settled.apply(e.data.items);
+      else if (e.data.type === "snapshot") this.snapCb?.(this.settled.merge(e.data.snap));
     };
     this.worker.postMessage({
       type: "init",
@@ -91,6 +107,7 @@ class RemoteSession implements Session {
   private snapCb: ((snap: Snapshot) => void) | null = null;
   private endCb: ((reason: EndReason) => void) | null = null;
   private ended = false;
+  private settled = new SettledDebris();
 
   constructor(
     private conn: ServerConnection,
@@ -114,7 +131,10 @@ class RemoteSession implements Session {
   }
   /* internal: routed by the connection */
   deliver(snap: Snapshot): void {
-    this.snapCb?.(snap);
+    this.snapCb?.(this.settled.merge(snap));
+  }
+  deliverDebris(items: DebrisSnap[]): void {
+    this.settled.apply(items);
   }
   end(reason: EndReason): void {
     if (this.ended) return;
@@ -221,6 +241,9 @@ export class ServerConnection {
         break;
       case "snapshot":
         this.session?.deliver(msg.snap);
+        break;
+      case "debris":
+        this.session?.deliverDebris(msg.items);
         break;
       case "left":
         break; // release() already tore the session down

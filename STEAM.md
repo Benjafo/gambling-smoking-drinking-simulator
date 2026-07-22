@@ -96,6 +96,26 @@ app-ID day.)
 
 ## Operational (before launch day)
 
+- [ ] **Snapshot slimming** — CODE DONE 2026-07-22, awaiting prod re-test.
+      Settled debris now ships once as a versioned "debris" message
+      (re-sent only on change/seat); snapshots stream flying pieces only;
+      wire numbers rounded (≤3dp); PROTOCOL_VERSION → 2. Transport layer
+      reassembles, so renderer/HUD untouched. Local smoke: snapshot p50
+      12.2 KB → 3.7 KB, egress 3.3× down, all tests + desktop smoke green
+      (new suites: shared/test/debrisWire.ts + server join-debris checks).
+      Remaining: deploy, re-run load test vs prod (raise box MAX_LOBBIES
+      for the test), set the new measured cap, record numbers here.
+      Originally PROMOTED from post-launch 2026-07-22 by the
+      prod load test: full-JSON snapshots are 12 KB × 20 Hz ≈ 2 Mbps per
+      seated player (106 Mbps / ~34 TB-month sustained at just 10 tables,
+      vs ~3 TB included on the DO box) and the stringify/send cost is a
+      big share of the CPU ceiling. Plan: settled debris sent once with a
+      version counter (it never moves), full snapshot on join/rejoin,
+      delta or trimmed per-tick fields. Wire-format change → bump
+      PROTOCOL_VERSION (gate already handles stale clients). Re-run the
+      load test after; expect ~25-40 table capacity on the same box, then
+      raise MAX_LOBBIES in the box .env to the new measurement.
+
 - [ ] **Server plan** — `/healthz` endpoint + docker healthcheck DONE
       2026-07-20; nginx now proxies it externally (https://<host>/healthz)
       for uptime monitors; restart-on-crash already in compose.
@@ -112,12 +132,15 @@ app-ID day.)
       egress metrics blow past the included transfer AND snapshot slimming
       can't fix it. EU Hetzner stays cheap but 100-150ms to US players is
       wrong for a 60Hz game.
-      Remaining: provision it, update DROPLET_* repo secrets, repoint DNS,
-      add a 2 GB swapfile, write `/var/www/projects/blackjack/.env` with
-      `MAX_LOBBIES=<measured>` (required env — server refuses to boot
-      without it; compose reads .env automatically), run the load test
-      against the box, point UptimeRobot (or similar) at /healthz —
-      all before the Coming Soon page goes live.
+      PROVISIONED + CUT OVER 2026-07-21/22: droplet 159.223.98.142 (NYC),
+      traefik at /opt/traefik, app at /var/www/projects/joint-liability, DNS
+      moved, LE cert live (first issuance failed — ACME fired before DNS
+      propagated; a traefik restart after propagation fixed it), deploy
+      pipeline re-keyed (new deploy key + read-only GitHub repo key) and
+      green. LOAD TESTED 2026-07-22 (results under Load test item):
+      capacity of this box is ~10 tables / 50 players; MAX_LOBBIES=10 in
+      the box .env. Remaining: UptimeRobot at /healthz; raise
+      MAX_LOBBIES after snapshot slimming re-test.
 - [x] **Load test + capacity tooling** — DONE 2026-07-21.
       `npm run loadtest -- --url ws://host --tables 10,25,50 --hold 90`
       (server/src/loadtest.ts): whole tables of wire-honest bots (ported
@@ -128,6 +151,12 @@ app-ID day.)
       budget). MAX_LOBBIES demoted from shared constant to required
       per-box env var. First smoke (2 tables, M-series laptop): sim rate
       60.0, pump busy p95 2.1ms, snapshot p50 ~12 KB.
+      PROD RESULTS 2026-07-22 (2 vCPU/2 GB DO box): 10 tables = sim rate
+      59.9, pump busy p95 8.6ms (at budget), egress 106 Mbps (~34 TB/30d
+      sustained); 25 tables = SATURATED (sim rate 47.4 avg / 34.5 worst,
+      pump busy p95 153ms). Capacity ≈ 10 tables / 50 players →
+      MAX_LOBBIES=10. Egress, not RAM, is the binding cost — hence
+      snapshot slimming promoted to pre-launch (see Code).
       SCALING RULINGS 2026-07-21: no lobby-directory/Redis/multi-process
       rewrite pre-launch — short rounds, no persistence, protocol gate,
       and offline solo make hard-cutover deploys safe; ladder is
@@ -152,11 +181,5 @@ app-ID day.)
 - [ ] Key rebinding
 - [ ] Achievements, rich presence
 - [ ] Localization (needs non-latin font subsets too)
-- [ ] Snapshot slimming (delta/binary encoding) — only if bandwidth metrics
-      say so. First metric (2026-07-21 smoke): ~12 KB/snapshot × 20 Hz ≈
-      2 Mbps per seated player — at full house that's hundreds of Mbps and
-      >100 TB/mo sustained. Watch this in the droplet load test; likely
-      the first post-launch item (settled debris re-sent every frame is
-      the obvious fat).
 - [ ] Lobby sharding across processes — only if traffic demands
 - [ ] Background music (music bus exists, plays nothing yet)

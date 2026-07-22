@@ -285,6 +285,12 @@ export class Simulation {
   private cardSlots: V3[] = [];
   private cardSig = "";
   nextDebrisId = 1;
+  /* settled-debris set version: bumps whenever a piece settles or a settled
+     piece leaves the floor (pickup, janitor, cap eviction). The wire ships
+     the settled set only when this changes — settled pieces never move, so
+     re-broadcasting them every snapshot was most of the bandwidth bill.
+     Starts at 1: the seeded room litter is version one. */
+  settledV = 1;
   private events: SimEvent[] = [];
   private schedule: ScheduledAction[] = [];
   private lastImpactTick = 0;
@@ -1168,6 +1174,9 @@ export class Simulation {
       this.colliderDebris.delete(d.body.collider(0).handle);
       this.world.removeRigidBody(d.body);
     }
+    // a flying piece just drops out of the next per-tick list; a settled
+    // piece was part of the versioned set, so its removal must re-ship it
+    if (d.phase === "settled") this.settledV++;
     this.debris.delete(d.id);
   }
 
@@ -1533,6 +1542,7 @@ export class Simulation {
         // freeze into scenery: fixed body keeps the collider, costs nothing
         d.body.setBodyType(RAPIER.RigidBodyType.Fixed, false);
         d.phase = "settled";
+        this.settledV++;
         this.rollMoneyDrop(d);
       }
     }
@@ -1629,7 +1639,11 @@ export class Simulation {
   }
 
   /* ---------------- snapshot ---------------- */
-  snapshot(): Snapshot {
+  /* wire=true is what the server and solo worker send at 20 Hz: flying
+     debris only (the settled set rides its own versioned message). The
+     default keeps the full debris list for tests and direct consumers.
+     Both modes drain the event queue — call once per beat. */
+  snapshot(wire = false): Snapshot {
     const players: PlayerSnap[] = [...this.players.values()].map((p) => ({
       id: p.id,
       name: p.name,
@@ -1643,8 +1657,8 @@ export class Simulation {
       doubled: p.doubled,
       stood: p.stood,
       hand: p.hand,
-      cigarMeter: p.cigarMeter,
-      beerMeter: p.beerMeter,
+      cigarMeter: Math.round(p.cigarMeter * 100) / 100,
+      beerMeter: Math.round(p.beerMeter * 100) / 100,
       cigarTol: p.cigarTol,
       beerTol: p.beerTol,
       cigarInv: p.cigarInv,
@@ -1652,7 +1666,10 @@ export class Simulation {
       ritual: p.ritual
         ? {
             kind: p.ritual.kind,
-            progress: Math.min(1, p.ritual.progressTicks / msTicks(RITUAL_MS[p.ritual.kind])),
+            progress:
+              Math.round(
+                Math.min(1, p.ritual.progressTicks / msTicks(RITUAL_MS[p.ritual.kind])) * 1000
+              ) / 1000,
           }
         : null,
       held: p.held
@@ -1660,7 +1677,7 @@ export class Simulation {
             id: p.held.id,
             kind: p.held.kind,
             fresh: p.held.fresh,
-            pos: p.held.pos ? { ...p.held.pos } : null,
+            pos: p.held.pos ? roundV3(p.held.pos) : null,
           }
         : null,
       look: {
@@ -1683,21 +1700,20 @@ export class Simulation {
       stats: { ...p.stats },
     }));
 
-    const debris: DebrisSnap[] = [...this.debris.values()].map((d) => ({
-      id: d.id,
-      kind: d.kind,
-      phase: d.phase,
-      room: d.room,
-      seeded: d.seeded,
-      pos: d.pos,
-      rot: d.rot,
-    }));
+    /* wire mode ships only the pieces that are actually moving — the
+       settled set travels separately via settledDebris(), re-sent only
+       when settledV changes. Full mode (tests, direct sim consumers)
+       keeps the whole list. */
+    const debris: DebrisSnap[] = [];
+    for (const d of this.debris.values())
+      if (!wire || d.phase === "flying") debris.push(debrisSnap(d));
 
     const events = this.events;
     this.events = [];
 
     return {
       tick: this.tick,
+      settledV: this.settledV,
       phase: this.phase,
       leaderId: this.leaderId,
       winnerId: this.winnerId,
@@ -1709,7 +1725,7 @@ export class Simulation {
       cigarPrice: this.cigarPrice,
       beerPrice: this.beerPrice,
       handsPlayed: this.handsPlayed,
-      elapsed: (this.tick - this.runStartTick) / TICK_RATE,
+      elapsed: Math.round(((this.tick - this.runStartTick) / TICK_RATE) * 100) / 100,
       startsIn:
         this.startAtTick === null
           ? null
@@ -1726,4 +1742,29 @@ export class Simulation {
       standings: this.phase === "over" ? this.computeStandings() : [],
     };
   }
+
+  /* the versioned settled set — the transport's other half of wire
+     snapshots. Hosts send it on seating and whenever settledV moves. */
+  settledDebris(): { v: number; items: DebrisSnap[] } {
+    const items: DebrisSnap[] = [];
+    for (const d of this.debris.values()) if (d.phase === "settled") items.push(debrisSnap(d));
+    return { v: this.settledV, items };
+  }
+}
+
+/* wire rounding: a settled bottle doesn't need sub-millimeter JSON. 3
+   decimals ≈ 1mm / an invisible quat error, and it halves the digits. */
+const r3 = (n: number): number => Math.round(n * 1000) / 1000;
+const roundV3 = (v: V3): V3 => ({ x: r3(v.x), y: r3(v.y), z: r3(v.z) });
+
+function debrisSnap(d: Debris): DebrisSnap {
+  return {
+    id: d.id,
+    kind: d.kind,
+    phase: d.phase,
+    room: d.room,
+    seeded: d.seeded,
+    pos: roundV3(d.pos),
+    rot: { x: r3(d.rot.x), y: r3(d.rot.y), z: r3(d.rot.z), w: r3(d.rot.w) },
+  };
 }

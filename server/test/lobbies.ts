@@ -114,6 +114,25 @@ assert(annaJoin.lobbyName === "ALPHA" && annaJoin.playerId === "p1", "creator se
 let snap = await anna.snapshot();
 assert(snap.players.length === 1 && snap.players[0].name === "ANNA", "ALPHA sim holds only ANNA");
 
+/* ---- wire split: seating ships the settled floor once; snapshots then
+   stream only what's airborne (settled set re-sent only on version change) */
+const annaDebris = await anna.waitFor(
+  (m): m is Extract<ServerMsg, { type: "debris" }> => m.type === "debris",
+  "debris(ALPHA)"
+);
+assert(
+  annaDebris.v === 1 && annaDebris.items.length > 0,
+  "seating delivers the seeded settled floor as debris v1"
+);
+assert(
+  annaDebris.items.every((d) => d.phase === "settled"),
+  "the settled set carries settled pieces only"
+);
+assert(
+  snap.settledV === 1 && snap.debris.length === 0,
+  "snapshots reference the version and stream zero settled debris"
+);
+
 /* ---- second connection browses the live list ---- */
 const bob = await Client.connect();
 list = await bob.lobbies();

@@ -9,19 +9,18 @@ code/docs/art shaped.
 - [x] ~~Provider call~~ RESOLVED 2026-07-21: DigitalOcean (Premium AMD
       2 vCPU / 2 GB, ~$21/mo, per the original STEAM.md spec). Hetzner's
       June 2026 price hikes erased its US advantage — details in STEAM.md.
-- [ ] **Provision the game box** — IN PROGRESS 2026-07-21, new droplet
-      159.223.98.142 (DO Premium AMD 2 vCPU/2 GB, NYC): box + docker +
-      swapfile + traefik (/opt/traefik) + app + .env DONE and verified
-      end-to-end; DNS repointed, waiting on propagation + cert.
-      Remaining: old box `compose down` → fresh deploy key + update
-      DROPLET_HOST / DROPLET_USER / DROPLET_SSH_KEY secrets → re-run
-      Deploy workflow green (fold in the uncommitted doc edits).
-- [ ] **Load test the box** (~30 min):
-      `npm run loadtest -- --url wss://blackjack.benjafo.com/ws --tables 10,25,50 --hold 90`
-      → write the highest stage that holds ~60 ticks/s into the box's
-      .env as MAX_LOBBIES, and tell Claude the numbers.
-- [ ] **UptimeRobot** at https://blackjack.benjafo.com/healthz (can be
-      done today against current prod for a baseline).
+- [x] ~~Provision the game box~~ DONE 2026-07-22: droplet 159.223.98.142
+      live behind DNS + Let's Encrypt cert, deploy pipeline green with
+      fresh keys, old box retired.
+- [x] ~~Load test the box~~ DONE 2026-07-22: capacity ≈ 10 tables /
+      50 players (10 tables held 59.9 ticks/s; 25 saturated at 47.4).
+      Egress 106 Mbps at 10 tables → snapshot slimming promoted to
+      pre-launch (Claude's build, then a re-test raises the cap).
+- [ ] **Set the measured cap** on the box (1 min):
+      `cd /var/www/projects/blackjack && sed -i 's/^MAX_LOBBIES=.*/MAX_LOBBIES=10/' .env && docker compose --profile prod up -d`
+- [ ] **UptimeRobot** at https://blackjack.benjafo.com/healthz.
+- [ ] (Claude, on your go) **Snapshot slimming** → then re-run the load
+      test together and raise MAX_LOBBIES to the new measurement.
 
 ## Optional, any time
 

@@ -109,6 +109,12 @@ export type SimEvent =
 
 export interface Snapshot {
   tick: number;
+  /* version of the settled-debris set (bumps when anything settles or a
+     settled piece is removed). On the wire, `debris` carries only FLYING
+     pieces and the settled set travels separately (ServerMsg "debris",
+     sent only when this version changes) — the transport layer merges the
+     two back together, so everything above it still sees the full list. */
+  settledV: number;
   phase: RoomPhase;
   leaderId: string | null;
   winnerId: string | null;
@@ -209,6 +215,10 @@ export type ClientMsg =
 export type ServerMsg =
   | { type: "welcome"; playerId: string }
   | { type: "snapshot"; snap: Snapshot }
+  /* the settled-debris set, versioned. Settled pieces never move, so
+     re-broadcasting them 20×/sec was the bulk of every snapshot — this
+     ships them once per change (and once at seating) instead. */
+  | { type: "debris"; v: number; items: DebrisSnap[] }
   | { type: "lobbies"; lobbies: LobbyInfo[] }
   | { type: "joined"; lobbyId: string; lobbyName: string; playerId: string }
   | { type: "joinError"; reason: string }
