@@ -1,60 +1,49 @@
-# Launch handoff — Ben's actions only
+# Launch checklist — Ben's remaining items
 
-Snapshot 2026-07-20. STEAM.md stays the canonical tracker; this is just
-your to-do view of it. Everything not listed here is done, automated, or
-Claude's job on request.
+Slimmed 2026-07-21. STEAM.md is the canonical tracker with full detail;
+this is only what's left that needs YOUR hands. Ask Claude for anything
+code/docs/art shaped.
 
-## Now (this week — none of this waits on Valve)
+## Now (nothing here waits on Valve)
 
-1. ~~Push + merge to main~~ DONE 2026-07-21.
-2. ~~Screenshot session~~ DONE 2026-07-21 — 8 shots in
-   `steam/screenshots/`, suggested upload order + optional re-shoot notes
-   (MIRROR, cause-of-death screen) in steam/STORE_PAGE.md.
-3. **Pick the provider (~10 min reading):** DO Premium AMD 2 vCPU / 2 GB
-   (~$21/mo) vs Hetzner (2-3x the CPU per dollar, ~20 TB included
-   transfer vs DO's ~4 TB — and the first load-test numbers say bandwidth
-   is our binding constraint). TRADEOFF.md has the full argument. If
-   Hetzner: create the account NOW — their identity check can eat days.
-4. **Game server box (~1 evening):** Docker + compose + your traefik
-   stack, 2 GB swapfile, update DROPLET_HOST / DROPLET_USER /
-   DROPLET_SSH_KEY repo secrets, repoint blackjack.benjafo.com DNS, and
-   write the box's capacity file (the server now REQUIRES it — without
-   it the prod container crash-loops): in the repo checkout on the box,
-   `cp .env.example .env` (gitignored; template documents the value).
-   Push to deploy, then point UptimeRobot (free) at
-   https://blackjack.benjafo.com/healthz.
-   Deadline: before the Coming Soon page goes live.
-5. **Load test the box (~30 min, same evening):** from your laptop,
-   `npm run loadtest -- --url wss://blackjack.benjafo.com/ws --tables 10,25,50 --hold 90`
-   and read the report: the highest stage where sim rate holds ~60 is the
-   box's table capacity — write that number into the droplet's .env
-   (replacing the 50) and tell Claude so the docs match. Watch the
-   snapshot-KB and egress lines: if egress at 50 tables looks scary,
-   snapshot slimming moves up the queue (Claude's job, ask any time).
+- [x] ~~Provider call~~ RESOLVED 2026-07-21: DigitalOcean (Premium AMD
+      2 vCPU / 2 GB, ~$21/mo, per the original STEAM.md spec). Hetzner's
+      June 2026 price hikes erased its US advantage — details in STEAM.md.
+- [ ] **Provision the game box** — IN PROGRESS 2026-07-21, new droplet
+      159.223.98.142 (DO Premium AMD 2 vCPU/2 GB, NYC): box + docker +
+      swapfile + traefik (/opt/traefik) + app + .env DONE and verified
+      end-to-end; DNS repointed, waiting on propagation + cert.
+      Remaining: old box `compose down` → fresh deploy key + update
+      DROPLET_HOST / DROPLET_USER / DROPLET_SSH_KEY secrets → re-run
+      Deploy workflow green (fold in the uncommitted doc edits).
+- [ ] **Load test the box** (~30 min):
+      `npm run loadtest -- --url wss://blackjack.benjafo.com/ws --tables 10,25,50 --hold 90`
+      → write the highest stage that holds ~60 ticks/s into the box's
+      .env as MAX_LOBBIES, and tell Claude the numbers.
+- [ ] **UptimeRobot** at https://blackjack.benjafo.com/healthz (can be
+      done today against current prod for a baseline).
 
-## When Valve's email arrives (app-ID day — ~1 focused day)
+## Optional, any time
 
-Open STEAM.md and follow the runbook top to bottom. Your parts: the
-Steamworks dashboard clicking (store page assembly from steam/STORE_PAGE.md,
-questionnaire paste, pricing $9.99 + 15% launch discount, depot config per
-steam/README.md, the steamcmd upload, submitting both reviews). Ask Claude
-first for the code side: the 480→appID swap and vdf placeholder fills.
+- [ ] Screenshot fidelity pass — re-shoot with a diegetic lobby name;
+      add THE MIRROR + cause-of-death shots (list in steam/STORE_PAGE.md).
+- [ ] Trailer (OBS-record a hand).
+
+## When Valve's email arrives (~1 focused day)
+
+- [ ] Run the app-ID day runbook in STEAM.md top to bottom. Your parts:
+      Steamworks dashboard clicks (store page from steam/STORE_PAGE.md,
+      questionnaire, $9.99 + 15% launch discount, depots per
+      steam/README.md, steamcmd upload, submit both reviews). Ask Claude
+      first for the 480→appID swap + vdf fills.
 
 ## During the 2-week Coming Soon window
 
-- Set up the Playtest app in Steamworks; run one friends session (this is
-  also the multiplayer load test — watch /healthz during it).
-- If either Valve review bounces anything: hand the rejection text to
-  Claude, fixes come back same day.
-- Optional, only if you feel like it: OBS-record a hand for a trailer.
+- [ ] Set up the Playtest app; run one friends session (doubles as the
+      real multiplayer load test — watch /healthz during it).
+- [ ] Any review rejection → hand the text to Claude, same-day fixes.
 
 ## Launch day
 
-Press the release button (needs: both reviews green + 2 weeks elapsed).
-Then watch /healthz and the reviews page for the first weekend.
-
-## Standing offers (ask Claude any time)
-
-App-ID swap + vdf fills · store copy tweaks · art regens (any capsule,
-new backdrop angle, trashier floor — ~2 min) · review-rejection fixes ·
-post-launch items (gamepad, music, snapshot slimming) when you want them.
+- [ ] Press release (needs both reviews green + 2 weeks elapsed), then
+      watch /healthz and the reviews page over the first weekend.

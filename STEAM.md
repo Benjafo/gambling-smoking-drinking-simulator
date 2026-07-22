@@ -4,10 +4,12 @@ Canonical tracker for shipping on Steam. Check items off in the same commit
 that completes them; add notes inline. Review this doc before starting
 Steam-related work and update it after.
 
-**Last reviewed: 2026-07-21** (sixth pass — scalability: load-test driver
-built (`npm run loadtest`), /healthz now reports pump timing, MAX_LOBBIES
-is a required server env var (per-box measured capacity). Scaling rulings
-recorded under Operational. See runbook below for app-ID day.)
+**Last reviewed: 2026-07-21** (seventh pass — provider RESOLVED back to
+DigitalOcean after Hetzner's June 2026 price hikes (see Server plan);
+earlier same day: load-test driver built (`npm run loadtest`), /healthz
+pump timing, MAX_LOBBIES required env var, 8 screenshots captured,
+hardened server deployed to prod and verified. See runbook below for
+app-ID day.)
 
 ## App-ID day runbook (do in this order, same day)
 
@@ -100,11 +102,16 @@ recorded under Operational. See runbook below for app-ID day.)
       DECIDED: dedicated droplet, separate from the portfolio box —
       DO Premium AMD 2 vCPU / 2 GB / NVMe (~$21/mo; single-threaded sim
       wants clock speed not cores; 2 GB because deploys build on-droplet).
-      PROVIDER UNDER REVIEW 2026-07-21: Hetzner is a live alternative
-      (2-3x CPU/$, ~20 TB included transfer vs DO's ~4 TB — and bandwidth
-      is our binding constraint, see load test below; DO wins on region
-      spread only). See TRADEOFF.md. Create the Hetzner account early if
-      switching — their identity check can take days.
+      PROVIDER RESOLVED 2026-07-21: staying on DigitalOcean. Hetzner's
+      June 2026 price increases (DRAM-driven, +107-204% on CPX/CCX) killed
+      the case for a US box: CCX13 US now ~$51/mo, CPX31 US ~$62, and US
+      locations include only 1-8 TB traffic — not the ~20 TB the
+      TRADEOFF.md argument rested on (that was EU-only, and pre-increase).
+      DO Basic 2 vCPU/2 GB is ~$18-21 with 3 TB. Hetzner's only surviving
+      edge is the €1/TB overage rate (vs DO ~$10/TB) — revisit only if
+      egress metrics blow past the included transfer AND snapshot slimming
+      can't fix it. EU Hetzner stays cheap but 100-150ms to US players is
+      wrong for a 60Hz game.
       Remaining: provision it, update DROPLET_* repo secrets, repoint DNS,
       add a 2 GB swapfile, write `/var/www/projects/blackjack/.env` with
       `MAX_LOBBIES=<measured>` (required env — server refuses to boot
